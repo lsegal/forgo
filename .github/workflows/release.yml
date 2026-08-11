@@ -1,0 +1,186 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version part to bump"
+        required: true
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump FORGO_VERSION
+        id: bump
+        run: |
+          set -euo pipefail
+          new_version="$(./scripts/version.sh "${{ github.event.inputs.bump }}")"
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$new_version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add FORGO_VERSION
+          git commit -m "Release v${{ steps.bump.outputs.version }}"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "v${{ steps.bump.outputs.version }}"
+
+  build:
+    needs: bump-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: tar.gz
+          - os: macos-14
+            goos: darwin
+            goarch: arm64
+            ext: tar.gz
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: zip
+        # Intel Mac (darwin/amd64) is deliberately not built here: GitHub's
+        # hosted macos-13 (Intel) runner pool has been drawn down as Apple
+        # Silicon has taken over, and jobs targeting it can sit queued
+        # indefinitely instead of ever starting. Apple Silicon (macos-14,
+        # darwin/arm64) covers virtually all current Macs; an Intel Mac can
+        # run the arm64 build under Rosetta 2, or build from source
+        # (see README.md).
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.bump-version.outputs.version }}
+
+      - name: Set up bootstrap Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Build forgo toolchain (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT_BOOTSTRAP="$(go env GOROOT)"
+          cd src
+          ./make.bash
+          cp ../bin/go ../bin/forgo
+
+      - name: Build forgo toolchain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT_BOOTSTRAP = (go env GOROOT)
+          Set-Location src
+          & .\make.bat
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item ..\bin\go.exe ..\bin\forgo.exe
+
+      - name: Smoke test examples (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          for dir in examples/*/; do
+            (cd "$dir" && forgo run .)
+          done
+
+      - name: Smoke test examples (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          Get-ChildItem examples -Directory | ForEach-Object {
+            Push-Location $_.FullName
+            & forgo run .
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            Pop-Location
+          }
+
+      - name: Package (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="forgo-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "dist/$name"
+          for d in bin pkg lib src api go.env VERSION FORGO_VERSION LICENSE README.md AGENTS.md; do
+            [ -e "$d" ] && cp -R "$d" "dist/$name/"
+          done
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $name = "forgo-${{ matrix.goos }}-${{ matrix.goarch }}"
+          New-Item -ItemType Directory -Force "dist/$name" | Out-Null
+          foreach ($d in @("bin","pkg","lib","src","api","go.env","VERSION","FORGO_VERSION","LICENSE","README.md","AGENTS.md")) {
+            if (Test-Path $d) { Copy-Item -Recurse -Force $d "dist/$name/" }
+          }
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgo-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    needs: [bump-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.bump-version.outputs.version }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ needs.bump-version.outputs.tag }}" \
+            dist/*.tar.gz dist/*.zip \
+            --title "forgo ${{ needs.bump-version.outputs.tag }}" \
+            --generate-notes

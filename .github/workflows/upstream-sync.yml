@@ -1,0 +1,23 @@
+name: Upstream Sync
+
+# Hourly fast-forward sync from its GitHub parent
+# (golang/go), via `gh repo sync`. This only succeeds when our branch can be
+# fast-forwarded cleanly; if it has diverged, `gh repo sync` fails and the
+# run shows as failed, which is the signal that a manual merge is needed.
+
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly, off the hour to avoid GitHub's cron rush
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync fork from upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh repo sync

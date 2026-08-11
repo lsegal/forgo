@@ -73,6 +73,8 @@ func LoadPackage(filenames []string) {
 	}
 	base.Timer.AddEvent(int64(lines), "lines")
 
+	forgoTransform(m, noders)
+
 	unified(m, noders)
 }
 
@@ -173,6 +175,12 @@ type pragmas struct {
 	Embeds     []pragmaEmbed
 	WasmImport *WasmImport
 	WasmExport *WasmExport
+
+	// forgo extensions: compile-time execution and AST macros. See
+	// forgo_pragma.go for the ForgoPragma interface implementation and
+	// forgo.go's pragma-text handling.
+	IsComptime bool
+	IsMacro    bool
 }
 
 func (p *pragmas) Nointerface() bool {
@@ -242,6 +250,10 @@ func (p *noder) pragma(pos syntax.Pos, blankLine bool, text string, old syntax.P
 	if !blankLine {
 		// directive must be on line by itself
 		p.error(syntax.Error{Pos: pos, Msg: "misplaced compiler directive"})
+		return pragma
+	}
+
+	if forgoPragma(pragma, text) {
 		return pragma
 	}
 

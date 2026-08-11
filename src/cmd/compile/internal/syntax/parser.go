@@ -74,8 +74,8 @@ func (p *parser) init(file *PosBase, r io.Reader, errh ErrorHandler, pragh Pragm
 				return
 			}
 
-			// go: directive (but be conservative and test)
-			if strings.HasPrefix(text, "go:") {
+			// go: or forgo: directive (but be conservative and test)
+			if strings.HasPrefix(text, "go:") || strings.HasPrefix(text, "forgo:") {
 				if p.top && strings.HasPrefix(msg, "//go:build") {
 					if x, err := constraint.Parse(msg); err == nil {
 						p.goVersion = constraint.GoVersion(x)
@@ -1213,6 +1213,15 @@ loop:
 			p.next()
 			t.Fun = x
 			t.ArgList, t.HasDots = p.argList()
+			x = t
+
+		case _Question:
+			// forgo: x? propagates an error result of x from the
+			// enclosing function, like Rust's postfix ? operator.
+			p.next()
+			t := new(TryExpr)
+			t.pos = pos
+			t.X = x
 			x = t
 
 		case _Lbrace:

@@ -348,6 +348,11 @@ redo:
 		s.op, s.prec = Tilde, 0
 		s.tok = _Operator
 
+	case '?':
+		s.nextch()
+		s.nlsemi = true
+		s.tok = _Question
+
 	default:
 		s.errorf("invalid character %#U", s.ch)
 		s.nextch()
@@ -747,16 +752,18 @@ func (s *scanner) lineComment() {
 	}
 
 	// are we saving directives? or is this definitely not a directive?
-	if s.mode&directives == 0 || (s.ch != 'g' && s.ch != 'l') {
+	if s.mode&directives == 0 || (s.ch != 'g' && s.ch != 'l' && s.ch != 'f') {
 		s.stop()
 		s.skipLine()
 		return
 	}
 
-	// recognize go: or line directives
+	// recognize go:, line, or forgo: directives
 	prefix := "go:"
 	if s.ch == 'l' {
 		prefix = "line "
+	} else if s.ch == 'f' {
+		prefix = "forgo:"
 	}
 	for _, m := range prefix {
 		if s.ch != m {
