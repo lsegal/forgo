@@ -396,6 +396,9 @@ func (p *printer) printRawNode(n Node) {
 	case *ParenExpr:
 		p.print(_Lparen, n.X, _Rparen)
 
+	case *TryExpr:
+		p.print(n.X, _Question)
+
 	case *SelectorExpr:
 		p.print(n.X, _Dot, n.Sel)
 

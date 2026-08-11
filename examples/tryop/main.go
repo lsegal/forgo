@@ -1,0 +1,65 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Thing struct {
+	name string
+}
+
+func parse(s string) (int, error) {
+	if s == "" {
+		return 0, errors.New("empty input")
+	}
+	return len(s), nil
+}
+
+func makeThing(s string) (*Thing, error) {
+	return &Thing{name: s}, nil
+}
+
+func (t *Thing) validate() error {
+	if t.name == "bad" {
+		return errors.New("bad thing")
+	}
+	return nil
+}
+
+func run(s string) (n int, err error) {
+	n = parse(s)?
+	return
+}
+
+func chained(s string) (name string, err error) {
+	t := makeThing(s)?
+	t.validate()?
+	name = t.name
+	return
+}
+
+func main() {
+	n, err := run("hello")
+	fmt.Println("run(hello):", n, err)
+
+	n, err = run("")
+	fmt.Println("run(empty):", n, err)
+
+	name, err := chained("ok")
+	fmt.Println("chained(ok):", name, err)
+
+	name, err = chained("bad")
+	fmt.Println("chained(bad):", name, err)
+
+	name, err = inlineChain("ok")
+	fmt.Println("inlineChain(ok):", name, err)
+
+	name, err = inlineChain("")
+	fmt.Println("inlineChain(empty):", name, err)
+
+	name, err = inlineChain("bad")
+	fmt.Println("inlineChain(bad):", name, err)
+
+	runLoopsDemo()
+}

@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [release-branch.go1.26]
+  pull_request:
+    branches: [release-branch.go1.26]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only used to bootstrap-build the forgo toolchain; forgo is
+      # self-hosting once built (src/go.mod requires Go 1.26, which per
+      # go.dev/doc/install/source needs a Go 1.24+ bootstrap compiler).
+      - name: Set up bootstrap Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Build forgo toolchain (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT_BOOTSTRAP="$(go env GOROOT)"
+          cd src
+          ./make.bash
+          cp ../bin/go ../bin/forgo
+
+      - name: Build forgo toolchain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT_BOOTSTRAP = (go env GOROOT)
+          Set-Location src
+          & .\make.bat
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item ..\bin\go.exe ..\bin\forgo.exe
+
+      - name: Run examples (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          status=0
+          for dir in examples/*/; do
+            name="$(basename "$dir")"
+            echo "=== $name ==="
+            if ! (cd "$dir" && forgo run .); then
+              echo "!!! example $name failed"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Run examples (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          $failed = $false
+          Get-ChildItem examples -Directory | ForEach-Object {
+            Write-Host "=== $($_.Name) ==="
+            Push-Location $_.FullName
+            & forgo run .
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "!!! example $($_.Name) failed"
+              $failed = $true
+            }
+            Pop-Location
+          }
+          if ($failed) { exit 1 }
+
+      - name: Compiler unit tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          forgo test cmd/compile/internal/syntax/... cmd/compile/internal/forgo/...
+
+      - name: Compiler unit tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          forgo test cmd/compile/internal/syntax/... cmd/compile/internal/forgo/...
+
+      # Exercises install/install.{sh,ps1} for real against the latest
+      # published release, so a broken installer (e.g. a download/extract
+      # bug that only shows up when actually run) fails CI instead of
+      # being discovered by a user. Requires at least one prior release to
+      # exist, same as any real user running these scripts would.
+      - name: Test install script (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export FORGO_REPO=lsegal/forgo
+          export FORGO_INSTALL_DIR="$RUNNER_TEMP/forgo-install-test"
+          bash install/install.sh
+          "$FORGO_INSTALL_DIR/bin/forgo" version
+          (cd examples/mini && GOROOT="$FORGO_INSTALL_DIR" GOTOOLCHAIN=local "$FORGO_INSTALL_DIR/bin/forgo" run .)
+
+      - name: Test install script (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:FORGO_REPO = "lsegal/forgo"
+          $env:FORGO_INSTALL_DIR = "$env:RUNNER_TEMP\forgo-install-test"
+          & .\install\install.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:FORGO_INSTALL_DIR\bin\forgo.exe" version
+          Push-Location examples\mini
+          $env:GOROOT = $env:FORGO_INSTALL_DIR
+          $env:GOTOOLCHAIN = "local"
+          & "$env:FORGO_INSTALL_DIR\bin\forgo.exe" run .
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Pop-Location

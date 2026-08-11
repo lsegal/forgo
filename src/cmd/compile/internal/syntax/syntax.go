@@ -52,6 +52,16 @@ type Pragma any
 // Blank specifies whether the line is blank before the pragma.
 type PragmaHandler func(pos Pos, blank bool, text string, current Pragma) Pragma
 
+// ForgoPragma is implemented by a FuncDecl's Pragma value when it records
+// forgo-specific directives ("//forgo:comptime", "//forgo:macro"). It lets
+// packages other than the one that produced the Pragma (i.e. types2, which
+// cannot import noder) recognize these directives without a shared
+// concrete pragma type.
+type ForgoPragma interface {
+	ForgoComptime() bool
+	ForgoMacro() bool
+}
+
 // Parse parses a single Go source file from src and returns the corresponding
 // syntax tree. If there are errors, Parse will return the first error found,
 // and a possibly partially constructed syntax tree, or nil.

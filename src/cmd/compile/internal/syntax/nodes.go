@@ -187,6 +187,12 @@ type (
 		expr
 	}
 
+	// X?
+	TryExpr struct {
+		X Expr
+		expr
+	}
+
 	// X.Sel
 	SelectorExpr struct {
 		X   Expr
