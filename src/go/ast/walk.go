@@ -205,6 +205,9 @@ func Walk(v Visitor, node Node) {
 	case *ReturnStmt:
 		walkList(v, n.Results)
 
+	case *ThrowStmt:
+		Walk(v, n.X)
+
 	case *BranchStmt:
 		if n.Label != nil {
 			Walk(v, n.Label)

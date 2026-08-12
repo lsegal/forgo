@@ -1439,6 +1439,10 @@ func (p *printer) stmt(stmt ast.Stmt, nextIsRBrace bool) {
 			}
 		}
 
+	case *ast.ThrowStmt:
+		p.print(&ast.Ident{NamePos: s.Throw, Name: "throw"}, blank)
+		p.expr(s.X)
+
 	case *ast.BranchStmt:
 		p.print(s.Tok)
 		if s.Label != nil {

@@ -709,6 +709,14 @@ type (
 		Results []Expr    // result expressions; or nil
 	}
 
+	// A ThrowStmt node represents a forgo "throw X" statement: shorthand
+	// for returning zero values for every result except the last (an
+	// error), which is set to X.
+	ThrowStmt struct {
+		Throw token.Pos // position of "throw"
+		X     Expr
+	}
+
 	// A BranchStmt node represents a break, continue, goto,
 	// or fallthrough statement.
 	//
@@ -840,6 +848,8 @@ func (s *ReturnStmt) End() token.Pos {
 	}
 	return s.Return + 6 // len("return")
 }
+func (s *ThrowStmt) Pos() token.Pos { return s.Throw }
+func (s *ThrowStmt) End() token.Pos { return s.X.End() }
 func (s *BranchStmt) End() token.Pos {
 	if s.Label != nil {
 		return s.Label.End()
@@ -892,6 +902,7 @@ func (*AssignStmt) stmtNode()     {}
 func (*GoStmt) stmtNode()         {}
 func (*DeferStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()     {}
+func (*ThrowStmt) stmtNode()      {}
 func (*BranchStmt) stmtNode()     {}
 func (*BlockStmt) stmtNode()      {}
 func (*IfStmt) stmtNode()         {}
