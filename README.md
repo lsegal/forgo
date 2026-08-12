@@ -152,12 +152,12 @@ including the literal `foo()?.bar()?` chained form, and
 
 ```bash
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/main/install/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
 ```
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/lsegal/forgo/main/install/install.ps1 | iex
+irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex
 ```
 
 Both scripts install the latest [GitHub release](https://github.com/lsegal/forgo/releases)
