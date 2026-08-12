@@ -299,13 +299,20 @@ func InitConst(n *ir.Name, noff int64, c ir.Node, wid int) {
 	if n.Sym() == nil {
 		base.Fatalf("InitConst nil n sym")
 	}
+	initConstAt(n.Linksym(), n.Pos(), noff, c, wid)
+}
+
+// initConstAt is InitConst generalized to write into an arbitrary
+// symbol, so composite-constant recursion (initConstComposite) can
+// target a freshly synthesized backing-array symbol for a slice field,
+// not just the top-level ir.Name being initialized.
+func initConstAt(s *obj.LSym, pos src.XPos, noff int64, c ir.Node, wid int) {
 	if c.Op() == ir.ONIL {
 		return
 	}
 	if c.Op() != ir.OLITERAL {
 		base.Fatalf("InitConst c op %v", c.Op())
 	}
-	s := n.Linksym()
 	switch u := c.Val(); u.Kind() {
 	case constant.Bool:
 		i := int64(obj.Bool2int(constant.BoolVal(u)))
@@ -337,28 +344,31 @@ func InitConst(n *ir.Name, noff int64, c ir.Node, wid int) {
 
 	case constant.String:
 		i := constant.StringVal(u)
-		symdata := StringSym(n.Pos(), i)
+		symdata := StringSym(pos, i)
 		s.WriteAddr(base.Ctxt, noff, types.PtrSize, symdata, 0)
 		s.WriteInt(base.Ctxt, noff+int64(types.PtrSize), types.PtrSize, int64(len(i)))
 
 	case constant.Composite:
-		initConstComposite(n, noff, c)
+		initConstComposite(s, pos, noff, c)
 
 	default:
 		base.Fatalf("InitConst unhandled OLITERAL %v", c)
 	}
 }
 
-// initConstComposite writes a forgo composite constant (a struct or
-// [N]T array value folded by the comptime interpreter, see go/constant's
-// Composite kind) into static memory, recursing field-by-field/
-// element-by-element. Slice- and map-typed composite constants aren't
-// materializable this way (a slice needs a separately allocated backing
-// array; Go doesn't statically lay out map data at all) -- using one
-// directly as a value (rather than only folding a field/index access off
-// of it, which types2 already resolves to a plain scalar constant before
-// this ever runs) isn't supported yet.
-func initConstComposite(n *ir.Name, noff int64, c ir.Node) {
+// initConstComposite writes a forgo composite constant (a struct,
+// [N]T array, or slice value folded by the comptime interpreter, see
+// go/constant's Composite kind) into static memory, recursing
+// field-by-field/element-by-element. A slice field gets its elements
+// written into a freshly synthesized backing-array symbol (see
+// compositeBackingSym), then a {ptr, len, cap} slice header pointing at
+// it is written at the field's offset -- the same shape InitSlice
+// writes for a []byte string conversion. Map-typed composite constants
+// still aren't materializable this way (Go doesn't statically lay out
+// map data at all); using one directly as a value (rather than only
+// folding a field/index access off of it, which types2 already resolves
+// to a plain scalar constant before this ever runs) isn't supported.
+func initConstComposite(s *obj.LSym, pos src.XPos, noff int64, c ir.Node) {
 	val := c.Val()
 	typ := c.Type()
 	switch {
@@ -372,7 +382,7 @@ func initConstComposite(n *ir.Name, noff int64, c ir.Node) {
 			if !ok {
 				continue // zero value: static memory is already zeroed
 			}
-			writeConstField(n, noff+f.Offset, fv, f.Type)
+			writeConstField(s, pos, noff+f.Offset, fv, f.Type)
 		}
 
 	case typ.IsArray():
@@ -383,22 +393,107 @@ func initConstComposite(n *ir.Name, noff int64, c ir.Node) {
 		elemType := typ.Elem()
 		width := elemType.Size()
 		for i, ev := range elems {
-			writeConstField(n, noff+int64(i)*width, ev, elemType)
+			writeConstField(s, pos, noff+int64(i)*width, ev, elemType)
 		}
 
+	case typ.IsSlice():
+		if !constant.CompositeIsArray(val) {
+			base.Fatalf("InitConst: composite constant shape mismatch for slice %v", typ)
+		}
+		elems := constant.CompositeElems(val)
+		if len(elems) == 0 {
+			return // nil slice: static memory is already zeroed
+		}
+		elemType := typ.Elem()
+		width := elemType.Size()
+		backing := compositeBackingSym(pos, elemType, len(elems))
+		for i, ev := range elems {
+			writeConstField(backing, pos, int64(i)*width, ev, elemType)
+		}
+		InitSliceAt(s, noff, backing, int64(len(elems)))
+
 	default:
-		base.Fatalf("forgo: %v (a compile-time struct/map/slice/array constant) can't be used directly as a value here -- only field/index access on it (e.g. %v.Field, %v[i]) is supported", n, n, n)
+		base.Fatalf("forgo: a compile-time struct/map/slice/array constant of type %v can't be used directly as a value here -- only field/index access on it (e.g. x.Field, x[i]) is supported", typ)
 	}
+}
+
+// compositeBackingSym allocates and returns a fresh read-only symbol
+// sized to hold n elements of elemType, for a slice-typed composite
+// constant's backing array (see initConstComposite). It doesn't mark
+// the symbol NOPTR: unlike slicedata's raw bytes, elemType may itself
+// contain pointers (e.g. a struct with a string field), which need
+// relocations the GC can follow.
+var compositeBackingGen int
+
+func compositeBackingSym(pos src.XPos, elemType *types.Type, n int) *obj.LSym {
+	compositeBackingGen++
+	symname := fmt.Sprintf(".gocompositedata.%d", compositeBackingGen)
+	lsym := types.LocalPkg.Lookup(symname).LinksymABI(obj.ABI0)
+	size := elemType.Size() * int64(n)
+	objw.Global(lsym, int32(size), obj.RODATA|obj.LOCAL)
+	return lsym
+}
+
+// InitSliceAt writes a static slice header {lsym, lencap, lencap} at
+// noff into s directly, the way InitSlice does for an ir.Name's own
+// symbol. It's used when the slice header's destination is itself a
+// synthesized symbol (a composite constant nested inside another
+// composite), not a real declared name.
+func InitSliceAt(s *obj.LSym, noff int64, lsym *obj.LSym, lencap int64) {
+	s.WriteAddr(base.Ctxt, noff, types.PtrSize, lsym, 0)
+	s.WriteInt(base.Ctxt, noff+types.SliceLenOffset, types.PtrSize, lencap)
+	s.WriteInt(base.Ctxt, noff+types.SliceCapOffset, types.PtrSize, lencap)
+}
+
+// compositeConstSyms memoizes CompositeConstExpr's synthesized globals by
+// the identity of the OLITERAL node they came from -- a given `const`
+// identifier's references all share the same underlying *ir.Name/Node
+// (see typecheck), so this dedupes repeated uses of the same forgo
+// composite constant (e.g. `content` used three times in one function)
+// down to a single static copy of its data.
+var (
+	compositeConstMu   sync.Mutex
+	compositeConstSyms = map[ir.Node]*obj.LSym{}
+	compositeConstGen  int
+)
+
+// CompositeConstExpr returns an expression reading the value of n (an
+// OLITERAL node holding a forgo composite constant -- a struct/slice/
+// array folded by the comptime interpreter, see go/constant's Composite
+// kind) from a synthesized static read-only global, materializing that
+// global via InitConst on first use. It's how a composite constant used
+// in ordinary expression position (a function argument, an assignment
+// RHS, ...) becomes something ssagen can actually load -- ssagen has no
+// notion of an OLITERAL struct/slice value, only OLINKSYMOFFSET reads
+// out of static memory (see walk's OLITERAL case in expr.go).
+func CompositeConstExpr(n ir.Node) ir.Node {
+	compositeConstMu.Lock()
+	defer compositeConstMu.Unlock()
+
+	if lsym, ok := compositeConstSyms[n]; ok {
+		return ir.NewLinksymExpr(n.Pos(), lsym, n.Type())
+	}
+
+	typ := n.Type()
+	types.CalcSize(typ)
+	compositeConstGen++
+	symname := fmt.Sprintf(".gocomposite.%d", compositeConstGen)
+	lsym := types.LocalPkg.Lookup(symname).LinksymABI(obj.ABI0)
+	objw.Global(lsym, int32(typ.Size()), obj.RODATA|obj.LOCAL)
+	initConstAt(lsym, n.Pos(), 0, n, int(typ.Size()))
+
+	compositeConstSyms[n] = lsym
+	return ir.NewLinksymExpr(n.Pos(), lsym, typ)
 }
 
 // writeConstField writes a single field/element value (itself possibly a
 // nested composite) at the given offset, dispatching back through
 // InitConst-shaped logic for scalars.
-func writeConstField(n *ir.Name, off int64, v constant.Value, typ *types.Type) {
+func writeConstField(s *obj.LSym, pos src.XPos, off int64, v constant.Value, typ *types.Type) {
 	if v.Kind() == constant.Composite {
-		initConstComposite(n, off, ir.NewBasicLit(n.Pos(), typ, v))
+		initConstComposite(s, pos, off, ir.NewBasicLit(pos, typ, v))
 		return
 	}
-	lit := ir.NewBasicLit(n.Pos(), typ, v)
-	InitConst(n, off, lit, int(typ.Size()))
+	lit := ir.NewBasicLit(pos, typ, v)
+	initConstAt(s, pos, off, lit, int(typ.Size()))
 }

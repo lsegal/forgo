@@ -347,6 +347,29 @@ normally outside of a `const` initializer.
 See [examples/embedfile](examples/embedfile/main.fgo) for a runnable
 version.
 
+`Load(patterns ...string) FS` goes further and embeds a whole tree of
+files into an `FS` value, the way the standard library's `//go:embed`
+directive populates an `embed.FS` — but folded through a `const`
+initializer instead of a directive:
+
+```go
+const content = embed.Load("image", "template", "html/index.html")
+
+data, _ := content.ReadFile("image/hello.jpg")
+http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(content))))
+```
+
+A pattern naming a directory embeds every file in that directory's
+subtree (skipping names beginning with `.` or `_`); a plain path embeds
+exactly that one file. `FS` implements `io/fs.FS`, `io/fs.ReadFileFS`,
+and `io/fs.ReadDirFS`, so it works anywhere those are accepted — `content`
+above is a genuine compile-time constant (see "Non-scalar (struct/slice/map)
+consts" below for how a slice-shaped value like `FS`'s file list
+materializes), not a value rebuilt from disk at every reference.
+
+See [examples/embedfs](examples/embedfs/main.fgo) for a runnable version
+that embeds a small file tree and serves it over HTTP.
+
 ### `comptime/json` — compile-time JSON marshal/unmarshal
 
 `comptime/json` marshals and unmarshals JSON at compile time, so a value
@@ -433,16 +456,21 @@ label, and so on.
 **Current limits**, both bounded and enforced with a real compiler
 diagnostic rather than a crash:
 
-- A struct-shaped composite const (no slice/map fields) can also be used
-  directly as an ordinary runtime value (`fmt.Println(schema)`, passed to
-  a function, etc.) — the compiler lowers it to static data at each
-  reference, field by field.
-- A composite const with a slice or map field can't (yet) be used bare
-  this way — only through field/index access down to a scalar or a
-  further struct, as in `schema.Tags[0]` or `const name = schema.Name`
-  above. A slice needs a separately allocated backing array, and Go
-  doesn't statically lay out map data at all, so materializing either as
-  a plain value at an arbitrary reference site is unfinished; using one
+- A struct-, array-, or slice-shaped composite const (including nested
+  combinations, like `embed.FS`'s struct-holding-a-slice-of-structs) can
+  be used directly as an ordinary runtime value (`fmt.Println(schema)`,
+  `content.ReadFile(...)`, passed to a function, etc.). The compiler
+  materializes it once into a read-only static global — a slice field's
+  elements go into a freshly allocated backing array, exactly like a
+  `[]byte(someStringConst)` conversion's backing data — and every
+  reference to that same `const` reads from the same global, memoized
+  the first time it's needed (see `CompositeConstExpr` in
+  [`staticdata/data.go`](src/cmd/compile/internal/staticdata/data.go)).
+- A composite const with a *map* field still can't be used bare this
+  way — only through field/index access down to a scalar or a further
+  struct, as in `schema.Tags[0]` or `const name = schema.Name` above.
+  Go doesn't statically lay out map data at all, so materializing one as
+  a plain value at an arbitrary reference site is unsupported; using one
   where it isn't supported reports a specific compile error rather than
   crashing.
 
@@ -591,12 +619,18 @@ commits these are.
   usable anywhere a constant is required, not just inside the expression
   that produced `schema`.
 - [`src/cmd/compile/internal/staticdata/data.go`](src/cmd/compile/internal/staticdata/data.go)
-  (`InitConst`): writes a struct- or array-shaped Composite constant into
-  static memory field-by-field/element-by-element, so a struct-shaped
-  composite const (no slice/map fields) can be used directly as an
-  ordinary runtime value, not just folded further.
+  (`InitConst`/`CompositeConstExpr`): writes a struct-, array-, or
+  slice-shaped Composite constant into static memory
+  field-by-field/element-by-element (a slice field's elements go into a
+  freshly allocated backing-array symbol), so a composite const can be
+  used directly as an ordinary runtime value, not just folded further.
+  `CompositeConstExpr` (called from `walk/expr.go`'s `OLITERAL` case)
+  handles a composite const referenced from expression position — a
+  function argument, an assignment RHS — by materializing it once into a
+  memoized static global and rewriting the reference to an
+  `OLINKSYMOFFSET` read out of it.
 - [`src/comptime/embed`](src/comptime/embed/embed.go): the `comptime/embed`
-  package itself — `ReadFile`, `ReadDir`, `Exists`, etc.
+  package itself — `ReadFile`, `ReadDir`, `Exists`, `Load`/`FS`, etc.
 - [`src/comptime/json`](src/comptime/json/json.go): the `comptime/json`
   package itself — `Marshal` and generic `Unmarshal[T]`.
 - [`src/cmd/compile/internal/syntax/nodes.go`](src/cmd/compile/internal/syntax/nodes.go),

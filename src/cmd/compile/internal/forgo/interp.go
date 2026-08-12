@@ -628,7 +628,7 @@ func (in *Interp) HasNative(pkg, fn string) bool {
 	switch pkg + "." + fn {
 	case "fmt.Sprintf", "strconv.Itoa",
 		"embed.ReadFile", "embed.ReadFileRange", "embed.Exists",
-		"embed.IsDir", "embed.ReadDir", "embed.Getwd",
+		"embed.IsDir", "embed.ReadDir", "embed.Getwd", "embed.Load",
 		"json.Marshal", "json.Unmarshal":
 		return true
 	}
@@ -719,6 +719,16 @@ func (in *Interp) nativeCall(pos syntax.Pos, pkg, fn string, args []Value) (Valu
 		}
 		return constant.MakeString(wd), true
 
+	case "embed.Load":
+		if len(args) == 0 {
+			fail("forgo: embed.Load requires at least one pattern")
+		}
+		patterns := make([]string, len(args))
+		for i, a := range args {
+			patterns[i] = scalarString(a, "embed.Load")
+		}
+		return loadEmbedFS(pos, patterns), true
+
 	case "json.Marshal":
 		if len(args) != 1 {
 			fail("forgo: json.Marshal takes exactly one argument")
@@ -757,6 +767,126 @@ func resolveEmbedPath(pos syntax.Pos, path string) string {
 		dir = filepath.Dir(base.Filename())
 	}
 	return filepath.Join(dir, path)
+}
+
+// loadEmbedFS implements embed.Load: it walks patterns (each either a
+// plain file path or a directory, resolved against the call site's
+// source directory the same way resolveEmbedPath does) and builds an
+// objectVal shaped like comptime/embed's FS{files []file{name, data}}
+// struct -- an unexported "files" field holding an arrayVal of
+// name/data objectVals, sorted by (dir, elem) exactly as
+// comptime/embed's split/lookup/readDir expect, so the resulting
+// constant materializes into a real, queryable FS value (see
+// staticdata's slice-composite handling in InitConst).
+//
+// A directory pattern embeds every file in its subtree, skipping names
+// beginning with '.' or '_', matching the `//go:embed` directive's
+// rules; a plain path embeds exactly that file.
+func loadEmbedFS(pos syntax.Pos, patterns []string) Value {
+	type embedFile struct{ name, data string }
+	var files []embedFile
+	seen := map[string]bool{}
+
+	var addFile func(fsPath, diskPath string)
+	addFile = func(fsPath, diskPath string) {
+		if seen[fsPath] {
+			return
+		}
+		seen[fsPath] = true
+		data, err := os.ReadFile(diskPath)
+		if err != nil {
+			fail("forgo: embed.Load: %s", err)
+		}
+		files = append(files, embedFile{name: fsPath, data: string(data)})
+	}
+	var walkDir func(diskDir, fsDir string)
+	walkDir = func(diskDir, fsDir string) {
+		entries, err := os.ReadDir(diskDir)
+		if err != nil {
+			fail("forgo: embed.Load: %s", err)
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				continue
+			}
+			diskPath := filepath.Join(diskDir, name)
+			fsPath := fsDir + "/" + name
+			if e.IsDir() {
+				walkDir(diskPath, fsPath)
+				continue
+			}
+			addFile(fsPath, diskPath)
+		}
+	}
+
+	for _, p := range patterns {
+		diskPath := resolveEmbedPath(pos, p)
+		info, err := os.Stat(diskPath)
+		if err != nil {
+			fail("forgo: embed.Load(%q): %s", p, err)
+		}
+		if info.IsDir() {
+			walkDir(diskPath, p)
+		} else {
+			addFile(p, diskPath)
+		}
+	}
+
+	// Add a directory marker entry (name ending in '/', no data) for
+	// every ancestor directory of every file, mirroring
+	// comptime/embed's addDirEntries: without it, FS.lookup/readDir
+	// can't find/list "template" as a directory, only its leaf files.
+	dirSeen := map[string]bool{}
+	var dirs []embedFile
+	for _, f := range files {
+		for dir, _, _ := splitEmbedName(f.name); dir != "."; {
+			if !dirSeen[dir] {
+				dirSeen[dir] = true
+				dirs = append(dirs, embedFile{name: dir + "/"})
+			}
+			dir, _, _ = splitEmbedName(dir)
+		}
+	}
+	files = append(files, dirs...)
+
+	sort.Slice(files, func(i, j int) bool {
+		idir, ielem, _ := splitEmbedName(files[i].name)
+		jdir, jelem, _ := splitEmbedName(files[j].name)
+		if idir != jdir {
+			return idir < jdir
+		}
+		return ielem < jelem
+	})
+
+	elems := make([]Value, len(files))
+	for i, f := range files {
+		elems[i] = objectVal{
+			keys: []string{"name", "data"},
+			fields: map[string]Value{
+				"name": constant.MakeString(f.name),
+				"data": constant.MakeString(f.data),
+			},
+		}
+	}
+	return objectVal{
+		keys:   []string{"files"},
+		fields: map[string]Value{"files": arrayVal{elems: elems}},
+	}
+}
+
+// splitEmbedName mirrors comptime/embed's split: it separates name into
+// (dir, elem), taking dir to be "." at the root, and reports whether
+// name ended in a trailing slash (a directory entry). It's used to
+// reproduce the FS files list's (dir, elem) sort order here at compile
+// time.
+func splitEmbedName(name string) (dir, elem string, isDir bool) {
+	name, isDir = strings.CutSuffix(name, "/")
+	i := strings.LastIndexByte(name, '/')
+	if i < 0 {
+		return ".", name, isDir
+	}
+	return name[:i], name[i+1:], isDir
 }
 
 // marshalJSONValue renders v (a scalar, or an objectVal/arrayVal built by
