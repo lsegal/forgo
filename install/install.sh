@@ -2,8 +2,8 @@
 # Installs forgo (https://github.com/lsegal/forgo) on Linux or macOS.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/main/install/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/main/install/install.sh | sh -s -- v0.2.0
+#   curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh -s -- v0.2.0
 #
 # Env vars:
 #   FORGO_REPO         "owner/repo" to install from (default: lsegal/forgo)
