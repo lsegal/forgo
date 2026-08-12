@@ -562,6 +562,9 @@ func (p *printer) printRawNode(n Node) {
 			p.print(blank, n.Results)
 		}
 
+	case *ThrowStmt:
+		p.print(_Name, "throw", blank, n.X)
+
 	case *BranchStmt:
 		p.print(n.Tok)
 		if n.Label != nil {

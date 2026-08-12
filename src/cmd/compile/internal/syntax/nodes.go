@@ -426,6 +426,14 @@ type (
 		stmt
 	}
 
+	// forgo: throw X
+	// Shorthand for returning zero values for every result except the
+	// last (an error), which is set to X.
+	ThrowStmt struct {
+		X Expr
+		stmt
+	}
+
 	IfStmt struct {
 		Init SimpleStmt
 		Cond Expr

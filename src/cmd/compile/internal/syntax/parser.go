@@ -2624,6 +2624,9 @@ func (p *parser) stmtOrNil() Stmt {
 	// Most statements (assignments) start with an identifier;
 	// look for it first before doing anything more expensive.
 	if p.tok == _Name {
+		if p.lit == "throw" {
+			return p.throwStmtOrSimpleStmt()
+		}
 		p.clearPragma()
 		lhs := p.exprList()
 		if label, ok := lhs.(*Name); ok && p.tok == _Colon {
@@ -2716,6 +2719,50 @@ func (p *parser) stmtOrNil() Stmt {
 	}
 
 	return nil
+}
+
+// throwStmtOrSimpleStmt is called when a statement begins with the
+// identifier "throw". forgo treats "throw" as a contextual keyword rather
+// than a reserved word, since ordinary Go code (e.g. package runtime) uses
+// it as a plain identifier/function name. "throw EXPR" is only recognized
+// when EXPR begins with a new operand (a name or a literal) immediately
+// following "throw" with no intervening operator -- that token sequence
+// (two operands back to back) is never valid as a continuation of "throw"
+// used as an ordinary identifier, so there is no ambiguity with existing
+// Go syntax such as throw(msg), throw.field, or throw = msg.
+//
+//	ThrowStmt = "throw" Expression .
+func (p *parser) throwStmtOrSimpleStmt() Stmt {
+	p.clearPragma()
+	pos := p.pos()
+	p.next() // consume "throw"
+
+	if p.tok == _Name || p.tok == _Literal {
+		s := new(ThrowStmt)
+		s.pos = pos
+		s.X = p.expr()
+		return s
+	}
+
+	// Not a throw statement: "throw" was just an ordinary identifier.
+	// Reconstruct the statement starting from it, the same way stmtOrNil
+	// would have for any other identifier-led statement.
+	name := NewName(pos, "throw")
+	x := p.binaryExpr(p.pexpr(name, true), 0)
+	if p.got(_Comma) {
+		list := []Expr{x, p.expr()}
+		for p.got(_Comma) {
+			list = append(list, p.expr())
+		}
+		t := new(ListExpr)
+		t.pos = x.Pos()
+		t.ElemList = list
+		x = t
+	}
+	if label, ok := x.(*Name); ok && p.tok == _Colon {
+		return p.labeledStmtOrNil(label)
+	}
+	return p.simpleStmt(x, 0)
 }
 
 // StatementList = { Statement ";" } .
