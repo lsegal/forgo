@@ -33,6 +33,12 @@ fork. After installing, point `GOROOT` at the install directory and add its
 (e.g. `forgo build`, `forgo run`). The release tarball also includes
 `forgopls` in `bin/` — see the VS Code extension below.
 
+Once installed, `forgo upgrade` (alias `forgo update`) re-runs the same
+install script to pull the latest release over the current installation —
+no need to re-fetch and re-run the one-liner above by hand. Pass a version
+to install that instead of latest (`forgo upgrade v0.4.0`); it honors the
+same `FORGO_INSTALL_DIR`/`FORGO_REPO` env vars as the scripts.
+
 ### VS Code extension
 
 Forgo source lives in `.fgo` files (alongside plain `.go` files, which still
