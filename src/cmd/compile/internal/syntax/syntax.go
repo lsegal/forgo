@@ -53,7 +53,7 @@ type Pragma any
 type PragmaHandler func(pos Pos, blank bool, text string, current Pragma) Pragma
 
 // ForgoPragma is implemented by a FuncDecl's Pragma value when it records
-// forgo-specific directives ("//forgo:comptime", "//forgo:macro"). It lets
+// forgo-specific directives ("//fgo:comptime", "//fgo:macro"). It lets
 // packages other than the one that produced the Pragma (i.e. types2, which
 // cannot import noder) recognize these directives without a shared
 // concrete pragma type.

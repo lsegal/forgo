@@ -138,7 +138,7 @@ fi
 # forgopls/comptimeconst at the repo root, which are developed and tested
 # standalone as their own module) as suggested-fix quick fixes: one for
 # converting a manual "if err != nil { return zero..., err }" check to "?"
-# (AGENTS.md rule 1), one for suggesting "//forgo:comptime" on a function
+# (AGENTS.md rule 1), one for suggesting "//fgo:comptime" on a function
 # used to compute a package-level "var" from constant arguments (AGENTS.md
 # rule 2). This vendors their source into a patched copy of the gopls
 # module (gopls is itself a nested module inside x/tools, so it needs the

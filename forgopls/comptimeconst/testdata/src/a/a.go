@@ -33,7 +33,7 @@ func dynamicArg() string { return "runtime" }
 
 var runtimeInput = crc(dynamicArg()) // must NOT fire: argument isn't constant
 
-//forgo:comptime
+//fgo:comptime
 func alreadyMarked(n int) int { return n * 2 }
 
 var already = alreadyMarked(3) // must NOT fire: already has the pragma

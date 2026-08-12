@@ -4,15 +4,15 @@
 
 package noder
 
-// forgoPragma recognizes forgo's own directive comments ("//forgo:comptime",
-// "//forgo:macro") and records them on pragma. It reports whether text was
+// forgoPragma recognizes forgo's own directive comments ("//fgo:comptime",
+// "//fgo:macro") and records them on pragma. It reports whether text was
 // a forgo directive, so noder.pragma can skip its normal //go:... switch
 // for it.
 func forgoPragma(pragma *pragmas, text string) bool {
 	switch text {
-	case "forgo:comptime":
+	case "fgo:comptime":
 		pragma.IsComptime = true
-	case "forgo:macro":
+	case "fgo:macro":
 		pragma.IsMacro = true
 	default:
 		return false
@@ -20,11 +20,11 @@ func forgoPragma(pragma *pragmas, text string) bool {
 	return true
 }
 
-// ForgoComptime reports whether the declaration carries //forgo:comptime.
+// ForgoComptime reports whether the declaration carries //fgo:comptime.
 // Implements syntax.ForgoPragma.
 func (p *pragmas) ForgoComptime() bool { return p != nil && p.IsComptime }
 
-// ForgoMacro reports whether the declaration carries //forgo:macro.
+// ForgoMacro reports whether the declaration carries //fgo:macro.
 // Implements syntax.ForgoPragma.
 func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 

@@ -294,6 +294,9 @@ var depsRules = `
 	< encoding/json/v2
 	< encoding/json;
 
+	encoding/json
+	< comptime/json;
+
 	# hashes
 	io
 	< hash

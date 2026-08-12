@@ -7,7 +7,7 @@ package forgo
 import "cmd/compile/internal/syntax"
 
 // evalQuote implements the Quote(func(){ ... }) builtin available inside
-// //forgo:macro bodies. It captures the function literal's body as an AST
+// //fgo:macro bodies. It captures the function literal's body as an AST
 // template (without evaluating it), substitutes any Splice(x) call it finds
 // for the NodeVal bound to x in the current macro scope, and returns the
 // result as a NodeVal. A single-statement expression template unwraps to

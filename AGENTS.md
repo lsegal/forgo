@@ -11,7 +11,7 @@ feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `throw`, postfix `if`, `//forgo:comptime`, or `//forgo:macro`. If
+uses `?`, `throw`, postfix `if`, `//fgo:comptime`, or `//fgo:macro`. If
 unsure, check for a forgo `GOROOT` (a directory with
 `src/cmd/compile/internal/forgo`).
 
@@ -197,15 +197,15 @@ Constraints:
   correctly, in that order (postfix `if` unwraps first, so `throw`/`?`
   lowering see an ordinary statement inside a regular `if` afterward).
 
-## Rule 2: use `//forgo:comptime` for values that can be computed once, at compile time
+## Rule 2: use `//fgo:comptime` for values that can be computed once, at compile time
 
 If you're computing a `const` from a pure function of literal/constant
 inputs — a table, a hash, a formatted string, a size — write the function
-as `//forgo:comptime` and call it directly in the `const` declaration,
+as `//fgo:comptime` and call it directly in the `const` declaration,
 instead of computing it by hand or leaving it as a runtime `var`.
 
 ```go
-//forgo:comptime
+//fgo:comptime
 func crc(s string) uint32 {
 	var c uint32 = 0xFFFFFFFF
 	for i := 0; i < len(s); i++ {
@@ -226,7 +226,7 @@ const magicHash = crc("forgo") // computed by the compiler, not at runtime
 
 Constraints:
 - The function is ordinary Go and also compiles/runs normally at runtime —
-  `//forgo:comptime` only adds compile-time-callability, it doesn't remove
+  `//fgo:comptime` only adds compile-time-callability, it doesn't remove
   the function from the binary.
 - Folding only triggers when the comptime function is called **directly as
   a `const` initializer** (`const x = f(...)`), not in general
@@ -235,12 +235,12 @@ Constraints:
   `const`).
 - The comptime interpreter supports a deliberately small subset of Go:
   `int`/`float`/`string`/`bool` locals and arithmetic, `if`, 3-clause `for`,
-  compound assignment, calls to other `//forgo:comptime` functions, and
+  compound assignment, calls to other `//fgo:comptime` functions, and
   `fmt.Sprintf`/`strconv.Itoa`. **No closures, generics, maps, slices,
   method calls, or `range` loops** inside a comptime function body — if you
   need those, compute the value at runtime (`var`, `init()`) instead.
 
-## Rule 3: use `//forgo:macro` for AST-level code generation, not for things a normal function/generic can do
+## Rule 3: use `//fgo:macro` for AST-level code generation, not for things a normal function/generic can do
 
 Reach for a macro only when you need to generate or transform *syntax* at
 the call site — e.g. duplicating an argument expression, building
@@ -250,7 +250,7 @@ last resort because they have no hygiene and are harder to read/debug than
 ordinary Go.
 
 ```go
-//forgo:macro
+//fgo:macro
 func double(x Node) Node {
 	return Quote(func() {
 		Splice(x) + Splice(x)
@@ -280,8 +280,8 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 | Bubble up an error with added context (`fmt.Errorf("...: %w", err)`) | manual `if err != nil`     |
 | Fail a function outright with a new error                          | `throw`                    |
 | Guard clause whose body is one statement (`throw`, `return`, `continue`, ...) | postfix `if` (`STMT if COND`) |
-| Compute a constant from literal inputs (hash, table, formatted str) | `//forgo:comptime` + `const`|
-| Generate/duplicate syntax at a call site                           | `//forgo:macro`              |
+| Compute a constant from literal inputs (hash, table, formatted str) | `//fgo:comptime` + `const`|
+| Generate/duplicate syntax at a call site                           | `//fgo:macro`              |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
 
 ## Building and running
@@ -297,7 +297,7 @@ GOROOT=/path/to/forgo /path/to/forgo/bin/forgo build ./...
 ```
 
 Using the system's regular `go` (not this repo's `bin/forgo`) on forgo
-source will fail to parse `?`, `//forgo:comptime`, and `//forgo:macro` —
+source will fail to parse `?`, `//fgo:comptime`, and `//fgo:macro` —
 always use the `bin/forgo` built from `src/` in this repo.
 
 If you change the compiler itself (anything under
@@ -335,12 +335,12 @@ Users install a release via `install/install.sh` (Linux/macOS) or
   `if` (`STMT if COND`) to a plain `if COND { STMT }`; runs before
   `forgo_throw.go`/`forgo_try.go`.
 - `src/cmd/compile/internal/noder/forgo_pragma.go` — parses
-  `//forgo:comptime`/`//forgo:macro`.
+  `//fgo:comptime`/`//fgo:macro`.
 - `src/cmd/compile/internal/noder/forgo_macro.go` — macro expansion pass.
-- `src/cmd/compile/internal/types2/forgo.go` — folds `//forgo:comptime`
+- `src/cmd/compile/internal/types2/forgo.go` — folds `//fgo:comptime`
   calls in `const` initializers.
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
-  `?` token/operator and `//forgo:` pragma parsing.
+  `?` token/operator and `//fgo:` pragma parsing.
 
 These are all either new files (untouched by upstream merges) or single-line
 hooks into existing files — see README.md's "Least invasive by design" if

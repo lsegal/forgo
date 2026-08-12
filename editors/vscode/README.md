@@ -1,7 +1,7 @@
 # Forgo for VS Code
 
 Language support for [forgo](https://github.com/lsegal/forgo) `.fgo` files:
-syntax highlighting for `?`, `throw`, `//forgo:comptime`, and `//forgo:macro`
+syntax highlighting for `?`, `throw`, `//fgo:comptime`, and `//fgo:macro`
 on top of standard Go syntax, plus a language client backed by
 **forgopls** — [gopls](https://pkg.go.dev/golang.org/x/tools/gopls) built
 with the forgo toolchain (see [scripts/build-forgopls.sh](../../scripts/build-forgopls.sh)),
@@ -30,8 +30,8 @@ instead of just tolerating or choking on them.
   `PATH`, which will misreport `?`/`throw` (it wasn't built against forgo's
   `go/parser`/`go/types`, and doesn't have the `golang.org/x/tools` patches
   described in [build-forgopls.sh](../../scripts/build-forgopls.sh)), not
-  just `//forgo:comptime`/`//forgo:macro`. `//forgo:comptime` and
-  `//forgo:macro` are compiler-only either way and will still show
+  just `//fgo:comptime`/`//fgo:macro`. `//fgo:comptime` and
+  `//fgo:macro` are compiler-only either way and will still show
   false-positive diagnostics from either binary; disable
   `forgo.enableLanguageServer` if that's noisier than it's worth.
 - `forgo.languageServerEnv` (default `{}`) — extra environment variables for

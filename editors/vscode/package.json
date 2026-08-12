@@ -1,7 +1,7 @@
 {
 	"name": "forgo",
 	"displayName": "Forgo",
-	"description": "Language support for forgo (.fgo): syntax highlighting for ?, //forgo:comptime, and //forgo:macro, plus forgopls-backed language features.",
+	"description": "Language support for forgo (.fgo): syntax highlighting for ?, //fgo:comptime, and //fgo:macro, plus forgopls-backed language features.",
 	"version": "0.1.0",
 	"publisher": "lsegal",
 	"license": "BSD-3-Clause",
@@ -37,7 +37,7 @@
 				"forgo.languageServerPath": {
 					"type": "string",
 					"default": "forgopls",
-					"description": "Path to the forgopls binary used for forgo language features. forgopls is gopls built with the forgo toolchain, so it understands ? (type-checks it like Rust's postfix ? operator); //forgo:comptime and //forgo:macro are still compiler-only and will show as false-positive diagnostics. Falls back to a plain 'gopls' on PATH if forgopls isn't found, with reduced accuracy on ?."
+					"description": "Path to the forgopls binary used for forgo language features. forgopls is gopls built with the forgo toolchain, so it understands ? (type-checks it like Rust's postfix ? operator); //fgo:comptime and //fgo:macro are still compiler-only and will show as false-positive diagnostics. Falls back to a plain 'gopls' on PATH if forgopls isn't found, with reduced accuracy on ?."
 				},
 				"forgo.enableLanguageServer": {
 					"type": "boolean",

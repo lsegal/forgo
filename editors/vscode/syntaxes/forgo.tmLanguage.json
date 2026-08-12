@@ -33,7 +33,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.directive.forgo",
-					"match": "//forgo:(comptime|macro)\\b"
+					"match": "//fgo:(comptime|macro)\\b"
 				}
 			]
 		},

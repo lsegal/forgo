@@ -10,7 +10,7 @@ import (
 	"cmd/compile/internal/syntax"
 )
 
-// forgoExpandMacros removes every //forgo:macro function declaration from the
+// forgoExpandMacros removes every //fgo:macro function declaration from the
 // parsed package (macros are never type-checked or compiled as ordinary
 // functions) and rewrites every call to one elsewhere in the package into
 // the AST it expands to. It must run after parsing and before the package
