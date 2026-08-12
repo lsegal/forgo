@@ -428,6 +428,13 @@ type (
 		Colon token.Pos // position of ":"
 		Value Expr
 	}
+
+	// A TryExpr node represents a forgo postfix "?" error-propagation
+	// expression: X?.
+	TryExpr struct {
+		X        Expr
+		Question token.Pos // position of "?"
+	}
 )
 
 // The direction of a channel type is indicated by a bit
@@ -514,6 +521,7 @@ func (x *StarExpr) Pos() token.Pos       { return x.Star }
 func (x *UnaryExpr) Pos() token.Pos      { return x.OpPos }
 func (x *BinaryExpr) Pos() token.Pos     { return x.X.Pos() }
 func (x *KeyValueExpr) Pos() token.Pos   { return x.Key.Pos() }
+func (x *TryExpr) Pos() token.Pos        { return x.X.Pos() }
 func (x *ArrayType) Pos() token.Pos      { return x.Lbrack }
 func (x *StructType) Pos() token.Pos     { return x.Struct }
 func (x *FuncType) Pos() token.Pos {
@@ -556,6 +564,7 @@ func (x *StarExpr) End() token.Pos       { return x.X.End() }
 func (x *UnaryExpr) End() token.Pos      { return x.X.End() }
 func (x *BinaryExpr) End() token.Pos     { return x.Y.End() }
 func (x *KeyValueExpr) End() token.Pos   { return x.Value.End() }
+func (x *TryExpr) End() token.Pos        { return x.Question + 1 }
 func (x *ArrayType) End() token.Pos      { return x.Elt.End() }
 func (x *StructType) End() token.Pos     { return x.Fields.End() }
 func (x *FuncType) End() token.Pos {
@@ -587,6 +596,7 @@ func (*StarExpr) exprNode()       {}
 func (*UnaryExpr) exprNode()      {}
 func (*BinaryExpr) exprNode()     {}
 func (*KeyValueExpr) exprNode()   {}
+func (*TryExpr) exprNode()        {}
 
 func (*ArrayType) exprNode()     {}
 func (*StructType) exprNode()    {}

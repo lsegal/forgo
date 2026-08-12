@@ -128,6 +128,8 @@ const (
 	additional_beg
 	// additional tokens, handled in an ad-hoc manner
 	TILDE
+	// forgo: postfix ? error-propagation operator
+	QUESTION
 	additional_end
 )
 
@@ -230,7 +232,8 @@ var tokens = [...]string{
 	TYPE:   "type",
 	VAR:    "var",
 
-	TILDE: "~",
+	TILDE:    "~",
+	QUESTION: "?",
 }
 
 // String returns the string corresponding to the token tok.
