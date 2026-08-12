@@ -13,6 +13,15 @@ on:
 permissions:
   contents: write
 
+env:
+  # golang.org/x/tools/gopls version built as forgopls (see "Build forgopls"
+  # below). Bump deliberately, not on every release — forgopls is gopls
+  # itself, compiled with the forgo toolchain so it links against this
+  # repo's patched go/parser, go/ast, and go/types (see go/types/expr.go
+  # and friends) instead of vanilla Go's, which is what teaches it to
+  # type-check ? without forking gopls's own source.
+  GOPLS_VERSION: v0.23.0
+
 jobs:
   bump-version:
     runs-on: ubuntu-latest
@@ -128,6 +137,26 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit 1 }
             Pop-Location
           }
+
+      - name: Build forgopls (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          scripts/build-forgopls.sh "${{ env.GOPLS_VERSION }}" "$GITHUB_WORKSPACE/bin/forgopls"
+
+      - name: Build forgopls (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          scripts/build-forgopls.sh "${{ env.GOPLS_VERSION }}" "$GITHUB_WORKSPACE/bin/forgopls.exe"
 
       - name: Package (Linux/macOS)
         if: runner.os != 'Windows'

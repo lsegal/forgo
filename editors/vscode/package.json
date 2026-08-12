@@ -1,7 +1,7 @@
 {
 	"name": "forgo",
 	"displayName": "Forgo",
-	"description": "Language support for forgo (.fgo): syntax highlighting for ?, //forgo:comptime, and //forgo:macro, plus optional gopls-backed language features.",
+	"description": "Language support for forgo (.fgo): syntax highlighting for ?, //forgo:comptime, and //forgo:macro, plus forgopls-backed language features.",
 	"version": "0.1.0",
 	"publisher": "lsegal",
 	"license": "BSD-3-Clause",
@@ -36,13 +36,18 @@
 			"properties": {
 				"forgo.languageServerPath": {
 					"type": "string",
-					"default": "gopls",
-					"description": "Path to the gopls binary used for forgo language features (diagnostics are limited on forgo-specific syntax like ?, //forgo:comptime, //forgo:macro)."
+					"default": "forgopls",
+					"description": "Path to the forgopls binary used for forgo language features. forgopls is gopls built with the forgo toolchain, so it understands ? (type-checks it like Rust's postfix ? operator); //forgo:comptime and //forgo:macro are still compiler-only and will show as false-positive diagnostics. Falls back to a plain 'gopls' on PATH if forgopls isn't found, with reduced accuracy on ?."
 				},
 				"forgo.enableLanguageServer": {
 					"type": "boolean",
 					"default": true,
 					"description": "Start a language server for .fgo files. Disable to use syntax highlighting only."
+				},
+				"forgo.languageServerEnv": {
+					"type": "object",
+					"default": {},
+					"description": "Extra environment variables for the forgopls/gopls process, merged over VS Code's own environment. forgopls resolves packages by shelling out to \"go list\"/\"go build\" using its process environment, so if GOROOT/PATH there don't already point at a forgo toolchain (e.g. VS Code wasn't launched from a shell with them exported), set them here, e.g. {\"GOROOT\": \"/path/to/forgo\", \"GOTOOLCHAIN\": \"local\", \"PATH\": \"/path/to/forgo/bin:${env:PATH}\"}."
 				}
 			}
 		}

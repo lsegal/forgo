@@ -1,12 +1,14 @@
 # forgo
 
 `forgo` is a fork of Go (currently synced to the 1.26.0 release) that adds
-Nim-style compile-time execution and AST macros, plus a Rust-style `?`
-error-propagation operator.
+Nim-style compile-time execution and AST macros, plus Rust-style `?`
+error-propagation and `throw` for failing a function out with a new error.
 
 Using a coding agent on a forgo codebase? Point it at [AGENTS.md](AGENTS.md)
-— it tells the agent when to reach for `?`, `//forgo:comptime`, and
-`//forgo:macro` instead of plain-Go idioms.
+— it tells the agent when to reach for `?`, `throw`, `//forgo:comptime`, and
+`//forgo:macro` instead of plain-Go idioms, including the rule that a
+forgo codebase should never hand-write `return ..., err` just to propagate
+or introduce an error — that's what `?` and `throw` are for.
 
 ## Installing a prebuilt release
 
@@ -26,16 +28,23 @@ to `~/.forgo` by default. Pass a specific version (`sh install.sh v0.2.0`, or
 `FORGO_INSTALL_DIR`/`FORGO_REPO` env vars to change the install location or
 fork. After installing, point `GOROOT` at the install directory and add its
 `bin/` to `PATH` (the script prints the exact commands), then run `forgo`
-(e.g. `forgo build`, `forgo run`).
+(e.g. `forgo build`, `forgo run`). The release tarball also includes
+`forgopls` in `bin/` — see the VS Code extension below.
 
 ### VS Code extension
 
 Forgo source lives in `.fgo` files (alongside plain `.go` files, which still
 compile as before). The [Forgo VS Code extension](editors/vscode) adds `.fgo`
-syntax highlighting for `?`, `//forgo:comptime`, and `//forgo:macro`, plus an
-optional `gopls`-backed language client. Download the `.vsix` from the
-[latest release](https://github.com/lsegal/forgo/releases) and install it
-with:
+syntax highlighting for `?`, `//forgo:comptime`, and `//forgo:macro`, plus a
+language client backed by **forgopls** — [gopls](https://pkg.go.dev/golang.org/x/tools/gopls)
+built with the forgo toolchain (see [release.yml](.github/workflows/release.yml)),
+so it links against this repo's patched `go/parser`/`go/ast`/`go/types`
+(see [go/types/expr.go](src/go/types/expr.go)) instead of vanilla Go's —
+enough to type-check `?` correctly. `//forgo:comptime` and `//forgo:macro`
+are still compiler-only and will show as false-positive diagnostics.
+`forgopls` ships in the toolchain install above; download the extension's
+`.vsix` from the [latest release](https://github.com/lsegal/forgo/releases)
+and install it with:
 
 ```bash
 code --install-extension forgo-<version>.vsix
@@ -190,6 +199,67 @@ including the literal `foo()?.bar()?` chained form, and
 [examples/tryop/loops.fgo](examples/tryop/loops.fgo) for `?` in loop headers,
 `continue`/`break`, and labeled loops.
 
+### `throw` — fail a function out with a new error
+
+`throw EXPR` returns immediately from the enclosing function, passing
+`EXPR` through as the last (`error`) result and a zero value for every
+other result — it's shorthand for the `return nil, ..., err`-shaped guard
+clause you'd otherwise write by hand:
+
+```go
+func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		throw errors.New("empty")     // same as: return nil, errors.New("empty")
+	}
+	return &Thing{name: s}, nil
+}
+```
+
+`throw "some text"` (a bare string literal) is sugar for `throw
+errors.New("some text")` — the two forms are exactly equivalent:
+
+```go
+func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		throw "empty"                 // same as: throw errors.New("empty")
+	}
+	return &Thing{name: s}, nil
+}
+```
+
+- `throw` works in any function (or func literal) whose **last result's
+  type is spelled `error`** — unlike `?`, it doesn't need that result to
+  be *named*, since it builds the `return`'s value list directly instead
+  of relying on Go's naked-return zero-initialization.
+- Every result before the last needs a zero value the compiler can work
+  out from its syntax alone: pointer, slice, map, chan, func, interface
+  (including `any`/`error`), or a basic type. A named struct, array, or
+  other defined type isn't nil-able and can't be zeroed without a type
+  checker, so `throw` there is a compile error — `no default value for
+  <result>` — naming exactly which result couldn't be zeroed; fall back to
+  a manual `return` for that function.
+- `throw "literal text"` requires the file to already have `import
+  "errors"` (under any name, or `.`) — `go build` computes a package's
+  import graph from the literal source text before the compiler runs, so
+  an import added only inside the compiler's own lowering pass wouldn't be
+  visible to it. If `errors` isn't imported, `throw "..."` is a compile
+  error telling you to add the import; `throw errors.New(...)` has no such
+  requirement since you're already spelling out the import yourself.
+- `throw` is a **contextual** keyword, not a reserved word — plain Go code
+  that uses `throw` as an ordinary identifier or function name (like
+  `runtime.throw` in the standard library) is completely unaffected.
+  `throw` is only read as the statement when it's immediately followed by
+  a new operand (another name or a literal, e.g. `throw errors.New(...)`
+  or `throw "text"`); `throw(x)`, `throw.field`, `throw = x`, and a bare
+  `throw` all still parse as the identifier `throw`.
+- `throw` is lowered to a plain `return` by
+  [`cmd/compile/internal/noder/forgo_throw.go`](src/cmd/compile/internal/noder/forgo_throw.go)
+  before type checking, so the rest of the compiler never sees it — same
+  strategy as `?`.
+
+See [examples/tryop/chain.fgo](examples/tryop/chain.fgo) for a runnable
+version using both `throw` forms.
+
 ## Versioning
 
 forgo has its own version, independent of the golang/go release it's synced
@@ -244,8 +314,9 @@ existing Go source as possible, so those merges stay conflict-free:
 
 - **New files carry the logic.** [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)
   (the comptime/macro interpreter), `cmd/compile/internal/noder/forgo_try.go`,
-  `forgo_pragma.go`, `forgo_macro.go`, and `cmd/compile/internal/types2/forgo.go`
-  are all new files upstream will never touch.
+  `forgo_throw.go`, `forgo_pragma.go`, `forgo_macro.go`, and
+  `cmd/compile/internal/types2/forgo.go` are all new files upstream will
+  never touch.
 - **Existing files get single-line hooks, not inline logic.** E.g.
   `types2/decl.go`'s `constDecl` gains exactly one `if` calling
   `forgoEvalConstCall` (defined in `forgo.go`); `noder.go`'s pragma switch
@@ -268,7 +339,8 @@ existing Go source as possible, so those merges stay conflict-free:
 
 The full forgo-specific diff against upstream is genuinely small: the `?`
 token/parsing (`syntax/{tokens,scanner,parser,nodes,printer}.go`), the
-`//forgo:` pragma prefix (`syntax/scanner.go`, `syntax/parser.go`), the
+`throw` statement parsing (`syntax/{nodes,parser,positions,printer,walk}.go`),
+the `//forgo:` pragma prefix (`syntax/scanner.go`, `syntax/parser.go`), the
 `ForgoPragma` interface (`syntax/syntax.go`), and the hooks described above.
 Run `git log --oneline` to see exactly which commits these are.
 
@@ -289,6 +361,10 @@ Run `git log --oneline` to see exactly which commits these are.
 - [`src/cmd/compile/internal/noder/forgo_try.go`](src/cmd/compile/internal/noder/forgo_try.go):
   lowers `TryExpr` (the `?` operator) into ordinary `:=`/`if`/`return`
   statements, also run after parsing and before type-checking.
+- [`src/cmd/compile/internal/noder/forgo_throw.go`](src/cmd/compile/internal/noder/forgo_throw.go):
+  lowers `ThrowStmt` (the `throw` statement) into an ordinary `return`,
+  run before `forgo_try.go` (a thrown expression may itself contain `?`)
+  and before type-checking.
 - [`src/cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo): the
   interpreter shared by comptime evaluation and macro expansion.
 - [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):
