@@ -1936,6 +1936,24 @@ func (p *parser) parseSimpleStmt(mode int) (ast.Stmt, bool) {
 
 	x := p.parseList(false)
 
+	// forgo: "throw" is a contextual keyword, not a reserved word (plain Go
+	// code, e.g. package runtime, uses it as an ordinary identifier). A
+	// statement of the form "throw EXPR" is only recognized when EXPR
+	// begins with a new operand (identifier or literal) immediately
+	// following "throw" with no intervening operator — two operands back
+	// to back is never a valid continuation of "throw" used as a plain
+	// identifier, so parseList above already stopped right after it with
+	// no ambiguity, leaving p.tok on the start of EXPR.
+	if len(x) == 1 {
+		if id, ok := x[0].(*ast.Ident); ok && id.Name == "throw" {
+			switch p.tok {
+			case token.IDENT, token.INT, token.FLOAT, token.IMAG, token.CHAR, token.STRING:
+				val := p.parseRhs()
+				return &ast.ThrowStmt{Throw: id.Pos(), X: val}, false
+			}
+		}
+	}
+
 	switch p.tok {
 	case
 		token.DEFINE, token.ASSIGN, token.ADD_ASSIGN,

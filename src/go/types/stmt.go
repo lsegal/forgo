@@ -565,6 +565,26 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			check.initVars(lhs, s.Results, s)
 		}
 
+	case *ast.ThrowStmt:
+		// forgo: throw X is shorthand for returning zero values for every
+		// result except the last (an error), set to X — or, if X is a bare
+		// string literal, to errors.New(X). The actual zero-value/return
+		// rewrite is done later by the compiler, not here; this only
+		// checks that X itself is sane, for diagnostics.
+		res := check.sig.results
+		if res.Len() == 0 || !AssignableTo(res.vars[res.Len()-1].typ, universeError) {
+			check.error(s, InvalidSyntaxTree, "forgo: throw requires the enclosing function's last result to be error")
+			break
+		}
+		if lit, ok := s.X.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			break // sugar for errors.New(X); X itself needs no further check
+		}
+		var x operand
+		check.expr(nil, &x, s.X)
+		if x.mode != invalid && !AssignableTo(x.typ, universeError) {
+			check.errorf(s.X, InvalidSyntaxTree, "forgo: throw's operand must be a string literal or error, not %s", x.typ)
+		}
+
 	case *ast.BranchStmt:
 		if s.Label != nil {
 			check.hasLabel = true
