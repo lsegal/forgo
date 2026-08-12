@@ -63,7 +63,12 @@ func (check *Checker) recordTypeAndValue(x syntax.Expr, mode operandMode, typ Ty
 		assert(val != nil)
 		// We check allBasic(typ, IsConstType) here as constant expressions may be
 		// recorded as type parameters.
-		assert(!isValid(typ) || allBasic(typ, IsConstType))
+		//
+		// A forgo composite constant (val.Kind() == constant.Composite, a
+		// struct/map/slice/array value folded by the comptime interpreter)
+		// has a real, non-basic type by design -- see forgoEvalConstCall in
+		// forgo.go and initConst's analogous exception in assignments.go.
+		assert(!isValid(typ) || val.Kind() == constant.Composite || allBasic(typ, IsConstType))
 	}
 	if m := check.Types; m != nil {
 		m[x] = TypeAndValue{mode, typ, val}

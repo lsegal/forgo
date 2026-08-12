@@ -14,11 +14,12 @@ func _() {
 	_ = x[Int-3]
 	_ = x[Float-4]
 	_ = x[Complex-5]
+	_ = x[Composite-6]
 }
 
-const _Kind_name = "UnknownBoolStringIntFloatComplex"
+const _Kind_name = "UnknownBoolStringIntFloatComplexComposite"
 
-var _Kind_index = [...]uint8{0, 7, 11, 17, 20, 25, 32}
+var _Kind_index = [...]uint8{0, 7, 11, 17, 20, 25, 32, 41}
 
 func (i Kind) String() string {
 	if i < 0 || i >= Kind(len(_Kind_index)-1) {

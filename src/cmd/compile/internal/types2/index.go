@@ -19,6 +19,18 @@ func (check *Checker) indexExpr(x *operand, e *syntax.IndexExpr) (isFuncInst boo
 	check.exprOrType(x, e.X, true)
 	// x may be generic
 
+	// forgo: x[i] on an array-shaped composite constant (a slice/array
+	// value folded by the comptime interpreter, see go/constant's
+	// Composite kind) is itself a constant when i is -- capture that here,
+	// before the switch below overwrites x.mode/x.val with the ordinary
+	// (runtime-value) indexing result, and fold below once the index's
+	// constant value (if any) is known. See call.go's selector for the
+	// analogous struct-field-selection fold.
+	var baseComposite constant.Value
+	if x.mode == constant_ && x.val != nil && x.val.Kind() == constant.Composite && constant.CompositeIsArray(x.val) {
+		baseComposite = x.val
+	}
+
 	switch x.mode {
 	case invalid:
 		check.use(e.Index)
@@ -202,7 +214,13 @@ func (check *Checker) indexExpr(x *operand, e *syntax.IndexExpr) (isFuncInst boo
 		x.typ = Typ[Invalid]
 	}
 
-	check.index(index, length)
+	_, idx := check.index(index, length)
+	if baseComposite != nil && idx >= 0 {
+		if elems := constant.CompositeElems(baseComposite); idx < int64(len(elems)) {
+			x.mode = constant_
+			x.val = elems[idx]
+		}
+	}
 	return false
 }
 

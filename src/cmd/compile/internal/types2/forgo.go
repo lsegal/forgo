@@ -12,7 +12,6 @@ package types2
 import (
 	"cmd/compile/internal/forgo"
 	"cmd/compile/internal/syntax"
-	"go/constant"
 	. "internal/types/errors"
 )
 
@@ -80,9 +79,14 @@ func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 		x.mode = invalid
 		return true
 	}
-	cv, ok := v.(constant.Value)
+	// v is either a scalar or a struct/map/slice composite (see
+	// forgo.ToConstant); either way it folds into a real go/constant.Value
+	// -- x.typ is already whatever check.expr inferred for init from the
+	// real (possibly generic) function signatures involved, e.g. Schema
+	// for json.Unmarshal[Schema](...), so it's left untouched here.
+	cv, ok := forgo.ToConstant(v)
 	if !ok {
-		check.error(init, InvalidConstInit, "compile-time evaluation did not produce a constant value (got a struct/slice/map result; select a scalar field or element first)")
+		check.error(init, InvalidConstInit, "compile-time evaluation did not produce a usable constant value")
 		x.mode = invalid
 		return true
 	}

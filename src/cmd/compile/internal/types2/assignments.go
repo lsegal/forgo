@@ -9,6 +9,7 @@ package types2
 import (
 	"cmd/compile/internal/syntax"
 	"fmt"
+	"go/constant"
 	. "internal/types/errors"
 	"strings"
 )
@@ -131,7 +132,13 @@ func (check *Checker) initConst(lhs *Const, x *operand) {
 		}
 		return
 	}
-	assert(isConstType(x.typ))
+	// A forgo composite constant (a struct/map/slice/array value folded by
+	// the comptime interpreter, e.g. from comptime/json's Unmarshal) has a
+	// real, non-basic type (x.typ) by design -- isConstType only knows
+	// about the ordinary bool/numeric/string constant kinds, so skip its
+	// assertion here rather than teaching it about a kind of constant Go
+	// itself has never had. See forgoEvalConstCall in forgo.go.
+	assert(x.val.Kind() == constant.Composite || isConstType(x.typ))
 
 	// If the lhs doesn't have a type yet, use the type of x.
 	if lhs.typ == nil {

@@ -8,6 +8,7 @@ package types2
 
 import (
 	"cmd/compile/internal/syntax"
+	"go/constant"
 	. "internal/types/errors"
 	"strings"
 )
@@ -834,6 +835,28 @@ func (check *Checker) selector(x *operand, e *syntax.SelectorExpr, wantType bool
 		}
 		check.errorf(e.Sel, MissingFieldOrMethod, "%s.%s undefined (%s)", x.expr, sel, why)
 		goto Error
+	}
+
+	// forgo: x.Field on a composite constant (a struct value folded by the
+	// comptime interpreter, see go/constant's Composite kind) is itself a
+	// constant -- fold it now instead of falling through to the ordinary
+	// (runtime-value) field-selection logic below, so it can be used
+	// anywhere Go requires a constant expression (another const, an array
+	// length, a case label, ...), not just inside the const declaration
+	// that produced it. Only a direct (non-embedded, non-pointer) field of
+	// a struct-shaped composite folds this way; anything else (a promoted
+	// field via embedding) falls through to ordinary selection.
+	if _, isVar := obj.(*Var); isVar && len(index) == 1 && !indirect &&
+		x.mode == constant_ && x.val != nil && x.val.Kind() == constant.Composite && !constant.CompositeIsArray(x.val) {
+		if fv, ok := constant.CompositeField(x.val, sel); ok {
+			check.recordSelection(e, FieldVal, x.typ, obj, index, indirect)
+			fieldType := obj.(*Var).typ
+			x.mode = constant_
+			x.typ = fieldType
+			x.val = fv
+			x.expr = e
+			return
+		}
 	}
 
 	// methods may not have a fully set up signature yet
