@@ -288,8 +288,9 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 
 This directory *is* the forgo `GOROOT` (`src/`, `bin/`, `pkg/`, `lib/`, etc.
 all present). To build or run forgo code, point `GOROOT` at this repo's
-root and use its `bin/forgo` (a copy of the real, unmodified `bin/go` under
-a different name — see README.md's "Least invasive by design"):
+root and use its `bin/forgo` (the real, unmodified `cmd/go` build, renamed
+from `bin/go` by the wrapper build scripts — see README.md's "Least
+invasive by design"):
 
 ```bash
 GOROOT=/path/to/forgo /path/to/forgo/bin/forgo run ./yourpackage
@@ -302,12 +303,14 @@ always use the `bin/forgo` built from `src/` in this repo.
 
 If you change the compiler itself (anything under
 `src/cmd/compile/internal/{syntax,noder,types2,forgo}`), rebuild before
-testing code changes, then re-copy the binary:
+testing code changes:
 
 ```bash
 cd src && GOROOT_BOOTSTRAP=/path/to/a/plain/go1.24+/install ./make.bat   # or make.bash / make.rc
-cp ../bin/go ../bin/forgo   # bin/go.exe -> bin/forgo.exe on Windows
 ```
+
+The build script itself renames the freshly built `bin/go` to `bin/forgo`
+as its last step — no separate copy needed.
 
 ## Version, CI, releases, upstream sync
 
@@ -343,8 +346,10 @@ Users install a release via `install/install.sh` (Linux/macOS) or
   `?` token/operator and `//fgo:` pragma parsing.
 
 These are all either new files (untouched by upstream merges) or single-line
-hooks into existing files — see README.md's "Least invasive by design" if
-you're adding a new forgo feature and want to follow the same pattern.
+hooks into existing files. Follow that same pattern if you're adding a new
+forgo feature: put the logic in a new file, and touch existing upstream
+files with only a single-line hook, so daily upstream merges stay
+conflict-free.
 
 See [README.md](README.md) for full design rationale, limitations, and
 runnable examples under `examples/`.

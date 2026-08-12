@@ -98,7 +98,6 @@ jobs:
           export GOROOT_BOOTSTRAP="$(go env GOROOT)"
           cd src
           ./make.bash
-          cp ../bin/go ../bin/forgo
 
       - name: Build forgo toolchain (Windows)
         if: runner.os == 'Windows'
@@ -109,7 +108,6 @@ jobs:
           Set-Location src
           & .\make.bat
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item ..\bin\go.exe ..\bin\forgo.exe
 
       - name: Smoke test examples (Linux/macOS)
         if: runner.os != 'Windows'

@@ -12,11 +12,11 @@ fi
 export GOROOT="$(cd .. && pwd)"
 
 gobin="${GOROOT}"/bin
-if ! "$gobin"/go help >/dev/null 2>&1; then
+if ! "$gobin"/forgo help >/dev/null 2>&1; then
 	echo 'cannot find go command; nothing to clean' >&2
 	exit 1
 fi
 
-"$gobin/go" clean -i std
-"$gobin/go" tool dist clean
-"$gobin/go" clean -i cmd
+"$gobin/forgo" clean -i std
+"$gobin/forgo" tool dist clean
+"$gobin/forgo" clean -i cmd

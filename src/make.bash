@@ -219,8 +219,20 @@ fi
 ./cmd/dist/dist bootstrap -a $vflag $GO_DISTFLAGS "$@"
 rm -f ./cmd/dist/dist
 
-# DO NOT ADD ANY NEW CODE HERE.
+# DO NOT ADD ANY NEW CODE HERE (except the forgo rename below).
 # The bootstrap+rm above are the final step of make.bash.
 # If something must be added, add it to cmd/dist's cmdbootstrap,
 # to avoid needing three copies in three different shell languages
 # (make.bash, make.bat, make.rc).
+
+# forgo: cmd/dist and cmd/go are kept 100% stock (see README.md's "Least
+# invasive by design") so the bootstrap above still produces bin/go. Rename
+# it to bin/forgo here, in the wrapper script, instead of patching cmd/go's
+# self-references to its own binary name -- that would fight every future
+# upstream merge. No bin/go is left behind.
+if [[ -f "$GOROOT/bin/go" ]]; then
+	mv -f "$GOROOT/bin/go" "$GOROOT/bin/forgo"
+fi
+if [[ -f "$GOROOT/bin/gofmt" ]]; then
+	mv -f "$GOROOT/bin/gofmt" "$GOROOT/bin/forgofmt"
+fi

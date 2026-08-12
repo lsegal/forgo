@@ -10,4 +10,4 @@ if [ ! -f make.bash ]; then
 fi
 . ./make.bash "$@" --no-banner
 bash run.bash --no-rebuild
-../bin/go tool dist banner # print build info
+../bin/forgo tool dist banner # print build info

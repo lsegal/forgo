@@ -40,7 +40,7 @@ fi
 GOROOT="$(cd .. && pwd)"
 
 gettargets() {
-	../bin/go tool dist list | sed -e 's|/|-|' |
+	../bin/forgo tool dist list | sed -e 's|/|-|' |
 		grep -E -v '^(android|ios)' # need C toolchain even for cross-compiling
 	echo linux-arm-arm5
 }
@@ -77,7 +77,7 @@ do
 	# Build and vet everything.
 	# cmd/go/internal/work/exec.go enables the same vet flags during go test of std cmd
 	# and should be kept in sync with any vet flag changes here.
-	if ! "$GOROOT/bin/go" build std cmd || ! "$GOROOT/bin/go" vet -unsafeptr=false std cmd; then
+	if ! "$GOROOT/bin/forgo" build std cmd || ! "$GOROOT/bin/forgo" vet -unsafeptr=false std cmd; then
 		failed=true
 		if $sete; then
 			exit 1
