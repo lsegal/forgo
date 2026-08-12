@@ -39,6 +39,7 @@ import (
 	"cmd/go/internal/tool"
 	"cmd/go/internal/toolchain"
 	"cmd/go/internal/trace"
+	"cmd/go/internal/upgrade"
 	"cmd/go/internal/version"
 	"cmd/go/internal/vet"
 	"cmd/go/internal/work"
@@ -66,6 +67,8 @@ func init() {
 		telemetrycmd.CmdTelemetry,
 		test.CmdTest,
 		tool.CmdTool,
+		upgrade.CmdUpgrade,
+		upgrade.CmdUpdate,
 		version.CmdVersion,
 		vet.CmdVet,
 
