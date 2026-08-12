@@ -1,0 +1,49 @@
+package a
+
+import "errors"
+
+func open(path string) (*int, error) { return nil, nil }
+func parse(x *int) (string, error)   { return "", nil }
+func noop() error                    { return nil }
+
+// simple: single value + err, gets rewritten to "?".
+func loadConfig(path string) (cfg *int, err error) {
+	cfg = open(path)?
+	return cfg, nil
+}
+
+// bare error-only call, gets rewritten to a statement-form "?".
+func doNoop() (err error) {
+	noop()?
+	return nil
+}
+
+// not the obvious zero value for the first result: must NOT fire.
+func loadConfigNonZero(path string, fallback *int) (cfg *int, err error) {
+	cfg, err = open(path)
+	if err != nil {
+		return fallback, err
+	}
+	return cfg, nil
+}
+
+// unnamed error result: "?" isn't usable here, must NOT fire.
+func loadConfigUnnamed(path string) (*int, error) {
+	cfg, err := open(path)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// err used again after the check: must NOT fire (would change semantics).
+func loadConfigErrAfter(path string) (cfg *int, err error) {
+	cfg, err = open(path)
+	if err != nil {
+		return nil, err
+	}
+	_ = err
+	return cfg, nil
+}
+
+var _ = errors.New
