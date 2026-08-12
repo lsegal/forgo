@@ -1186,6 +1186,36 @@ func (check *Checker) exprInternal(T *target, x *operand, e ast.Expr, hint Type)
 		check.error(e, InvalidSyntaxTree, "no key:value expected")
 		goto Error
 
+	case *ast.TryExpr:
+		// forgo: X? propagates an error result of X from the enclosing
+		// function. X must evaluate to either a bare error (used as a
+		// whole statement, e.g. f()?) or a (value, error) pair (used
+		// where a value is expected, e.g. x := f()?); the actual control
+		// flow is synthesized later by the compiler, not here, so this
+		// only needs to compute X?'s type (or novalue) for diagnostics.
+		list, _ := check.multiExpr(e.X, false)
+		switch len(list) {
+		case 1:
+			if list[0].mode != invalid && !AssignableTo(list[0].typ, universeError) {
+				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand must return (value, error) or a bare error, not %s", list[0].typ)
+				goto Error
+			}
+			x.mode = novalue
+			x.typ = Typ[Invalid]
+			x.expr = e
+			return statement
+		case 2:
+			if list[1].mode != invalid && !AssignableTo(list[1].typ, universeError) {
+				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand's last result must be error, not %s", list[1].typ)
+				goto Error
+			}
+			x.mode = value
+			x.typ = list[0].typ
+		default:
+			check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand must return (value, error) or a bare error, not %d results", len(list))
+			goto Error
+		}
+
 	case *ast.ArrayType, *ast.StructType, *ast.FuncType,
 		*ast.InterfaceType, *ast.MapType, *ast.ChanType:
 		x.mode = typexpr
