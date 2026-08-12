@@ -1,0 +1,53 @@
+{
+	"name": "forgo",
+	"displayName": "Forgo",
+	"description": "Language support for forgo (.fgo): syntax highlighting for ?, //forgo:comptime, and //forgo:macro, plus optional gopls-backed language features.",
+	"version": "0.1.0",
+	"publisher": "lsegal",
+	"license": "BSD-3-Clause",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lsegal/forgo"
+	},
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": ["Programming Languages"],
+	"activationEvents": ["onLanguage:forgo"],
+	"main": "./extension.js",
+	"contributes": {
+		"languages": [
+			{
+				"id": "forgo",
+				"aliases": ["Forgo", "forgo"],
+				"extensions": [".fgo"],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "forgo",
+				"scopeName": "source.forgo",
+				"path": "./syntaxes/forgo.tmLanguage.json"
+			}
+		],
+		"configuration": {
+			"title": "Forgo",
+			"properties": {
+				"forgo.languageServerPath": {
+					"type": "string",
+					"default": "gopls",
+					"description": "Path to the gopls binary used for forgo language features (diagnostics are limited on forgo-specific syntax like ?, //forgo:comptime, //forgo:macro)."
+				},
+				"forgo.enableLanguageServer": {
+					"type": "boolean",
+					"default": true,
+					"description": "Start a language server for .fgo files. Disable to use syntax highlighting only."
+				}
+			}
+		}
+	},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.1"
+	}
+}

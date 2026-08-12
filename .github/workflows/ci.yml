@@ -8,6 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Package VS Code extension
+        working-directory: editors/vscode
+        run: |
+          set -euo pipefail
+          npm install
+          npx @vscode/vsce package --out /tmp/forgo-ci.vsix
+
   build-and-test:
     strategy:
       fail-fast: false

@@ -1,0 +1,129 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Forgo",
+	"scopeName": "source.forgo",
+	"fileTypes": ["fgo"],
+	"patterns": [
+		{ "include": "#comments" },
+		{ "include": "#forgo-directives" },
+		{ "include": "#imports" },
+		{ "include": "#keywords" },
+		{ "include": "#storage-types" },
+		{ "include": "#constants" },
+		{ "include": "#strings" },
+		{ "include": "#numbers" },
+		{ "include": "#operators" },
+		{ "include": "#functions" }
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.double-slash.forgo",
+					"match": "//.*$"
+				},
+				{
+					"name": "comment.block.forgo",
+					"begin": "/\\*",
+					"end": "\\*/"
+				}
+			]
+		},
+		"forgo-directives": {
+			"patterns": [
+				{
+					"name": "keyword.control.directive.forgo",
+					"match": "//forgo:(comptime|macro)\\b"
+				}
+			]
+		},
+		"imports": {
+			"patterns": [
+				{
+					"name": "keyword.control.import.forgo",
+					"match": "\\b(package|import)\\b"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.forgo",
+					"match": "\\b(break|case|continue|default|defer|else|fallthrough|for|go|goto|if|range|return|select|switch)\\b"
+				},
+				{
+					"name": "keyword.other.forgo",
+					"match": "\\b(chan|const|func|interface|map|struct|type|var)\\b"
+				}
+			]
+		},
+		"storage-types": {
+			"patterns": [
+				{
+					"name": "storage.type.forgo",
+					"match": "\\b(bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr|any|comparable)\\b"
+				}
+			]
+		},
+		"constants": {
+			"patterns": [
+				{
+					"name": "constant.language.forgo",
+					"match": "\\b(true|false|nil|iota)\\b"
+				}
+			]
+		},
+		"strings": {
+			"patterns": [
+				{
+					"name": "string.quoted.double.forgo",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [{ "name": "constant.character.escape.forgo", "match": "\\\\." }]
+				},
+				{
+					"name": "string.quoted.raw.forgo",
+					"begin": "`",
+					"end": "`"
+				},
+				{
+					"name": "string.quoted.single.forgo",
+					"begin": "'",
+					"end": "'",
+					"patterns": [{ "name": "constant.character.escape.forgo", "match": "\\\\." }]
+				}
+			]
+		},
+		"numbers": {
+			"patterns": [
+				{
+					"name": "constant.numeric.forgo",
+					"match": "\\b(0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]*)?([eE][+-]?[0-9_]+)?i?)\\b"
+				}
+			]
+		},
+		"operators": {
+			"patterns": [
+				{
+					"comment": "forgo's ? error-propagation operator",
+					"name": "keyword.operator.forgo.try",
+					"match": "\\?"
+				},
+				{
+					"name": "keyword.operator.forgo",
+					"match": ":=|==|!=|<=|>=|&&|\\|\\||<-|\\+\\+|--|[+\\-*/%&|^!<>=]"
+				}
+			]
+		},
+		"functions": {
+			"patterns": [
+				{
+					"match": "\\bfunc\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+					"captures": {
+						"1": { "name": "entity.name.function.forgo" }
+					}
+				}
+			]
+		}
+	}
+}
