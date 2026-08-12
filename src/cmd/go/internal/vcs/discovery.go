@@ -13,7 +13,7 @@ import (
 
 // charsetReader returns a reader that converts from the given charset to UTF-8.
 // Currently it only supports UTF-8 and ASCII. Otherwise, it returns a meaningful
-// error which is printed by go get, so the user can find why the package
+// error which is printed by forgo get, so the user can find why the package
 // wasn't downloaded if the encoding is not supported. Note that, in
 // order to reduce potential errors, ASCII is treated as UTF-8 (i.e. characters
 // greater than 0x7f are not rejected).

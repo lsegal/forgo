@@ -10,14 +10,14 @@ import (
 )
 
 var CmdMod = &base.Command{
-	UsageLine: "go mod",
+	UsageLine: "forgo mod",
 	Short:     "module maintenance",
 	Long: `Go mod provides access to operations on modules.
 
-Note that support for modules is built into all the go commands,
-not just 'go mod'. For example, day-to-day adding, removing, upgrading,
-and downgrading of dependencies should be done using 'go get'.
-See 'go help modules' for an overview of module functionality.
+Note that support for modules is built into all the forgo commands,
+not just 'forgo mod'. For example, day-to-day adding, removing, upgrading,
+and downgrading of dependencies should be done using 'forgo get'.
+See 'forgo help modules' for an overview of module functionality.
 	`,
 
 	Commands: []*base.Command{

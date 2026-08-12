@@ -59,12 +59,12 @@ func runGoAuth(client *http.Client, res *http.Response, url string) {
 		command = strings.TrimSpace(command)
 		words := strings.Fields(command)
 		if len(words) == 0 {
-			base.Fatalf("go: GOAUTH encountered an empty command (GOAUTH=%s)", cfg.GOAUTH)
+			base.Fatalf("forgo: GOAUTH encountered an empty command (GOAUTH=%s)", cfg.GOAUTH)
 		}
 		switch words[0] {
 		case "off":
 			if len(goAuthCmds) != 1 {
-				base.Fatalf("go: GOAUTH=off cannot be combined with other authentication commands (GOAUTH=%s)", cfg.GOAUTH)
+				base.Fatalf("forgo: GOAUTH=off cannot be combined with other authentication commands (GOAUTH=%s)", cfg.GOAUTH)
 			}
 			return
 		case "netrc":
@@ -75,7 +75,7 @@ func runGoAuth(client *http.Client, res *http.Response, url string) {
 			}
 			// Process lines in reverse so that if the same machine is listed
 			// multiple times, we end up saving the earlier one
-			// (overwriting later ones). This matches the way the go command
+			// (overwriting later ones). This matches the way the forgo command
 			// worked before GOAUTH.
 			for i := len(lines) - 1; i >= 0; i-- {
 				l := lines[i]
@@ -85,18 +85,18 @@ func runGoAuth(client *http.Client, res *http.Response, url string) {
 			}
 		case "git":
 			if len(words) != 2 {
-				base.Fatalf("go: GOAUTH=git dir method requires an absolute path to the git working directory")
+				base.Fatalf("forgo: GOAUTH=git dir method requires an absolute path to the git working directory")
 			}
 			dir := words[1]
 			if !filepath.IsAbs(dir) {
-				base.Fatalf("go: GOAUTH=git dir method requires an absolute path to the git working directory, dir is not absolute")
+				base.Fatalf("forgo: GOAUTH=git dir method requires an absolute path to the git working directory, dir is not absolute")
 			}
 			fs, err := os.Stat(dir)
 			if err != nil {
-				base.Fatalf("go: GOAUTH=git encountered an error; cannot stat %s: %v", dir, err)
+				base.Fatalf("forgo: GOAUTH=git encountered an error; cannot stat %s: %v", dir, err)
 			}
 			if !fs.IsDir() {
-				base.Fatalf("go: GOAUTH=git dir method requires an absolute path to the git working directory, dir is not a directory")
+				base.Fatalf("forgo: GOAUTH=git dir method requires an absolute path to the git working directory, dir is not a directory")
 			}
 
 			if url == "" {

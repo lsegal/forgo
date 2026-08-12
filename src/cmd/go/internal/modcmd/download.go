@@ -24,7 +24,7 @@ import (
 )
 
 var cmdDownload = &base.Command{
-	UsageLine: "go mod download [-x] [-json] [-reuse=old.json] [modules]",
+	UsageLine: "forgo mod download [-x] [-json] [-reuse=old.json] [modules]",
 	Short:     "download modules to local cache",
 	Long: `
 Download downloads the named modules, which can be module patterns selecting
@@ -32,11 +32,11 @@ dependencies of the main module or module queries of the form path@version.
 
 With no arguments, download applies to the modules needed to build and test
 the packages in the main module: the modules explicitly required by the main
-module if it is at 'go 1.17' or higher, or all transitively-required modules
-if at 'go 1.16' or lower.
+module if it is at 'forgo 1.17' or higher, or all transitively-required modules
+if at 'forgo 1.16' or lower.
 
-The go command will automatically download modules as needed during ordinary
-execution. The "go mod download" command is useful mainly for pre-filling
+The forgo command will automatically download modules as needed during ordinary
+execution. The "forgo mod download" command is useful mainly for pre-filling
 the local cache or to compute the answers for a Go module proxy.
 
 By default, download writes nothing to standard output. It may print progress
@@ -62,7 +62,7 @@ corresponding to this Go struct:
     }
 
 The -reuse flag accepts the name of file containing the JSON output of a
-previous 'go mod download -json' invocation. The go command may use this
+previous 'forgo mod download -json' invocation. The forgo command may use this
 file to determine that a module is unchanged since the previous invocation
 and avoid redownloading it. Modules that are not redownloaded will be marked
 in the new output by setting the Reuse field to true. Normally the module
@@ -71,7 +71,7 @@ useful on systems that do not preserve the module cache.
 
 The -x flag causes download to print the commands download executes.
 
-See https://golang.org/ref/mod#go-mod-download for more about 'go mod download'.
+See https://golang.org/ref/mod#go-mod-download for more about 'forgo mod download'.
 
 See https://golang.org/ref/mod#version-queries for more about version queries.
 	`,
@@ -85,13 +85,13 @@ var (
 func init() {
 	cmdDownload.Run = runDownload // break init cycle
 
-	// TODO(jayconrod): https://golang.org/issue/35849 Apply -x to other 'go mod' commands.
+	// TODO(jayconrod): https://golang.org/issue/35849 Apply -x to other 'forgo mod' commands.
 	cmdDownload.Flag.BoolVar(&cfg.BuildX, "x", false, "")
 	base.AddChdirFlag(&cmdDownload.Flag)
 	base.AddModCommonFlags(&cmdDownload.Flag)
 }
 
-// A ModuleJSON describes the result of go mod download.
+// A ModuleJSON describes the result of forgo mod download.
 type ModuleJSON struct {
 	Path     string `json:",omitempty"`
 	Version  string `json:",omitempty"`
@@ -127,7 +127,7 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 				for _, arg := range args {
 					switch arg {
 					case mainModule.Path, targetAtUpgrade, targetAtPatch:
-						os.Stderr.WriteString("go: skipping download of " + arg + " that resolves to the main module\n")
+						os.Stderr.WriteString("forgo: skipping download of " + arg + " that resolves to the main module\n")
 					}
 				}
 			}
@@ -146,14 +146,14 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 			} else {
 				// As of Go 1.17, the go.mod file explicitly requires every module
 				// that provides any package imported by the main module.
-				// 'go mod download' is typically run before testing packages in the
+				// 'forgo mod download' is typically run before testing packages in the
 				// main module, so by default we shouldn't download the others
 				// (which are presumed irrelevant to the packages in the main module).
 				// See https://golang.org/issue/44435.
 				//
 				// However, we also need to load the full module graph, to ensure that
-				// we have downloaded enough of the module graph to run 'go list all',
-				// 'go mod graph', and similar commands.
+				// we have downloaded enough of the module graph to run 'forgo list all',
+				// 'forgo mod graph', and similar commands.
 				_, err := modload.LoadModGraph(moduleLoaderState, ctx, "")
 				if err != nil {
 					// TODO(#64008): call base.Fatalf instead of toolchain.SwitchOrFatal
@@ -171,15 +171,15 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 
 	if len(args) == 0 {
 		if moduleLoaderState.HasModRoot() {
-			os.Stderr.WriteString("go: no module dependencies to download\n")
+			os.Stderr.WriteString("forgo: no module dependencies to download\n")
 		} else {
-			base.Errorf("go: no modules specified (see 'go help mod download')")
+			base.Errorf("forgo: no modules specified (see 'forgo help mod download')")
 		}
 		base.Exit()
 	}
 
 	if *downloadReuse != "" && moduleLoaderState.HasModRoot() {
-		base.Fatalf("go mod download -reuse cannot be used inside a module")
+		base.Fatalf("forgo mod download -reuse cannot be used inside a module")
 	}
 
 	var mods []*ModuleJSON
@@ -222,7 +222,7 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 	}
 
 	if !haveExplicitArgs && modload.WorkFilePath(moduleLoaderState) == "" {
-		// 'go mod download' is sometimes run without arguments to pre-populate the
+		// 'forgo mod download' is sometimes run without arguments to pre-populate the
 		// module cache. In modules that aren't at go 1.17 or higher, it may fetch
 		// modules that aren't needed to build packages in the main module. This is
 		// usually not intended, so don't save sums for downloaded modules
@@ -279,7 +279,7 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 	}
 
 	// If there were explicit arguments
-	// (like 'go mod download golang.org/x/tools@latest'),
+	// (like 'forgo mod download golang.org/x/tools@latest'),
 	// check whether we need to upgrade the toolchain in order to download them.
 	//
 	// (If invoked without arguments, we expect the module graph to already
@@ -332,8 +332,8 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 	}
 
 	// If there were explicit arguments, update go.mod and especially go.sum.
-	// 'go mod download mod@version' is a useful way to add a sum without using
-	// 'go get mod@version', which may have other side effects. We print this in
+	// 'forgo mod download mod@version' is a useful way to add a sum without using
+	// 'forgo get mod@version', which may have other side effects. We print this in
 	// some error message hints.
 	//
 	// If we're in workspace mode, update go.work.sum with checksums for all of
@@ -346,7 +346,7 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 	// TODO(#44435): If we adjust the set of modules downloaded in workspace mode,
 	// we may also need to adjust the logic for saving checksums here.
 	//
-	// Don't save sums for 'go mod download' without arguments unless we're in
+	// Don't save sums for 'forgo mod download' without arguments unless we're in
 	// workspace mode; see comment above.
 	if haveExplicitArgs || modload.WorkFilePath(moduleLoaderState) != "" {
 		if err := modload.WriteGoMod(moduleLoaderState, ctx, modload.WriteOpts{}); err != nil {
@@ -362,7 +362,7 @@ func runDownload(ctx context.Context, cmd *base.Command, args []string) {
 	}
 }
 
-// DownloadModule runs 'go mod download' for m.Path@m.Version,
+// DownloadModule runs 'forgo mod download' for m.Path@m.Version,
 // leaving the results (including any error) in m itself.
 func DownloadModule(ctx context.Context, f *modfetch.Fetcher, m *ModuleJSON) error {
 	var err error

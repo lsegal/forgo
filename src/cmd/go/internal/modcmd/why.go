@@ -15,7 +15,7 @@ import (
 )
 
 var cmdWhy = &base.Command{
-	UsageLine: "go mod why [-m] [-vendor] packages...",
+	UsageLine: "forgo mod why [-m] [-vendor] packages...",
 	Short:     "explain why packages or modules are needed",
 	Long: `
 Why shows a shortest path in the import graph from the main module to
@@ -23,7 +23,7 @@ each of the listed packages. If the -m flag is given, why treats the
 arguments as a list of modules and finds a path to any package in each
 of the modules.
 
-By default, why queries the graph of packages matched by "go list all",
+By default, why queries the graph of packages matched by "forgo list all",
 which includes tests for reachable packages. The -vendor flag causes why
 to exclude tests of dependencies.
 
@@ -37,7 +37,7 @@ parenthesized note indicating that fact.
 
 For example:
 
-	$ go mod why golang.org/x/text/language golang.org/x/text/encoding
+	$ forgo mod why golang.org/x/text/language golang.org/x/text/encoding
 	# golang.org/x/text/language
 	rsc.io/quote
 	rsc.io/sampler
@@ -47,7 +47,7 @@ For example:
 	(main module does not need package golang.org/x/text/encoding)
 	$
 
-See https://golang.org/ref/mod#go-mod-why for more about 'go mod why'.
+See https://golang.org/ref/mod#go-mod-why for more about 'forgo mod why'.
 	`,
 }
 
@@ -80,7 +80,7 @@ func runWhy(ctx context.Context, cmd *base.Command, args []string) {
 	if *whyM {
 		for _, arg := range args {
 			if strings.Contains(arg, "@") {
-				base.Fatalf("go: %s: 'go mod why' requires a module path, not a version query", arg)
+				base.Fatalf("forgo: %s: 'forgo mod why' requires a module path, not a version query", arg)
 			}
 		}
 

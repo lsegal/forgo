@@ -285,7 +285,7 @@ func (*dbClient) WriteConfig(file string, old, new []byte) error {
 
 // ReadCache reads cached lookups or tiles from
 // GOPATH/pkg/mod/cache/download/sumdb,
-// which will be deleted by "go clean -modcache".
+// which will be deleted by "forgo clean -modcache".
 func (*dbClient) ReadCache(file string) ([]byte, error) {
 	targ := filepath.Join(cfg.GOMODCACHE, "cache/download/sumdb", file)
 	data, err := lockedfile.Read(targ)

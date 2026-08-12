@@ -13,7 +13,7 @@ import (
 )
 
 var cmdVendor = &base.Command{
-	UsageLine: "go work vendor [-e] [-v] [-o outdir]",
+	UsageLine: "forgo work vendor [-e] [-v] [-o outdir]",
 	Short:     "make vendored copy of dependencies",
 	Long: `
 Vendor resets the workspace's vendor directory to include all packages
@@ -27,7 +27,7 @@ The -e flag causes vendor to attempt to proceed despite errors
 encountered while loading packages.
 
 The -o flag causes vendor to create the vendor directory at the given
-path instead of "vendor". The go command can only use a vendor directory
+path instead of "vendor". The forgo command can only use a vendor directory
 named "vendor" within the module root directory, so this flag is
 primarily useful for other tools.`,
 
@@ -49,7 +49,7 @@ func runVendor(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	moduleLoaderState.InitWorkfile()
 	if modload.WorkFilePath(moduleLoaderState) == "" {
-		base.Fatalf("go: no go.work file found\n\t(run 'go work init' first or specify path using GOWORK environment variable)")
+		base.Fatalf("forgo: no go.work file found\n\t(run 'forgo work init' first or specify path using GOWORK environment variable)")
 	}
 
 	modcmd.RunVendor(moduleLoaderState, ctx, vendorE, vendorO, args)

@@ -34,7 +34,7 @@ import (
 )
 
 var CmdEnv = &base.Command{
-	UsageLine: "go env [-json] [-changed] [-u] [-w] [var ...]",
+	UsageLine: "forgo env [-json] [-changed] [-u] [-w] [var ...]",
 	Short:     "print Go environment information",
 	Long: `
 Env prints Go environment information.
@@ -49,7 +49,7 @@ instead of as a shell script.
 
 The -u flag requires one or more arguments and unsets
 the default setting for the named environment variables,
-if one has been set with 'go env -w'.
+if one has been set with 'forgo env -w'.
 
 The -w flag requires one or more arguments of the
 form NAME=VALUE and changes the default settings
@@ -59,7 +59,7 @@ The -changed flag prints only those settings whose effective
 value differs from the default value that would be obtained in
 an empty environment with no prior uses of the -w flag.
 
-For more about environment variables, see 'go help environment'.
+For more about environment variables, see 'forgo help environment'.
 	`,
 }
 
@@ -222,7 +222,7 @@ func ExtraEnvVarsCostly(loaderstate *modload.State) []cfg.EnvVar {
 	cppflags, cflags, cxxflags, fflags, ldflags, err := b.CFlags(&load.Package{})
 	if err != nil {
 		// Should not happen - b.CFlags was given an empty package.
-		fmt.Fprintf(os.Stderr, "go: invalid cflags: %v\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: invalid cflags: %v\n", err)
 		return nil
 	}
 	cmd := b.GccCmd(".", "")
@@ -274,16 +274,16 @@ func argKey(arg string) string {
 func runEnv(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	if *envJson && *envU {
-		base.Fatalf("go: cannot use -json with -u")
+		base.Fatalf("forgo: cannot use -json with -u")
 	}
 	if *envJson && *envW {
-		base.Fatalf("go: cannot use -json with -w")
+		base.Fatalf("forgo: cannot use -json with -w")
 	}
 	if *envU && *envW {
-		base.Fatalf("go: cannot use -u with -w")
+		base.Fatalf("forgo: cannot use -u with -w")
 	}
 
-	// Handle 'go env -w' and 'go env -u' before calling buildcfg.Check,
+	// Handle 'forgo env -w' and 'forgo env -u' before calling buildcfg.Check,
 	// so they can be used to recover from an invalid configuration.
 	if *envW {
 		runEnvW(args)
@@ -302,7 +302,7 @@ func runEnv(ctx context.Context, cmd *base.Command, args []string) {
 
 	for _, arg := range args {
 		if strings.Contains(arg, "=") {
-			base.Fatalf("go: invalid variable name %q (use -w to set variable)", arg)
+			base.Fatalf("forgo: invalid variable name %q (use -w to set variable)", arg)
 		}
 	}
 
@@ -316,7 +316,7 @@ func runEnv(ctx context.Context, cmd *base.Command, args []string) {
 	// Do we need to call ExtraEnvVarsCostly, which is a bit expensive?
 	needCostly := false
 	if len(args) == 0 {
-		// We're listing all environment variables ("go env"),
+		// We're listing all environment variables ("forgo env"),
 		// including the expensive ones.
 		needCostly = true
 	} else {
@@ -384,7 +384,7 @@ func runEnv(ctx context.Context, cmd *base.Command, args []string) {
 func runEnvW(args []string) {
 	// Process and sanity-check command line.
 	if len(args) == 0 {
-		base.Fatalf("go: no KEY=VALUE arguments given")
+		base.Fatalf("forgo: no KEY=VALUE arguments given")
 	}
 	osEnv := make(map[string]string)
 	for _, e := range cfg.OrigEnv {
@@ -396,17 +396,17 @@ func runEnvW(args []string) {
 	for _, arg := range args {
 		key, val, found := strings.Cut(arg, "=")
 		if !found {
-			base.Fatalf("go: arguments must be KEY=VALUE: invalid argument: %s", arg)
+			base.Fatalf("forgo: arguments must be KEY=VALUE: invalid argument: %s", arg)
 		}
 		if err := checkEnvWrite(key, val); err != nil {
 			base.Fatal(err)
 		}
 		if _, ok := add[key]; ok {
-			base.Fatalf("go: multiple values for key: %s", key)
+			base.Fatalf("forgo: multiple values for key: %s", key)
 		}
 		add[key] = val
 		if osVal := osEnv[key]; osVal != "" && osVal != val {
-			fmt.Fprintf(os.Stderr, "warning: go env -w %s=... does not override conflicting OS environment variable\n", key)
+			fmt.Fprintf(os.Stderr, "warning: forgo env -w %s=... does not override conflicting OS environment variable\n", key)
 		}
 	}
 
@@ -417,7 +417,7 @@ func runEnvW(args []string) {
 	gotmp, okGOTMP := add["GOTMPDIR"]
 	if okGOTMP {
 		if !filepath.IsAbs(gotmp) && gotmp != "" {
-			base.Fatalf("go: GOTMPDIR must be an absolute path")
+			base.Fatalf("forgo: GOTMPDIR must be an absolute path")
 		}
 	}
 
@@ -427,7 +427,7 @@ func runEnvW(args []string) {
 func runEnvU(args []string) {
 	// Process and sanity-check command line.
 	if len(args) == 0 {
-		base.Fatalf("go: 'go env -u' requires an argument")
+		base.Fatalf("forgo: 'forgo env -u' requires an argument")
 	}
 	del := make(map[string]bool)
 	for _, arg := range args {
@@ -491,7 +491,7 @@ func PrintEnv(w io.Writer, env []cfg.EnvVar, onlyChanged bool) {
 	for _, e := range env {
 		if e.Name != "TERM" {
 			if runtime.GOOS != "plan9" && bytes.Contains([]byte(e.Value), []byte{0}) {
-				base.Fatalf("go: internal error: encountered null byte in environment variable %s on non-plan9 platform", e.Name)
+				base.Fatalf("forgo: internal error: encountered null byte in environment variable %s on non-plan9 platform", e.Name)
 			}
 			if onlyChanged && !e.Changed {
 				continue
@@ -515,7 +515,7 @@ func PrintEnv(w io.Writer, env []cfg.EnvVar, onlyChanged bool) {
 				}
 			case "windows":
 				if hasNonGraphic(e.Value) {
-					base.Errorf("go: stripping unprintable or unescapable characters from %%%q%%", e.Name)
+					base.Errorf("forgo: stripping unprintable or unescapable characters from %%%q%%", e.Name)
 				}
 				fmt.Fprintf(w, "set %s=%s\n", e.Name, batchEscape(e.Value))
 			}
@@ -589,7 +589,7 @@ func printEnvAsJSON(env []cfg.EnvVar, onlyChanged bool) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "\t")
 	if err := enc.Encode(m); err != nil {
-		base.Fatalf("go: %s", err)
+		base.Fatalf("forgo: %s", err)
 	}
 }
 
@@ -613,12 +613,12 @@ func checkEnvWrite(key, val string) error {
 	// To catch typos and the like, check that we know the variable.
 	// If it's already in the env file, we assume it's known.
 	if !cfg.CanGetenv(key) {
-		return fmt.Errorf("unknown go command variable %s", key)
+		return fmt.Errorf("unknown forgo command variable %s", key)
 	}
 
 	// Some variables can only have one of a few valid values. If set to an
 	// invalid value, the next cmd/go invocation might fail immediately,
-	// even 'go env -w' itself.
+	// even 'forgo env -w' itself.
 	switch key {
 	case "GO111MODULE":
 		switch val {
@@ -669,13 +669,13 @@ func readEnvFileLines(mustExist bool) []string {
 	file, _, err := cfg.EnvFile()
 	if file == "" {
 		if mustExist {
-			base.Fatalf("go: cannot find go env config: %v", err)
+			base.Fatalf("forgo: cannot find forgo env config: %v", err)
 		}
 		return nil
 	}
 	data, err := os.ReadFile(file)
 	if err != nil && (!os.IsNotExist(err) || mustExist) {
-		base.Fatalf("go: reading go env config: %v", err)
+		base.Fatalf("forgo: reading forgo env config: %v", err)
 	}
 	lines := strings.SplitAfter(string(data), "\n")
 	if lines[len(lines)-1] == "" {
@@ -701,7 +701,7 @@ func updateEnvFile(add map[string]string, del map[string]bool) {
 		}
 	}
 
-	// Add variables (go env -w). Update existing lines in file if present, add to end otherwise.
+	// Add variables (forgo env -w). Update existing lines in file if present, add to end otherwise.
 	for key, val := range add {
 		if p, ok := prev[key]; ok {
 			lines[p] = key + "=" + val + "\n"
@@ -712,7 +712,7 @@ func updateEnvFile(add map[string]string, del map[string]bool) {
 		lines = append(lines, key+"="+val+"\n")
 	}
 
-	// Delete requested variables (go env -u).
+	// Delete requested variables (forgo env -u).
 	for key := range del {
 		if p, ok := prev[key]; ok {
 			lines[p] = ""
@@ -732,7 +732,7 @@ func updateEnvFile(add map[string]string, del map[string]bool) {
 
 	file, _, err := cfg.EnvFile()
 	if file == "" {
-		base.Fatalf("go: cannot find go env config: %v", err)
+		base.Fatalf("forgo: cannot find forgo env config: %v", err)
 	}
 	data := []byte(strings.Join(lines, ""))
 	err = os.WriteFile(file, data, 0666)
@@ -741,7 +741,7 @@ func updateEnvFile(add map[string]string, del map[string]bool) {
 		os.MkdirAll(filepath.Dir(file), 0777)
 		err = os.WriteFile(file, data, 0666)
 		if err != nil {
-			base.Fatalf("go: writing go env config: %v", err)
+			base.Fatalf("forgo: writing forgo env config: %v", err)
 		}
 	}
 }

@@ -25,7 +25,7 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: go run shell.go vcs remote\n")
+	fmt.Fprintf(os.Stderr, "usage: forgo run shell.go vcs remote\n")
 	os.Exit(2)
 }
 

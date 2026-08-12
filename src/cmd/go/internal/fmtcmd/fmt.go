@@ -28,24 +28,24 @@ func init() {
 
 var CmdFmt = &base.Command{
 	Run:       runFmt,
-	UsageLine: "go fmt [-n] [-x] [packages]",
-	Short:     "gofmt (reformat) package sources",
+	UsageLine: "forgo fmt [-n] [-x] [packages]",
+	Short:     "forgofmt (reformat) package sources",
 	Long: `
-Fmt runs the command 'gofmt -l -w' on the packages named
+Fmt runs the command 'forgofmt -l -w' on the packages named
 by the import paths. It prints the names of the files that are modified.
 
-For more about gofmt, see 'go doc cmd/gofmt'.
-For more about specifying packages, see 'go help packages'.
+For more about forgofmt, see 'forgo doc cmd/gofmt'.
+For more about specifying packages, see 'forgo help packages'.
 
 The -n flag prints commands that would be executed.
 The -x flag prints commands as they are executed.
 
 The -mod flag's value sets which module download mode
-to use: readonly or vendor. See 'go help modules' for more.
+to use: readonly or vendor. See 'forgo help modules' for more.
 
-To run gofmt with specific options, run gofmt itself.
+To run forgofmt with specific options, run forgofmt itself.
 
-See also: go fix, go vet.
+See also: forgo fix, forgo vet.
 	`,
 }
 
@@ -63,7 +63,7 @@ func runFmt(ctx context.Context, cmd *base.Command, args []string) {
 	for _, pkg := range load.PackagesAndErrors(moduleLoaderState, ctx, load.PackageOpts{}, args) {
 		if moduleLoaderState.Enabled() && pkg.Module != nil && !pkg.Module.Main {
 			if !printed {
-				fmt.Fprintf(os.Stderr, "go: not formatting packages in dependency modules\n")
+				fmt.Fprintf(os.Stderr, "forgo: not formatting packages in dependency modules\n")
 				printed = true
 			}
 			continue
@@ -98,7 +98,7 @@ func runFmt(ctx context.Context, cmd *base.Command, args []string) {
 }
 
 func gofmtPath() string {
-	gofmt := "gofmt" + cfg.ToolExeSuffix()
+	gofmt := "forgofmt" + cfg.ToolExeSuffix()
 
 	gofmtPath := filepath.Join(cfg.GOBIN, gofmt)
 	if _, err := os.Stat(gofmtPath); err == nil {
@@ -110,6 +110,6 @@ func gofmtPath() string {
 		return gofmtPath
 	}
 
-	// fallback to looking for gofmt in $PATH
-	return "gofmt"
+	// fallback to looking for forgofmt in $PATH
+	return "forgofmt"
 }

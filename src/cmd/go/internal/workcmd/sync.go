@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// go work sync
+// forgo work sync
 
 package workcmd
 
@@ -18,7 +18,7 @@ import (
 )
 
 var cmdSync = &base.Command{
-	UsageLine: "go work sync",
+	UsageLine: "forgo work sync",
 	Short:     "sync workspace build list to modules",
 	Long: `Sync syncs the workspace's build list back to the
 workspace's modules
@@ -52,7 +52,7 @@ func runSync(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState.ForceUseModules = true
 	moduleLoaderState.InitWorkfile()
 	if modload.WorkFilePath(moduleLoaderState) == "" {
-		base.Fatalf("go: no go.work file found\n\t(run 'go work init' first or specify path using GOWORK environment variable)")
+		base.Fatalf("forgo: no go.work file found\n\t(run 'forgo work init' first or specify path using GOWORK environment variable)")
 	}
 
 	_, err := modload.LoadModGraph(moduleLoaderState, ctx, "")
@@ -107,7 +107,7 @@ func runSync(ctx context.Context, cmd *base.Command, args []string) {
 		// single-module mode using the modroot of m.
 		modload.EnterModule(moduleLoaderState, ctx, mms.ModRoot(m))
 
-		// Edit the build list in the same way that 'go get' would if we
+		// Edit the build list in the same way that 'forgo get' would if we
 		// requested the relevant module versions explicitly.
 		// TODO(#57001): Do we need a toolchain.SwitchOrFatal here,
 		// and do we need to pass a toolchain.Switcher in LoadPackages?

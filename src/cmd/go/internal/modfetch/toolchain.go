@@ -61,7 +61,7 @@ func (r *toolchainRepo) Versions(ctx context.Context, prefix string) (*Versions,
 	}
 
 	// Always include our own version.
-	// This means that the development branch of Go 1.21 (say) will allow 'go get go@1.21'
+	// This means that the development branch of Go 1.21 (say) will allow 'forgo get go@1.21'
 	// even though there are no Go 1.21 releases yet.
 	// Once there is a release, 1.21 will be treated as a query matching the latest available release.
 	// Before then, 1.21 will be treated as a query that resolves to this entry we are adding (1.21).

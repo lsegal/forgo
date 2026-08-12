@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package vcweb serves version control repos for testing the go command.
+// Package vcweb serves version control repos for testing the forgo command.
 //
 // It is loosely derived from golang.org/x/build/vcs-test/vcweb,
 // which ran as a service hosted at vcs-test.golang.org.
@@ -26,7 +26,7 @@
 //
 // To run a standalone server based on the vcweb engine, use:
 //
-//	go test cmd/go/internal/vcweb/vcstest -v --port=0
+//	forgo test cmd/go/internal/vcweb/vcstest -v --port=0
 package vcweb
 
 import (
@@ -297,7 +297,7 @@ func (s *Server) HandleScript(scriptRelPath string, logger *log.Logger, f func(h
 		// across invocations. However, to allow for rapid iteration, we hash the
 		// script's contents and regenerate its output if the contents change.
 		//
-		// That way, one can use 'go run main.go' in this directory to stand up a
+		// That way, one can use 'forgo run main.go' in this directory to stand up a
 		// server and see the output of the test script in order to fine-tune it.
 		content, err := os.ReadFile(filepath.Join(s.scriptDir, scriptRelPath))
 		if err != nil {
@@ -363,7 +363,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html>\n")
 	fmt.Fprintf(w, "<title>vcweb</title>\n<pre>\n")
 	fmt.Fprintf(w, "<b>vcweb</b>\n\n")
-	fmt.Fprintf(w, "This server serves various version control repos for testing the go command.\n\n")
+	fmt.Fprintf(w, "This server serves various version control repos for testing the forgo command.\n\n")
 	fmt.Fprintf(w, "For an overview of the script language, see <a href=\"/help\">/help</a>.\n\n")
 
 	fmt.Fprintf(w, "<b>cache</b>\n")

@@ -4,17 +4,17 @@
 
 // Package cacheprog defines the protocol for a GOCACHEPROG program.
 //
-// By default, the go command manages a build cache stored in the file system
+// By default, the forgo command manages a build cache stored in the file system
 // itself. GOCACHEPROG can be set to the name of a command (with optional
-// space-separated flags) that implements the go command build cache externally.
+// space-separated flags) that implements the forgo command build cache externally.
 // This permits defining a different cache policy.
 //
-// The go command will start the GOCACHEPROG as a subprocess and communicate
+// The forgo command will start the GOCACHEPROG as a subprocess and communicate
 // with it via JSON messages over stdin/stdout. The subprocess's stderr will be
-// connected to the go command's stderr.
+// connected to the forgo command's stderr.
 //
 // The subprocess should immediately send a [Response] with its capabilities.
-// After that, the go command will send a stream of [Request] messages and the
+// After that, the forgo command will send a stream of [Request] messages and the
 // subprocess should reply to each [Request] with a [Response] message.
 package cacheprog
 
@@ -25,7 +25,7 @@ import (
 
 // Cmd is a command that can be issued to a child process.
 //
-// If the interface needs to grow, the go command can add new commands or new
+// If the interface needs to grow, the forgo command can add new commands or new
 // versioned commands like "get2" in the future. The initial [Response] from
 // the child process indicates which commands it supports.
 type Cmd string
@@ -58,7 +58,7 @@ const (
 	CmdClose = Cmd("close")
 )
 
-// Request is the JSON-encoded message that's sent from the go command to
+// Request is the JSON-encoded message that's sent from the forgo command to
 // the GOCACHEPROG child process over stdin. Each JSON object is on its own
 // line. A ProgRequest of Type "put" with BodySize > 0 will be followed by a
 // line containing a base64-encoded JSON string literal of the body.
@@ -68,7 +68,7 @@ type Request struct {
 	ID int64
 
 	// Command is the type of request.
-	// The go command will only send commands that were declared
+	// The forgo command will only send commands that were declared
 	// as supported by the child.
 	Command Cmd
 
@@ -90,11 +90,11 @@ type Request struct {
 	BodySize int64 `json:",omitempty"`
 }
 
-// Response is the JSON response from the child process to the go command.
+// Response is the JSON response from the child process to the forgo command.
 //
 // With the exception of the first protocol message that the child writes to its
 // stdout with ID==0 and KnownCommands populated, these are only sent in
-// response to a Request from the go command.
+// response to a Request from the forgo command.
 //
 // Responses can be sent in any order. The ID must match the request they're
 // replying to.
@@ -106,8 +106,8 @@ type Response struct {
 	// writes to stdout on startup (with ID==0). It includes the
 	// Request.Command types that are supported by the program.
 	//
-	// This lets the go command extend the protocol gracefully over time (adding
-	// "get2", etc), or fail gracefully when needed. It also lets the go command
+	// This lets the forgo command extend the protocol gracefully over time (adding
+	// "get2", etc), or fail gracefully when needed. It also lets the forgo command
 	// verify the program wants to be a cache helper.
 	KnownCommands []Cmd `json:",omitempty"`
 

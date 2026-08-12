@@ -111,7 +111,7 @@ func ListModules(loaderstate *State, ctx context.Context, args []string, mode Li
 	if err == nil {
 		loaderstate.requirements = rs
 		// TODO(#61605): The extra ListU clause fixes a problem with Go 1.21rc3
-		// where "go mod tidy" and "go list -m -u all" fight over whether the go.sum
+		// where "forgo mod tidy" and "forgo list -m -u all" fight over whether the go.sum
 		// should be considered up-to-date. The fix for now is to always treat the
 		// go.sum as up-to-date during list -m -u. Probably the right fix is more targeted,
 		// but in general list -u is looking up other checksums in the checksum database
@@ -138,28 +138,28 @@ func listModules(loaderstate *State, ctx context.Context, rs *Requirements, args
 	needFullGraph := false
 	for _, arg := range args {
 		if strings.Contains(arg, `\`) {
-			base.Fatalf("go: module paths never use backslash")
+			base.Fatalf("forgo: module paths never use backslash")
 		}
 		if search.IsRelativePath(arg) {
-			base.Fatalf("go: cannot use relative path %s to specify module", arg)
+			base.Fatalf("forgo: cannot use relative path %s to specify module", arg)
 		}
 		if arg == "all" || strings.Contains(arg, "...") {
 			needFullGraph = true
 			if !loaderstate.HasModRoot() {
-				base.Fatalf("go: cannot match %q: %v", arg, NewNoMainModulesError(loaderstate))
+				base.Fatalf("forgo: cannot match %q: %v", arg, NewNoMainModulesError(loaderstate))
 			}
 			continue
 		}
 		path, vers, found, err := ParsePathVersion(arg)
 		if err != nil {
-			base.Fatalf("go: %v", err)
+			base.Fatalf("forgo: %v", err)
 		}
 		if found {
 			if vers == "upgrade" || vers == "patch" {
 				if _, ok := rs.rootSelected(loaderstate, path); !ok || rs.pruning == unpruned {
 					needFullGraph = true
 					if !loaderstate.HasModRoot() {
-						base.Fatalf("go: cannot match %q: %v", arg, NewNoMainModulesError(loaderstate))
+						base.Fatalf("forgo: cannot match %q: %v", arg, NewNoMainModulesError(loaderstate))
 					}
 				}
 			}
@@ -168,7 +168,7 @@ func listModules(loaderstate *State, ctx context.Context, rs *Requirements, args
 		if _, ok := rs.rootSelected(loaderstate, arg); !ok || rs.pruning == unpruned {
 			needFullGraph = true
 			if mode&ListVersions == 0 && !loaderstate.HasModRoot() {
-				base.Fatalf("go: cannot match %q without -versions or an explicit version: %v", arg, NewNoMainModulesError(loaderstate))
+				base.Fatalf("forgo: cannot match %q without -versions or an explicit version: %v", arg, NewNoMainModulesError(loaderstate))
 			}
 		}
 	}
@@ -182,7 +182,7 @@ func listModules(loaderstate *State, ctx context.Context, rs *Requirements, args
 	for _, arg := range args {
 		path, vers, found, err := ParsePathVersion(arg)
 		if err != nil {
-			base.Fatalf("go: %v", err)
+			base.Fatalf("forgo: %v", err)
 		}
 		if found {
 			var current string
@@ -203,7 +203,7 @@ func listModules(loaderstate *State, ctx context.Context, rs *Requirements, args
 			allowed := loaderstate.CheckAllowed
 			if IsRevisionQuery(path, vers) || mode&ListRetracted != 0 {
 				// Allow excluded and retracted versions if the user asked for a
-				// specific revision or used 'go list -retracted'.
+				// specific revision or used 'forgo list -retracted'.
 				allowed = nil
 			}
 			info, err := queryReuse(loaderstate, ctx, path, vers, current, allowed, reuse)

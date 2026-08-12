@@ -65,7 +65,7 @@ type Requirements struct {
 	// comments (or lack thereof) in the go.mod file. It is updated by the
 	// package loader: dependencies may be promoted to direct if new
 	// direct imports are observed, and may be demoted to indirect during
-	// 'go mod tidy' or 'go mod vendor'.
+	// 'forgo mod tidy' or 'forgo mod vendor'.
 	//
 	// The direct map is keyed by module paths, not module versions. When a
 	// module's selected version changes, we assume that it remains direct if the
@@ -91,7 +91,7 @@ func mustHaveGoRoot(roots []module.Version) {
 			return
 		}
 	}
-	panic("go: internal error: missing go root module")
+	panic("forgo: internal error: missing go root module")
 }
 
 // newRequirements returns a new requirement set with the given root modules.
@@ -185,7 +185,7 @@ func (rs *Requirements) initVendor(loaderstate *State, vendorList []module.Versi
 			inconsistent := false
 			for _, m := range vendorList {
 				if v, ok := rs.rootSelected(loaderstate, m.Path); !ok || v != m.Version {
-					base.Errorf("go: vendored module %v should be required explicitly in go.mod", m)
+					base.Errorf("forgo: vendored module %v should be required explicitly in go.mod", m)
 					inconsistent = true
 				}
 			}
@@ -323,10 +323,10 @@ func readModGraph(loaderstate *State, ctx context.Context, pruning modPruning, r
 				switch f {
 				case "lazymod=log":
 					debug.PrintStack()
-					fmt.Fprintf(os.Stderr, "go: read full module graph.\n")
+					fmt.Fprintf(os.Stderr, "forgo: read full module graph.\n")
 				case "lazymod=strict":
 					debug.PrintStack()
-					base.Fatalf("go: read full module graph (forbidden by GODEBUG=lazymod=strict).")
+					base.Fatalf("forgo: read full module graph (forbidden by GODEBUG=lazymod=strict).")
 				}
 			}
 		})
@@ -1028,12 +1028,12 @@ func updatePrunedRoots(loaderstate *State, ctx context.Context, direct map[strin
 
 		case rootsImported && pkg.flags.has(pkgFromRoot):
 			// pkg is a transitive dependency of some root, and we are treating the
-			// roots as if they are imported by the main module (as in 'go get').
+			// roots as if they are imported by the main module (as in 'forgo get').
 
 		case pkg.flags.has(pkgIsRoot):
 			// pkg is a root of the package-import graph. (Generally this means that
 			// it matches a command-line argument.) We want future invocations of the
-			// 'go' command — such as 'go test' on the same package — to continue to
+			// 'go' command — such as 'forgo test' on the same package — to continue to
 			// use the same versions of its dependencies that we are using right now.
 			// So we need to bring this package's dependencies inside the pruned
 			// module graph.
@@ -1170,7 +1170,7 @@ func updatePrunedRoots(loaderstate *State, ctx context.Context, direct map[strin
 				// When we read the full module graph, we include the dependencies of
 				// every root even if that root is redundant. That better preserves
 				// reproducibility if, say, some automated tool adds a redundant
-				// 'require' line and then runs 'go mod tidy' to try to make everything
+				// 'require' line and then runs 'forgo mod tidy' to try to make everything
 				// consistent, since the requirements of the older version are carried
 				// over.
 				//
@@ -1284,7 +1284,7 @@ func tidyUnprunedRoots(loaderstate *State, ctx context.Context, mainModule modul
 		// import ambiguity.
 		//
 		// For example, suppose a developer rewrites imports from example.com/m to
-		// example.com/m/v2, then runs 'go mod tidy'. Tidy may delete the
+		// example.com/m/v2, then runs 'forgo mod tidy'. Tidy may delete the
 		// requirement on example.com/m if there is no other transitive requirement
 		// on it. However, if example.com/m were downgraded to a version not in
 		// go.sum, when package example.com/m/v2/p is loaded, we'd get an error

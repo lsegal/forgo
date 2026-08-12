@@ -38,11 +38,9 @@ fork. After installing, point `GOROOT` at the install directory and add its
 Forgo source lives in `.fgo` files (alongside plain `.go` files, which still
 compile as before). The [Forgo VS Code extension](editors/vscode) adds `.fgo`
 syntax highlighting for `?`, `//fgo:comptime`, and `//fgo:macro`, plus a
-language client backed by **forgopls** — [gopls](https://pkg.go.dev/golang.org/x/tools/gopls)
-built with the forgo toolchain (see [release.yml](.github/workflows/release.yml)),
-so it links against this repo's patched `go/parser`/`go/ast`/`go/types`
-(see [go/types/expr.go](src/go/types/expr.go)) instead of vanilla Go's —
-enough to type-check `?` correctly. `//fgo:comptime` and `//fgo:macro`
+language client backed by **forgopls** — a build of
+[gopls](https://pkg.go.dev/golang.org/x/tools/gopls) that understands `?`
+well enough to type-check it correctly. `//fgo:comptime` and `//fgo:macro`
 are still compiler-only and will show as false-positive diagnostics.
 `forgopls` ships in the toolchain install above; download the extension's
 `.vsix` from the [latest release](https://github.com/lsegal/forgo/releases)
@@ -84,21 +82,6 @@ Files using forgo-specific syntax use the `.fgo` extension instead of `.go`
 `forgo run`, `forgo test`, module resolution), so a package can freely mix
 both. Files that are plain Go keep the `.go` extension.
 
-## This is a real fork, not a copy
-
-This repository is a git fork of [golang/go](https://github.com/golang/go)
-— same history, same tags, `upstream` remote pointed at the real thing —
-not a one-time export of the source. It's grafted onto the `go1.26.0` tag,
-which lives on golang/go's `release-branch.go1.26` (not `master`, where
-golang/go's ongoing development happens), so this repo's default branch is
-named `release-branch.go1.26` to match. The [Upstream Sync
-workflow](.github/workflows/upstream-sync.yml) runs daily, merges
-`upstream/release-branch.go1.26` into this repo's default branch, and opens
-a PR (which must pass [CI](.github/workflows/ci.yml) and auto-merges if it
-does, or sits for manual conflict resolution if it doesn't). Every
-forgo-specific change is designed to keep that merge boring — see "Least
-invasive by design" below.
-
 ## What's new
 
 ### `//fgo:comptime` functions
@@ -108,10 +91,8 @@ compiles normally, and can be called at runtime like any other function.
 Additionally, when it (or a chain of comptime functions calling each other)
 is invoked directly as the initializer of a `const` declaration with
 constant-foldable arguments, the compiler evaluates it during type-checking
-via a small tree-walking interpreter
-([`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)) and folds
-the result into a real Go constant — so it can be used anywhere the
-language requires a constant expression (array lengths, other `const`
+and folds the result into a real Go constant — so it can be used anywhere
+the language requires a constant expression (array lengths, other `const`
 declarations, etc.).
 
 Supported inside a comptime function body: `int`/`float`/`string`/`bool`
@@ -122,6 +103,15 @@ the [`comptime/embed`](#comptimeembed--compile-time-file-reads) helpers
 below).
 Anything else (closures, goroutines, maps, slices, method calls, `range`
 loops, ...) is not supported in v1 and reports a compile error if reached.
+Building or indexing a composite literal isn't supported inside a comptime
+function body either — only directly within a `const` initializer's
+expression tree (see "Non-scalar (struct/slice/map) consts" below).
+
+Folding only triggers for `const` initializers, not other
+constant-expression contexts written directly as a call (an array length,
+a `case` label, etc.) — go through an intermediate `const` if you need
+that. Comptime calls also can't cross package boundaries in v1: a function
+must be tagged `//fgo:comptime` in the same package where it's folded.
 
 ### `//fgo:macro` functions — AST macros
 
@@ -155,7 +145,9 @@ double(compute()) // expands to: compute() + compute()
 Macro call recognition is purely syntactic (unqualified function-name
 match), and expansion happens once per call site, recursively into the
 result. Macros are expanded within function bodies; using a macro directly
-in a package-level `var`/`const` initializer isn't supported in v1.
+in a package-level `var`/`const` initializer isn't supported in v1. Macros
+have no hygiene/renaming and only cover the AST node kinds needed for
+straightforward expression/statement templates.
 
 ### `?` — Rust-style error propagation
 
@@ -186,17 +178,19 @@ func loadConfig(path string) (name string, err error) {
   precedence as `.`/`(...)`, so `foo()?.bar()?` parses as `(foo()?).bar()?`:
   the first `?` unwraps to `foo`'s value, `.bar()` is then called on it, and
   the second `?` unwraps that call's result.
-- `?` is lowered to plain `:=`/`if`/`return` statements by
-  [`cmd/compile/internal/noder/forgo_try.go`](src/cmd/compile/internal/noder/forgo_try.go)
-  before type checking, so the rest of the compiler never sees it.
 - `?` works in an `if`/`for` init clause (including a bare, value-discarding
   `if f()?; cond { ... }`), and in a `for` loop's `Cond`/`Post` clauses. A
   loop using `?` in `Cond`/`Post` is rewritten to an equivalent form with the
   condition checked (and `break` on failure) at the top of the body and the
   post statement moved to the bottom; `continue` targeting that loop
-  (bare or labeled) is redirected to run the post statement first, using the
-  parser's own branch resolution (`syntax.BranchStmt.Target`) so nested
+  (bare or labeled) is redirected to run the post statement first, so nested
   loops are unaffected.
+- `?` is lowered before type-checking, so it can't verify its assumption
+  that `expr` returns `(value, error)` or bare `error` — a mismatched call
+  surfaces as an ordinary type-checking error rather than a `?`-specific
+  one. It also can't be used directly inside a labeled statement (`L: for
+  f()? { }`) if that would require hoisting code before the label — move
+  the fallible call above the label instead.
 
 See [examples/tryop](examples/tryop/main.fgo) for a runnable version,
 including the literal `foo()?.bar()?` chained form, and
@@ -243,12 +237,12 @@ func makeThing(s string) (*Thing, error) {
   <result>` — naming exactly which result couldn't be zeroed; fall back to
   a manual `return` for that function.
 - `throw "literal text"` requires the file to already have `import
-  "errors"` (under any name, or `.`) — `go build` computes a package's
-  import graph from the literal source text before the compiler runs, so
-  an import added only inside the compiler's own lowering pass wouldn't be
-  visible to it. If `errors` isn't imported, `throw "..."` is a compile
-  error telling you to add the import; `throw errors.New(...)` has no such
-  requirement since you're already spelling out the import yourself.
+  "errors"` (under any name, or `.`) — a package's import graph is computed
+  from the literal source text before the compiler runs, so an import added
+  only during compilation wouldn't be visible to it. If `errors` isn't
+  imported, `throw "..."` is a compile error telling you to add the import;
+  `throw errors.New(...)` has no such requirement since you're already
+  spelling out the import yourself.
 - `throw` is a **contextual** keyword, not a reserved word — plain Go code
   that uses `throw` as an ordinary identifier or function name (like
   `runtime.throw` in the standard library) is completely unaffected.
@@ -256,10 +250,6 @@ func makeThing(s string) (*Thing, error) {
   a new operand (another name or a literal, e.g. `throw errors.New(...)`
   or `throw "text"`); `throw(x)`, `throw.field`, `throw = x`, and a bare
   `throw` all still parse as the identifier `throw`.
-- `throw` is lowered to a plain `return` by
-  [`cmd/compile/internal/noder/forgo_throw.go`](src/cmd/compile/internal/noder/forgo_throw.go)
-  before type checking, so the rest of the compiler never sees it — same
-  strategy as `?`.
 
 See [examples/tryop/chain.fgo](examples/tryop/chain.fgo) for a runnable
 version using both `throw` forms.
@@ -301,11 +291,6 @@ return errors.New("bad") if x < 0
   statement can begin, so `if` appearing immediately after a just-completed
   statement on the same line was always a syntax error before — there's no
   existing program this could misparse.
-- Lowered to a plain `if COND { STMT }` by
-  [`cmd/compile/internal/noder/forgo_postfixif.go`](src/cmd/compile/internal/noder/forgo_postfixif.go),
-  before `throw`/`?` lowering (so those two passes still see the wrapped
-  statement as an ordinary one inside a regular `if`) and before type
-  checking.
 
 See [examples/tryop/postfixif.fgo](examples/tryop/postfixif.fgo) for a
 runnable version.
@@ -336,13 +321,11 @@ missing file surfaces as a compile error pointing at the `const` line, not
 a runtime panic.
 
 Unlike an ordinary `//fgo:comptime` function, these aren't interpreted by
-walking their Go source (real file I/O, `os.Stat`, slices, and `panic` are
-all outside what [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)'s
-tree-walking interpreter can run) — the compiler recognizes calls to
-`comptime/embed` by name and executes them natively, the same way it
-special-cases `fmt.Sprintf`/`strconv.Itoa` calls inside comptime function
-bodies. The package's Go source is still real, working code that also runs
-normally outside of a `const` initializer.
+walking their Go source — the compiler recognizes calls to `comptime/embed`
+by name and executes them natively, the same way it special-cases
+`fmt.Sprintf`/`strconv.Itoa` calls inside comptime function bodies. The
+package's Go source is still real, working code that also runs normally
+outside of a `const` initializer.
 
 See [examples/embedfile](examples/embedfile/main.fgo) for a runnable
 version.
@@ -397,21 +380,15 @@ const schema = json.Unmarshal[Schema](embed.ReadFile("schema.json"))
 const port = schema.Port
 ```
 
-To evaluate a struct/map/slice composite literal (for `Marshal`) or build
-the result of `Unmarshal`, the comptime interpreter represents structs and
-maps as an ordered `field name -> value` mapping and slices/arrays as an
-element list — see "Non-scalar (struct/slice/map) consts" below for how
-that folds into a real `const`. This still isn't available as general
-local variables inside a `//fgo:comptime` function body (no closures,
-generics, or method calls there either). `Unmarshal` is generic
-(`Unmarshal[T any](s string) T`) purely so real Go type-checking accepts
-`.Field` on its result with a concrete field to point at; the interpreter
-itself ignores the type argument and matches JSON object keys against
-field names verbatim, without applying Go's export-name capitalization or
-`json:"..."` struct tags — keep a struct's field names identical to the
-JSON keys you read them by (as `Schema` above already does, since it's
-also what the real `encoding/json` used at runtime expects for unadorned
-exported fields).
+`Unmarshal` is generic (`Unmarshal[T any](s string) T`) purely so real Go
+type-checking accepts `.Field` on its result with a concrete field to point
+at; matching against a struct's fields ignores Go's export-name
+capitalization or `json:"..."` struct tags — keep a struct's field names
+identical to the JSON keys you read them by (as `Schema` above already
+does, since it's also what the real `encoding/json` used at runtime expects
+for unadorned exported fields). This isn't available as general local
+variables inside a `//fgo:comptime` function body (no closures, generics,
+or method calls there either).
 
 See [examples/schemajson](examples/schemajson/main.fgo) for a runnable
 version that loads and unmarshals a `schema.json` file entirely at compile
@@ -420,16 +397,12 @@ time.
 ### Non-scalar (struct/slice/map) consts
 
 Ordinary Go restricts `const` to bool/numeric/string values — a struct,
-slice, or map can never be a constant, in any Go compiler, because
-`go/constant.Value` (the type every constant is represented as, all the
-way through IR generation and export data) has no case for one. forgo
-changes that: `go/constant` gets a new `Composite` kind alongside
-Bool/String/Int/Float/Complex, representing a struct/map (an ordered field
-name → value mapping) or a slice/array (an ordered element list), and the
-compiler's own constant machinery — type-checking, export data encoding,
-and static-data code generation — has been taught to carry it through. In
-practice, this is what lets `comptime/json`'s `Unmarshal[T]` fold into a
-real, named constant instead of only a one-shot expression:
+slice, or map can never be a constant, in any Go compiler. forgo changes
+that: a struct/map (an ordered field name → value mapping) or a
+slice/array (an ordered element list) can be a real constant, alongside
+the ordinary bool/string/int/float/complex kinds. In practice, this is what
+lets `comptime/json`'s `Unmarshal[T]` fold into a real, named constant
+instead of only a one-shot expression:
 
 ```go
 type Schema struct {
@@ -446,12 +419,9 @@ const name = schema.Name
 var proof [schema.Port % 16]byte // usable as an array length, like any const
 ```
 
-`schema.Field` and `schema.Tags[0]` are themselves constants — the field
-name/index access is folded by the type checker the moment it sees a
-selector or index applied to a Composite-kind constant, before the result
-ever reaches IR — so they compose with everything an ordinary scalar
-`const` already does: sizing an array, seeding another `const`, a `case`
-label, and so on.
+`schema.Field` and `schema.Tags[0]` are themselves constants — so they
+compose with everything an ordinary scalar `const` already does: sizing an
+array, seeding another `const`, a `case` label, and so on.
 
 **Current limits**, both bounded and enforced with a real compiler
 diagnostic rather than a crash:
@@ -459,13 +429,8 @@ diagnostic rather than a crash:
 - A struct-, array-, or slice-shaped composite const (including nested
   combinations, like `embed.FS`'s struct-holding-a-slice-of-structs) can
   be used directly as an ordinary runtime value (`fmt.Println(schema)`,
-  `content.ReadFile(...)`, passed to a function, etc.). The compiler
-  materializes it once into a read-only static global — a slice field's
-  elements go into a freshly allocated backing array, exactly like a
-  `[]byte(someStringConst)` conversion's backing data — and every
-  reference to that same `const` reads from the same global, memoized
-  the first time it's needed (see `CompositeConstExpr` in
-  [`staticdata/data.go`](src/cmd/compile/internal/staticdata/data.go)).
+  `content.ReadFile(...)`, passed to a function, etc.). Every reference to
+  the same `const` reads from the same underlying data.
 - A composite const with a *map* field still can't be used bare this
   way — only through field/index access down to a scalar or a further
   struct, as in `schema.Tags[0]` or `const name = schema.Name` above.
@@ -489,11 +454,11 @@ In practice this is normally driven by the [Release workflow](.github/workflows/
 (Actions → Release → Run workflow → pick `patch`/`minor`/`major`), which
 bumps `FORGO_VERSION`, commits and tags it, builds the toolchain for
 linux/amd64, darwin/arm64, and windows/amd64, and publishes them all to a
-new GitHub release. (Intel Mac/darwin-amd64 isn't built — see the comment in
-release.yml; it runs fine under Rosetta 2 on Apple Silicon, or build from
-source.) [CI](.github/workflows/ci.yml) builds and smoke-tests the
-toolchain on every push/PR (Linux, macOS, Windows) so a release build is
-never the first time a change gets built end to end.
+new GitHub release. (Intel Mac/darwin-amd64 isn't built; it runs fine under
+Rosetta 2 on Apple Silicon, or build from source.) [CI](.github/workflows/ci.yml)
+builds and smoke-tests the toolchain on every push/PR (Linux, macOS,
+Windows) so a release build is never the first time a change gets built end
+to end.
 
 ## Building
 
@@ -507,174 +472,8 @@ GOROOT_BOOTSTRAP=/path/to/a/go1.24+/install ./make.bash   # Linux/macOS
 # or ./make.bat on Windows, ./make.rc on Plan 9
 ```
 
-This produces `bin/go` and `pkg/tool/<os>_<arch>/compile` (etc.) — unchanged
-from upstream. forgo doesn't rename `cmd/go` internally (see "Least invasive
-by design" below); instead, copy `bin/go` to `bin/forgo` as the name you
-actually invoke:
+This produces `bin/forgo`, the name you actually invoke:
 
 ```bash
-cp bin/go bin/forgo   # bin/go.exe -> bin/forgo.exe on Windows
 GOROOT=/path/to/forgo /path/to/forgo/bin/forgo run ./examples/factorial
 ```
-
-(CI and the release workflow do this same copy step; prebuilt releases
-already include `bin/forgo`.)
-
-## Least invasive by design
-
-Because this is a real fork that merges from upstream daily, every
-forgo-specific change is deliberately structured to touch as little of the
-existing Go source as possible, so those merges stay conflict-free:
-
-- **New files carry the logic.** [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)
-  (the comptime/macro interpreter), `cmd/compile/internal/noder/forgo_try.go`,
-  `forgo_throw.go`, `forgo_postfixif.go`, `forgo_pragma.go`, `forgo_macro.go`,
-  and `cmd/compile/internal/types2/forgo.go` are all new files upstream will
-  never touch.
-- **Existing files get single-line hooks, not inline logic.** E.g.
-  `types2/decl.go`'s `constDecl` gains exactly one `if` calling
-  `forgoEvalConstCall` (defined in `forgo.go`); `noder.go`'s pragma switch
-  gains one `if forgoPragma(...) { return pragma }` before it, with the
-  actual `//fgo:comptime`/`//fgo:macro` handling living in
-  `forgo_pragma.go`.
-- **No new fields on hot structs.** `types2.Checker` (a large, frequently
-  touched struct) carries zero forgo-specific fields — the comptime
-  interpreter is cached in a package-level table keyed by `*Checker`
-  instead, so `check.go` has a zero-line diff from upstream.
-- **`cmd/go` is untouched.** Renaming the actual `go` binary to `forgo`
-  would mean renaming/patching `cmd/go` — a huge, constantly-changing
-  package with internal self-references to its own binary name — which is
-  exactly the kind of change that fights every future upstream merge. So
-  the build stays 100% stock, and `forgo` ships as a copy of the real `go`
-  binary under a different name (see "Building" above). One consequence:
-  `forgo version` still prints `go version ...` — `FORGO_VERSION` (via
-  `./scripts/version.sh`) is the source of truth for forgo's own version,
-  not `forgo version`'s output.
-
-The full forgo-specific diff against upstream is genuinely small: the `?`
-token/parsing (`syntax/{tokens,scanner,parser,nodes,printer}.go`), the
-`throw` statement parsing (`syntax/{nodes,parser,positions,printer,walk}.go`),
-postfix `if` parsing (same five `syntax/` files, plus `noder/forgo_postfixif.go`
-for lowering), the `//fgo:` pragma prefix (`syntax/scanner.go`,
-`syntax/parser.go`), the `ForgoPragma` interface (`syntax/syntax.go`), and
-the hooks described above. Run `git log --oneline` to see exactly which
-commits these are.
-
-## Implementation notes / where to look
-
-- [`src/cmd/compile/internal/syntax/scanner.go`](src/cmd/compile/internal/syntax/scanner.go)
-  and [`parser.go`](src/cmd/compile/internal/syntax/parser.go): recognize
-  `//fgo:` directive comments (previously only `//go:` and `//line` were
-  allowed through as compiler directives), and the `?` token.
-- [`src/cmd/compile/internal/syntax/syntax.go`](src/cmd/compile/internal/syntax/syntax.go):
-  the `ForgoPragma` interface, letting `types2` (which can't import `noder`)
-  recognize forgo pragmas on a `FuncDecl` without a shared concrete type.
-- [`src/cmd/compile/internal/noder/forgo_pragma.go`](src/cmd/compile/internal/noder/forgo_pragma.go):
-  parses `//fgo:comptime` / `//fgo:macro`, called from one line in
-  `noder.go`.
-- [`src/cmd/compile/internal/noder/forgo_macro.go`](src/cmd/compile/internal/noder/forgo_macro.go):
-  the macro expansion pass, run after parsing and before type-checking.
-- [`src/cmd/compile/internal/noder/forgo_try.go`](src/cmd/compile/internal/noder/forgo_try.go):
-  lowers `TryExpr` (the `?` operator) into ordinary `:=`/`if`/`return`
-  statements, also run after parsing and before type-checking.
-- [`src/cmd/compile/internal/noder/forgo_throw.go`](src/cmd/compile/internal/noder/forgo_throw.go):
-  lowers `ThrowStmt` (the `throw` statement) into an ordinary `return`,
-  run before `forgo_try.go` (a thrown expression may itself contain `?`)
-  and before type-checking.
-- [`src/cmd/compile/internal/noder/forgo_postfixif.go`](src/cmd/compile/internal/noder/forgo_postfixif.go):
-  lowers `PostfixIfStmt` (`STMT if COND`) into an ordinary `if COND { STMT
-  }`, run before `forgo_throw.go`/`forgo_try.go` (the wrapped statement may
-  itself be a `throw` or contain `?`) and before type-checking.
-- [`src/cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo): the
-  interpreter shared by comptime evaluation and macro expansion. Also hosts
-  the native dispatch table (`nativeCall`) for `fmt.Sprintf`,
-  `strconv.Itoa`, and the `comptime/embed`/`comptime/json` helpers — real
-  functions special-cased by name rather than interpreted from source —
-  the `objectVal`/`arrayVal` composite-value representation used to
-  evaluate a struct/map/slice literal or a `json.Unmarshal` result, and
-  `ToConstant`, which converts one into a real `go/constant.Value`.
-- [`src/go/constant/value.go`](src/go/constant/value.go): the `Composite`
-  `Kind` and `compositeVal` type themselves — a struct/map (an ordered
-  field name → value mapping) or slice/array (an ordered element list)
-  represented as a real constant, alongside the ordinary
-  Bool/String/Int/Float/Complex kinds. See "Non-scalar (struct/slice/map)
-  consts" above.
-- [`src/internal/pkgbits/encoder.go`](src/internal/pkgbits/encoder.go) and
-  [`decoder.go`](src/internal/pkgbits/decoder.go): read/write a
-  `Composite` constant into the compiler's unified-IR bitstream (used even
-  for a single, non-cross-package build), recursively encoding each
-  field/element as its own `Value`.
-- [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):
-  folds a `const` initializer that's a call (bare, package-qualified like
-  `embed.ReadFile(...)`, or generic-instantiated like
-  `json.Unmarshal[Config](...)`) or a field/index chain on top of one
-  (`json.Unmarshal[Config](...).Name`), called from one line in `decl.go`'s
-  `constDecl`; `assignments.go`/`recording.go` accept a Composite-kind
-  constant where the type checker otherwise requires an ordinary
-  const-eligible (basic) type.
-- [`src/cmd/compile/internal/types2/call.go`](src/cmd/compile/internal/types2/call.go)
-  (`selector`) and [`index.go`](src/cmd/compile/internal/types2/index.go)
-  (`indexExpr`): fold `x.Field`/`x[i]` into a further constant when `x` is
-  a Composite-kind constant operand — this is what makes `schema.Port`
-  usable anywhere a constant is required, not just inside the expression
-  that produced `schema`.
-- [`src/cmd/compile/internal/staticdata/data.go`](src/cmd/compile/internal/staticdata/data.go)
-  (`InitConst`/`CompositeConstExpr`): writes a struct-, array-, or
-  slice-shaped Composite constant into static memory
-  field-by-field/element-by-element (a slice field's elements go into a
-  freshly allocated backing-array symbol), so a composite const can be
-  used directly as an ordinary runtime value, not just folded further.
-  `CompositeConstExpr` (called from `walk/expr.go`'s `OLITERAL` case)
-  handles a composite const referenced from expression position — a
-  function argument, an assignment RHS — by materializing it once into a
-  memoized static global and rewriting the reference to an
-  `OLINKSYMOFFSET` read out of it.
-- [`src/comptime/embed`](src/comptime/embed/embed.go): the `comptime/embed`
-  package itself — `ReadFile`, `ReadDir`, `Exists`, `Load`/`FS`, etc.
-- [`src/comptime/json`](src/comptime/json/json.go): the `comptime/json`
-  package itself — `Marshal` and generic `Unmarshal[T]`.
-- [`src/cmd/compile/internal/syntax/nodes.go`](src/cmd/compile/internal/syntax/nodes.go),
-  [`tokens.go`](src/cmd/compile/internal/syntax/tokens.go): the `?` token
-  and `*syntax.TryExpr` node, parsed as a postfix operator alongside
-  `.`/`(...)`.
-
-## Known limitations (v1)
-
-- Comptime folding only triggers for `const` initializers, not general
-  constant-expression contexts (array lengths written directly as a call,
-  `case` labels of a call, etc.) — go through an intermediate `const` if
-  you need that.
-- A `//fgo:comptime` function body supports a deliberately small subset
-  of Go (see above); no closures, generics, maps/slices, or method calls.
-  Building a composite literal, or indexing into one, isn't supported
-  inside an ordinary comptime function body — only directly within a
-  `const` initializer's expression tree (see "Non-scalar
-  (struct/slice/map) consts" above for what that constant can then be
-  used for elsewhere).
-- `comptime/embed` and `comptime/json`'s helpers sidestep the small-subset
-  limitation above by being executed natively rather than interpreted (see
-  above), which is also why they're a fixed, hardcoded set rather than
-  something you can add to yourself by tagging an arbitrary function
-  `//fgo:comptime` in another package — cross-package comptime calls
-  aren't supported in v1.
-- A struct literal's keys and a map literal's keys are told apart by a
-  heuristic (an unbound identifier is a field name, anything else is
-  evaluated as an expression), since the interpreter has no real type
-  information — see `compositeLitKey` in
-  [`interp.go`](src/cmd/compile/internal/forgo/interp.go).
-- Macros have no hygiene/renaming and only cover the AST node kinds needed
-  for straightforward expression/statement templates.
-- Macro compile errors are reported without a precise source position.
-- `?` assumes the expression it's applied to returns `(value, error)` in
-  value position or bare `error` in statement position — it can't check
-  this itself (lowering runs before type-checking), so a mismatched call
-  surfaces as an ordinary "assignment mismatch" error instead of a `?`-
-  specific one.
-- `?` can't be used directly inside a labeled statement (`L: for f()? { }`)
-  if that would require hoisting statements before the label — move the
-  fallible call above the label instead. `?` also isn't lowered inside a
-  `for` loop's `Cond`/`Post` when written as (or containing) a channel send
-  (`for ...; ...; ch <- f()? { }`) — an obscure combination not handled in
-  v1.
-- `forgo version` prints Go's own version string, not `FORGO_VERSION` (see
-  "Least invasive by design" above).

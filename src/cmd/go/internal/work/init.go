@@ -30,7 +30,7 @@ var buildInitStarted = false
 // makeCfgChangedEnv is the environment to set to
 // override the current environment for GOOS, GOARCH, and the GOARCH-specific
 // architecture environment variable to the configuration used by
-// the go command. They may be different because go tool <tool> for builtin
+// the forgo command. They may be different because forgo tool <tool> for builtin
 // tools need to be built using the host configuration, so the configuration
 // used will be changed from that set in the environment. It is clipped
 // so its can append to it without changing it.
@@ -52,7 +52,7 @@ func makeCfgChangedEnv() []string {
 
 func BuildInit(loaderstate *modload.State) {
 	if buildInitStarted {
-		base.Fatalf("go: internal error: work.BuildInit called more than once")
+		base.Fatalf("forgo: internal error: work.BuildInit called more than once")
 	}
 	buildInitStarted = true
 	base.AtExit(closeBuilders)
@@ -67,7 +67,7 @@ func BuildInit(loaderstate *modload.State) {
 		base.Fatal(err)
 	}
 	if from, replaced := fsys.DirContainsReplacement(cfg.GOMODCACHE); replaced {
-		base.Fatalf("go: overlay contains a replacement for %s. Files beneath GOMODCACHE (%s) must not be replaced.", from, cfg.GOMODCACHE)
+		base.Fatalf("forgo: overlay contains a replacement for %s. Files beneath GOMODCACHE (%s) must not be replaced.", from, cfg.GOMODCACHE)
 	}
 
 	// Make sure -pkgdir is absolute, because we run commands
@@ -75,7 +75,7 @@ func BuildInit(loaderstate *modload.State) {
 	if cfg.BuildPkgdir != "" && !filepath.IsAbs(cfg.BuildPkgdir) {
 		p, err := filepath.Abs(cfg.BuildPkgdir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "go: evaluating -pkgdir: %v\n", err)
+			fmt.Fprintf(os.Stderr, "forgo: evaluating -pkgdir: %v\n", err)
 			base.SetExitStatus(2)
 			base.Exit()
 		}
@@ -83,7 +83,7 @@ func BuildInit(loaderstate *modload.State) {
 	}
 
 	if cfg.BuildP <= 0 {
-		base.Fatalf("go: -p must be a positive integer: %v\n", cfg.BuildP)
+		base.Fatalf("forgo: -p must be a positive integer: %v\n", cfg.BuildP)
 	}
 
 	// Make sure CC, CXX, and FC are absolute paths.
@@ -91,14 +91,14 @@ func BuildInit(loaderstate *modload.State) {
 		value := cfg.Getenv(key)
 		args, err := quoted.Split(value)
 		if err != nil {
-			base.Fatalf("go: %s environment variable could not be parsed: %v", key, err)
+			base.Fatalf("forgo: %s environment variable could not be parsed: %v", key, err)
 		}
 		if len(args) == 0 {
 			continue
 		}
 		path := args[0]
 		if !filepath.IsAbs(path) && path != filepath.Base(path) {
-			base.Fatalf("go: %s environment variable is relative; must be absolute path: %s\n", key, path)
+			base.Fatalf("forgo: %s environment variable is relative; must be absolute path: %s\n", key, path)
 		}
 	}
 
@@ -120,7 +120,7 @@ func BuildInit(loaderstate *modload.State) {
 // on supported platforms.
 //
 // On unsupported platforms, fuzzInstrumentFlags returns nil, meaning no
-// instrumentation is added. 'go test -fuzz' still works without coverage,
+// instrumentation is added. 'forgo test -fuzz' still works without coverage,
 // but it generates random inputs without guidance, so it's much less effective.
 func fuzzInstrumentFlags() []string {
 	if !platform.FuzzInstrumented(cfg.Goos, cfg.Goarch) {
@@ -134,17 +134,17 @@ func instrumentInit() {
 		return
 	}
 	if cfg.BuildRace && cfg.BuildMSan {
-		fmt.Fprintf(os.Stderr, "go: may not use -race and -msan simultaneously\n")
+		fmt.Fprintf(os.Stderr, "forgo: may not use -race and -msan simultaneously\n")
 		base.SetExitStatus(2)
 		base.Exit()
 	}
 	if cfg.BuildRace && cfg.BuildASan {
-		fmt.Fprintf(os.Stderr, "go: may not use -race and -asan simultaneously\n")
+		fmt.Fprintf(os.Stderr, "forgo: may not use -race and -asan simultaneously\n")
 		base.SetExitStatus(2)
 		base.Exit()
 	}
 	if cfg.BuildMSan && cfg.BuildASan {
-		fmt.Fprintf(os.Stderr, "go: may not use -msan and -asan simultaneously\n")
+		fmt.Fprintf(os.Stderr, "forgo: may not use -msan and -asan simultaneously\n")
 		base.SetExitStatus(2)
 		base.Exit()
 	}
@@ -194,9 +194,9 @@ func instrumentInit() {
 	// Note: On macOS, -race does not require cgo. -asan and -msan still do.
 	if !cfg.BuildContext.CgoEnabled && (cfg.Goos != "darwin" || cfg.BuildASan || cfg.BuildMSan) {
 		if runtime.GOOS != cfg.Goos || runtime.GOARCH != cfg.Goarch {
-			fmt.Fprintf(os.Stderr, "go: %s requires cgo\n", modeFlag)
+			fmt.Fprintf(os.Stderr, "forgo: %s requires cgo\n", modeFlag)
 		} else {
-			fmt.Fprintf(os.Stderr, "go: %s requires cgo; enable cgo by setting CGO_ENABLED=1\n", modeFlag)
+			fmt.Fprintf(os.Stderr, "forgo: %s requires cgo; enable cgo by setting CGO_ENABLED=1\n", modeFlag)
 		}
 
 		base.SetExitStatus(2)
@@ -379,9 +379,9 @@ var compiler struct {
 	err error
 }
 
-// compilerVersion detects the version of $(go env CC).
+// compilerVersion detects the version of $(forgo env CC).
 // It returns a non-nil error if the compiler matches a known version schema but
-// the version could not be parsed, or if $(go env CC) could not be determined.
+// the version could not be parsed, or if $(forgo env CC) could not be determined.
 func compilerVersion() (version, error) {
 	compiler.Once.Do(func() {
 		compiler.err = func() error {
@@ -436,7 +436,7 @@ func compilerVersion() (version, error) {
 func compilerRequiredAsanVersion() error {
 	compiler, err := compilerVersion()
 	if err != nil {
-		return fmt.Errorf("-asan: the version of $(go env CC) could not be parsed")
+		return fmt.Errorf("-asan: the version of $(forgo env CC) could not be parsed")
 	}
 
 	switch compiler.name {

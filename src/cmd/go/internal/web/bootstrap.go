@@ -17,7 +17,7 @@ import (
 )
 
 func get(security SecurityMode, url *urlpkg.URL) (*Response, error) {
-	return nil, errors.New("no http in bootstrap go command")
+	return nil, errors.New("no http in bootstrap forgo command")
 }
 
 func openBrowser(url string) bool { return false }

@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package fsys implements a virtual file system that the go command
+// Package fsys implements a virtual file system that the forgo command
 // uses to read source file trees. The virtual file system redirects some
 // OS file paths to other OS file paths, according to an overlay file.
-// Editors can use this overlay support to invoke the go command on
+// Editors can use this overlay support to invoke the forgo command on
 // temporary files that have been edited but not yet saved into their
 // final locations.
 package fsys

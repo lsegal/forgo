@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// go mod tidy
+// forgo mod tidy
 
 package modcmd
 
@@ -20,7 +20,7 @@ import (
 )
 
 var cmdTidy = &base.Command{
-	UsageLine: "go mod tidy [-e] [-v] [-x] [-diff] [-go=version] [-compat=version]",
+	UsageLine: "forgo mod tidy [-e] [-v] [-x] [-diff] [-go=version] [-compat=version]",
 	Short:     "add missing and remove unused modules",
 	Long: `
 Tidy makes sure go.mod matches the source code in the module.
@@ -55,7 +55,7 @@ file.
 
 The -x flag causes tidy to print the commands download executes.
 
-See https://golang.org/ref/mod#go-mod-tidy for more about 'go mod tidy'.
+See https://golang.org/ref/mod#go-mod-tidy for more about 'forgo mod tidy'.
 	`,
 	Run: runTidy,
 }
@@ -80,7 +80,7 @@ func init() {
 
 // A goVersionFlag is a flag.Value representing a supported Go version.
 //
-// (Note that the -go argument to 'go mod edit' is *not* a goVersionFlag.
+// (Note that the -go argument to 'forgo mod edit' is *not* a goVersionFlag.
 // It intentionally allows newer-than-supported versions as arguments.)
 type goVersionFlag struct {
 	v string
@@ -107,17 +107,17 @@ func (f *goVersionFlag) Set(s string) error {
 func runTidy(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	if len(args) > 0 {
-		base.Fatalf("go: 'go mod tidy' accepts no arguments")
+		base.Fatalf("forgo: 'forgo mod tidy' accepts no arguments")
 	}
 
-	// Tidy aims to make 'go test' reproducible for any package in 'all', so we
+	// Tidy aims to make 'forgo test' reproducible for any package in 'all', so we
 	// need to include test dependencies. For modules that specify go 1.15 or
 	// earlier this is a no-op (because 'all' saturates transitive test
 	// dependencies).
 	//
 	// However, with lazy loading (go 1.16+) 'all' includes only the packages that
 	// are transitively imported by the main module, not the test dependencies of
-	// those packages. In order to make 'go test' reproducible for the packages
+	// those packages. In order to make 'forgo test' reproducible for the packages
 	// that are in 'all' but outside of the main module, we must explicitly
 	// request that their test dependencies be included.
 	moduleLoaderState.ForceUseModules = true

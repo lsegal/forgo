@@ -47,7 +47,7 @@ func readVendorList(vendorDir string) {
 		data, err := os.ReadFile(vendorFile)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
-				base.Fatalf("go: %s", err)
+				base.Fatalf("forgo: %s", err)
 			}
 			return
 		}
@@ -279,6 +279,6 @@ func checkVendorConsistency(loaderstate *State, indexes []*modFileIndex, modFile
 		if loaderstate.inWorkspaceMode() {
 			subcmd = "work"
 		}
-		base.Fatalf("go: inconsistent vendoring in %s:%s\n\n\tTo ignore the vendor directory, use -mod=readonly or -mod=mod.\n\tTo sync the vendor directory, run:\n\t\tgo %s vendor", filepath.Dir(VendorDir(loaderstate)), vendErrors, subcmd)
+		base.Fatalf("forgo: inconsistent vendoring in %s:%s\n\n\tTo ignore the vendor directory, use -mod=readonly or -mod=mod.\n\tTo sync the vendor directory, run:\n\t	forgo %s vendor", filepath.Dir(VendorDir(loaderstate)), vendErrors, subcmd)
 	}
 }

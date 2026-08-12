@@ -106,7 +106,7 @@ func (s *Switcher) Switch(ctx context.Context) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "go: %v requires go >= %v; switching to %v\n", s.TooNew.What, s.TooNew.GoVersion, tv)
+	fmt.Fprintf(os.Stderr, "forgo: %v requires go >= %v; switching to %v\n", s.TooNew.What, s.TooNew.GoVersion, tv)
 	counterSwitchExec.Inc()
 	Exec(s.loaderstate, tv)
 	panic("unreachable")

@@ -28,7 +28,7 @@ import (
 
 var CmdBug = &base.Command{
 	Run:       runBug,
-	UsageLine: "go bug",
+	UsageLine: "forgo bug",
 	Short:     "start a bug report",
 	Long: `
 Bug opens the default browser and starts a new bug report.
@@ -44,7 +44,7 @@ func init() {
 func runBug(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	if len(args) > 0 {
-		base.Fatalf("go: bug takes no arguments")
+		base.Fatalf("forgo: bug takes no arguments")
 	}
 	work.BuildInit(moduleLoaderState)
 
@@ -85,18 +85,18 @@ A link on go.dev/play is best.
 `
 
 func printGoVersion(w io.Writer) {
-	fmt.Fprintf(w, "### What version of Go are you using (`go version`)?\n\n")
+	fmt.Fprintf(w, "### What version of Go are you using (`forgo version`)?\n\n")
 	fmt.Fprintf(w, "<pre>\n")
-	fmt.Fprintf(w, "$ go version\n")
+	fmt.Fprintf(w, "$ forgo version\n")
 	fmt.Fprintf(w, "go version %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	fmt.Fprintf(w, "</pre>\n")
 	fmt.Fprintf(w, "\n")
 }
 
 func printEnvDetails(loaderstate *modload.State, w io.Writer) {
-	fmt.Fprintf(w, "### What operating system and processor architecture are you using (`go env`)?\n\n")
-	fmt.Fprintf(w, "<details><summary><code>go env</code> Output</summary><br><pre>\n")
-	fmt.Fprintf(w, "$ go env\n")
+	fmt.Fprintf(w, "### What operating system and processor architecture are you using (`forgo env`)?\n\n")
+	fmt.Fprintf(w, "<details><summary><code>forgo env</code> Output</summary><br><pre>\n")
+	fmt.Fprintf(w, "$ forgo env\n")
 	printGoEnv(loaderstate, w)
 	printGoDetails(w)
 	printOSDetails(w)
@@ -113,8 +113,8 @@ func printGoEnv(loaderstate *modload.State, w io.Writer) {
 
 func printGoDetails(w io.Writer) {
 	gocmd := filepath.Join(runtime.GOROOT(), "bin/go")
-	printCmdOut(w, "GOROOT/bin/go version: ", gocmd, "version")
-	printCmdOut(w, "GOROOT/bin/go tool compile -V: ", gocmd, "tool", "compile", "-V")
+	printCmdOut(w, "GOROOT/bin/forgo version: ", gocmd, "version")
+	printCmdOut(w, "GOROOT/bin/forgo tool compile -V: ", gocmd, "tool", "compile", "-V")
 }
 
 func printOSDetails(w io.Writer) {
@@ -159,7 +159,7 @@ func printCDetails(w io.Writer) {
 }
 
 // printCmdOut prints the output of running the given command.
-// It ignores failures; 'go bug' is best effort.
+// It ignores failures; 'forgo bug' is best effort.
 func printCmdOut(w io.Writer, prefix, path string, args ...string) {
 	cmd := exec.Command(path, args...)
 	out, err := cmd.Output()

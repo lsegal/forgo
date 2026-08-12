@@ -11,7 +11,7 @@
 // Usage:
 //
 //	cd GOROOT/lib/fips140
-//	go run ../../src/cmd/go/internal/fips140/mkzip.go [-b branch] v1.2.3
+//	forgo run ../../src/cmd/go/internal/fips140/mkzip.go [-b branch] v1.2.3
 //
 // Mkzip creates a zip file named for the version on the command line
 // using the sources in the named branch (default origin/master,
@@ -37,7 +37,7 @@ import (
 var flagBranch = flag.String("b", "origin/master", "branch to use")
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: go run mkzip.go [-b branch] vX.Y.Z\n")
+	fmt.Fprintf(os.Stderr, "usage: forgo run mkzip.go [-b branch] vX.Y.Z\n")
 	os.Exit(2)
 }
 

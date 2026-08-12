@@ -21,7 +21,7 @@ import (
 	"cmd/go/internal/work"
 )
 
-// go vet/fix flag processing
+// forgo vet/fix flag processing
 var (
 	// We query the flags of the tool specified by -{vet,fix}tool
 	// and accept any of those flags plus any flag valid for 'go
@@ -34,7 +34,7 @@ var (
 	// golang.org/x/tools/go/analysis/unitchecker for the
 	// sole implementation. It is also used by tests.
 	//
-	// The default behavior ("") runs 'go tool {vet,fix}'.
+	// The default behavior ("") runs 'forgo tool {vet,fix}'.
 	//
 	// Do not access this flag directly; use [parseToolFlag].
 	toolFlag    string // -{vet,fix}tool
@@ -83,7 +83,7 @@ func parseToolFlag(cmd *base.Command, args []string) string {
 		return tool
 	}
 
-	return base.Tool(cmd.Name()) // default to 'go tool vet|fix'
+	return base.Tool(cmd.Name()) // default to 'forgo tool vet|fix'
 }
 
 // toolFlags processes the command line, splitting it at the first non-flag
@@ -97,7 +97,7 @@ func toolFlags(cmd *base.Command, args []string) (passToTool, packageNames []str
 	toolcmd := exec.Command(tool, "-flags")
 	toolcmd.Stdout = out
 	if err := toolcmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "go: %s -flags failed: %v\n", tool, err)
+		fmt.Fprintf(os.Stderr, "forgo: %s -flags failed: %v\n", tool, err)
 		base.SetExitStatus(2)
 		base.Exit()
 	}
@@ -107,7 +107,7 @@ func toolFlags(cmd *base.Command, args []string) (passToTool, packageNames []str
 		Usage string
 	}
 	if err := json.Unmarshal(out.Bytes(), &analysisFlags); err != nil {
-		fmt.Fprintf(os.Stderr, "go: can't unmarshal JSON from %s -flags: %v", tool, err)
+		fmt.Fprintf(os.Stderr, "forgo: can't unmarshal JSON from %s -flags: %v", tool, err)
 		base.SetExitStatus(2)
 		base.Exit()
 	}
@@ -197,12 +197,12 @@ func toolFlags(cmd *base.Command, args []string) (passToTool, packageNames []str
 
 func exitWithUsage(cmd *base.Command) {
 	fmt.Fprintf(os.Stderr, "usage: %s\n", cmd.UsageLine)
-	fmt.Fprintf(os.Stderr, "Run 'go help %s' for details.\n", cmd.LongName())
+	fmt.Fprintf(os.Stderr, "Run 'forgo help %s' for details.\n", cmd.LongName())
 
 	// This part is additional to what (*Command).Usage does:
 	tool := toolFlag
 	if tool == "" {
-		tool = "go tool " + cmd.Name()
+		tool = "forgo tool " + cmd.Name()
 	}
 	fmt.Fprintf(os.Stderr, "Run '%s help' for a full list of flags and analyzers.\n", tool)
 	fmt.Fprintf(os.Stderr, "Run '%s -help' for an overview.\n", tool)

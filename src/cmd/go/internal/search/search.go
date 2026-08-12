@@ -360,7 +360,7 @@ func (m *Match) MatchDirs(modRoots []string) {
 			// The initial case is not Cleaned, though, so we do this explicitly.
 			//
 			// This converts a path like "./io/" to "io". Without this step, running
-			// "cd $GOROOT/src; go list ./io/..." would incorrectly skip the io
+			// "cd $GOROOT/src; forgo list ./io/..." would incorrectly skip the io
 			// package, because prepending the prefix "./" to the unclean path would
 			// result in "././io", and match("././io") returns false.
 			top = true
@@ -425,7 +425,7 @@ func (m *Match) MatchDirs(modRoots []string) {
 func WarnUnmatched(matches []*Match) {
 	for _, m := range matches {
 		if len(m.Pkgs) == 0 && len(m.Errs) == 0 {
-			fmt.Fprintf(os.Stderr, "go: warning: %q matched no packages\n", m.pattern)
+			fmt.Fprintf(os.Stderr, "forgo: warning: %q matched no packages\n", m.pattern)
 		}
 	}
 }

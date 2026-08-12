@@ -13,8 +13,8 @@ package modload
 //
 // Although most of the loading state is maintained in the loader struct,
 // one key piece - the build list - is a global, so that it can be modified
-// separate from the loading operation, such as during "go get"
-// upgrades/downgrades or in "go mod" operations.
+// separate from the loading operation, such as during "forgo get"
+// upgrades/downgrades or in "forgo mod" operations.
 // TODO(#40775): It might be nice to make the loader take and return
 // a buildList rather than hard-coding use of the global.
 //
@@ -48,13 +48,13 @@ package modload
 // (This is necessary to maintain the “import invariant” described in
 // https://golang.org/design/36460-lazy-module-loading.)
 //
-// Because "go mod vendor" prunes out the tests of vendored packages, the
+// Because "forgo mod vendor" prunes out the tests of vendored packages, the
 // behavior of the "all" pattern with -mod=vendor in Go 1.11–1.15 is the same
 // as the "all" pattern (regardless of the -mod flag) in 1.16+.
 // The loader uses the GoVersion parameter to determine whether the "all"
 // pattern should close over tests (as in Go 1.11–1.15) or stop at only those
 // packages transitively imported by the packages and tests in the main module
-// ("all" in Go 1.16+ and "go mod vendor" in Go 1.11+).
+// ("all" in Go 1.16+ and "forgo mod vendor" in Go 1.11+).
 //
 // Note that it is possible for a loaded package NOT to be in "all" even when we
 // are loading the "all" pattern. For example, packages that are transitive
@@ -86,7 +86,7 @@ package modload
 // until either all packages resolve successfully or we cannot identify any
 // module that would resolve any remaining missing package.
 //
-// If the main module is “tidy” (that is, if "go mod tidy" is a no-op for it)
+// If the main module is “tidy” (that is, if "forgo mod tidy" is a no-op for it)
 // and all requested packages are in "all", then loading completes in a single
 // iteration.
 // TODO(bcmills): We should also be able to load in a single iteration if the
@@ -200,9 +200,9 @@ type PackageOpts struct {
 	LoadTests bool
 
 	// UseVendorAll causes the "all" package pattern to be interpreted as if
-	// running "go mod vendor" (or building with "-mod=vendor").
+	// running "forgo mod vendor" (or building with "-mod=vendor").
 	//
-	// This is a no-op for modules that declare 'go 1.16' or higher, for which this
+	// This is a no-op for modules that declare 'forgo 1.16' or higher, for which this
 	// is the default (and only) interpretation of the "all" pattern in module mode.
 	UseVendorAll bool
 
@@ -317,7 +317,7 @@ func LoadPackages(loaderstate *State, ctx context.Context, opts PackageOpts, pat
 					// load the requirements of some module. This is an error in matching
 					// the patterns to packages, because we may be missing some packages
 					// or we may erroneously match packages in the wrong versions of
-					// modules. However, for cases like 'go list -e', the error should not
+					// modules. However, for cases like 'forgo list -e', the error should not
 					// necessarily prevent us from loading the packages we could find.
 					m.Errs = append(m.Errs, err)
 				}
@@ -676,7 +676,7 @@ func resolveLocalPackage(loaderstate *State, ctx context.Context, dir string, rs
 		}
 		if loaderstate.inWorkspaceMode() {
 			if mr := findModuleRoot(absDir); mr != "" {
-				return "", fmt.Errorf("%s is contained in a module that is not one of the workspace modules listed in go.work. You can add the module to the workspace using:\n\tgo work use %s", dirstr, base.ShortPath(mr))
+				return "", fmt.Errorf("%s is contained in a module that is not one of the workspace modules listed in go.work. You can add the module to the workspace using:\n	forgo work use %s", dirstr, base.ShortPath(mr))
 			}
 			return "", fmt.Errorf("%s outside modules listed in go.work or their selected dependencies", dirstr)
 		}
@@ -865,7 +865,7 @@ func Lookup(loaderstate *State, parentPath string, parentIsStd bool, path string
 	if !ok {
 		// The loader should have found all the relevant paths.
 		// There are a few exceptions, though:
-		//	- during go list without -test, the p.Resolve calls to process p.TestImports and p.XTestImports
+		//	- during forgo list without -test, the p.Resolve calls to process p.TestImports and p.XTestImports
 		//	  end up here to canonicalize the import paths.
 		//	- during any load, non-loaded packages like "unsafe" end up here.
 		//	- during any load, build-injected dependencies like "runtime/cgo" end up here.
@@ -894,7 +894,7 @@ type loader struct {
 	allClosesOverTests bool
 
 	// skipImportModFiles indicates whether we may skip loading go.mod files
-	// for imported packages (as in 'go mod tidy' in Go 1.17–1.20).
+	// for imported packages (as in 'forgo mod tidy' in Go 1.17–1.20).
 	skipImportModFiles bool
 
 	work *par.Queue
@@ -932,7 +932,7 @@ func (ld *loader) reset() {
 // according to whether ld.AllowErrors is set.
 func (ld *loader) error(err error) {
 	if ld.AllowErrors {
-		fmt.Fprintf(os.Stderr, "go: %v\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: %v\n", err)
 	} else if ld.Switcher != nil {
 		ld.Switcher.Error(err)
 	} else {
@@ -1633,7 +1633,7 @@ func (ld *loader) resolveMissingImports(loaderstate *State, ctx context.Context)
 		}
 	}
 	if maxTooNew != nil {
-		fmt.Fprintf(os.Stderr, "go: toolchain upgrade needed to resolve %s\n", maxTooNewPkg.path)
+		fmt.Fprintf(os.Stderr, "forgo: toolchain upgrade needed to resolve %s\n", maxTooNewPkg.path)
 		return nil, maxTooNew
 	}
 
@@ -1643,7 +1643,7 @@ func (ld *loader) resolveMissingImports(loaderstate *State, ctx context.Context)
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "go: found %s in %s %s\n", pkg.path, mod.Path, mod.Version)
+		fmt.Fprintf(os.Stderr, "forgo: found %s in %s %s\n", pkg.path, mod.Path, mod.Version)
 		if modAddedBy[mod] == nil {
 			modAddedBy[mod] = pkg
 		}
@@ -1987,13 +1987,13 @@ func (ld *loader) stdVendor(loaderstate *State, parentPath, path string) string 
 		//
 		// Do the same for importers beginning with the prefix 'vendor/' even if we
 		// are *inside* of the 'std' module: the 'vendor/' packages that resolve
-		// globally from GOROOT/src/vendor (and are listed as part of 'go list std')
+		// globally from GOROOT/src/vendor (and are listed as part of 'forgo list std')
 		// are distinct from the real module dependencies, and cannot import
 		// internal packages from the real module.
 		//
 		// (Note that although the 'vendor/' packages match the 'std' *package*
 		// pattern, they are not part of the std *module*, and do not affect
-		// 'go mod tidy' and similar module commands when working within std.)
+		// 'forgo mod tidy' and similar module commands when working within std.)
 		vendorPath := pathpkg.Join("vendor", path)
 		if _, err := os.Stat(filepath.Join(cfg.GOROOTsrc, filepath.FromSlash(vendorPath))); err == nil {
 			return vendorPath
@@ -2081,18 +2081,18 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 				eDesc = ", leaving some packages unresolved"
 				eFlag = " -e"
 			}
-			fmt.Fprintf(os.Stderr, "To upgrade to the versions selected by go %s%s:\n\tgo mod tidy%s -go=%s && go mod tidy%s -go=%s%s\n", compatVersion, eDesc, eFlag, compatVersion, eFlag, goVersion, compatFlag)
+			fmt.Fprintf(os.Stderr, "To upgrade to the versions selected by go %s%s:\n\tforgo mod tidy%s -go=%s && forgo mod tidy%s -go=%s%s\n", compatVersion, eDesc, eFlag, compatVersion, eFlag, goVersion, compatFlag)
 		} else if suggestEFlag {
 			// If some packages are missing but no package is upgraded, then we
 			// shouldn't suggest upgrading to the Go 1.16 versions explicitly — that
 			// wouldn't actually fix anything for Go 1.16 users, and *would* break
 			// something for Go 1.17 users.
-			fmt.Fprintf(os.Stderr, "To proceed despite packages unresolved in go %s:\n\tgo mod tidy -e%s%s\n", compatVersion, goFlag, compatFlag)
+			fmt.Fprintf(os.Stderr, "To proceed despite packages unresolved in go %s:\n\tforgo mod tidy -e%s%s\n", compatVersion, goFlag, compatFlag)
 		}
 
-		fmt.Fprintf(os.Stderr, "If reproducibility with go %s is not needed:\n\tgo mod tidy%s -compat=%s\n", compatVersion, goFlag, goVersion)
+		fmt.Fprintf(os.Stderr, "If reproducibility with go %s is not needed:\n\tforgo mod tidy%s -compat=%s\n", compatVersion, goFlag, goVersion)
 
-		fmt.Fprintf(os.Stderr, "For information about 'go mod tidy' compatibility, see:\n\thttps://go.dev/ref/mod#graph-pruning\n")
+		fmt.Fprintf(os.Stderr, "For information about 'forgo mod tidy' compatibility, see:\n\thttps://go.dev/ref/mod#graph-pruning\n")
 	}
 
 	mg, err := rs.Graph(loaderstate, ctx)
@@ -2145,7 +2145,7 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 
 	mismatches := <-mismatchMu
 	if len(mismatches) == 0 {
-		// Since we're running as part of 'go mod tidy', the roots of the module
+		// Since we're running as part of 'forgo mod tidy', the roots of the module
 		// graph should contain only modules that are relevant to some package in
 		// the package graph. We checked every package in the package graph and
 		// didn't find any mismatches, so that must mean that all of the roots of
@@ -2159,7 +2159,7 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 		for _, m := range ld.requirements.rootModules {
 			if v := mg.Selected(m.Path); v != m.Version {
 				fmt.Fprintln(os.Stderr)
-				base.Fatalf("go: internal error: failed to diagnose selected-version mismatch for module %s: go %s selects %s, but go %s selects %s\n\tPlease report this at https://golang.org/issue.", m.Path, goVersion, m.Version, compatVersion, v)
+				base.Fatalf("forgo: internal error: failed to diagnose selected-version mismatch for module %s: go %s selects %s, but go %s selects %s\n\tPlease report this at https://golang.org/issue.", m.Path, goVersion, m.Version, compatVersion, v)
 			}
 		}
 		return
@@ -2177,7 +2177,7 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 			// We already did (or will) report an error for the package itself,
 			// so don't report a duplicate (and more verbose) error for its test.
 			if _, ok := mismatches[pkg.testOf]; !ok {
-				base.Fatalf("go: internal error: mismatch recorded for test %s, but not its non-test package", pkg.path)
+				base.Fatalf("forgo: internal error: mismatch recorded for test %s, but not its non-test package", pkg.path)
 			}
 			continue
 		}
@@ -2254,7 +2254,7 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 			ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would select %v\n", pkg.stackText(), pkg.mod, compatVersion, mismatch.mod.Version))
 
 		default:
-			base.Fatalf("go: internal error: mismatch recorded for package %s, but no differences found", pkg.path)
+			base.Fatalf("forgo: internal error: mismatch recorded for package %s, but no differences found", pkg.path)
 		}
 	}
 
@@ -2269,7 +2269,7 @@ func (ld *loader) checkTidyCompatibility(loaderstate *State, ctx context.Context
 // The standard magic import is "C", for cgo.
 //
 // The only other known magic imports are appengine and appengine/*.
-// These are so old that they predate "go get" and did not use URL-like paths.
+// These are so old that they predate "forgo get" and did not use URL-like paths.
 // Most code today now uses google.golang.org/appengine instead,
 // but not all code has been so updated. When we mostly ignore build tags
 // during "go vendor", we look into "// +build appengine" files and
@@ -2366,7 +2366,7 @@ func (pkg *loadPkg) stackText() string {
 	return buf.String()
 }
 
-// why returns the text to use in "go mod why" output about the given package.
+// why returns the text to use in "forgo mod why" output about the given package.
 // It is less ornate than the stackText but contains the same information.
 func (pkg *loadPkg) why() string {
 	var buf strings.Builder
@@ -2386,7 +2386,7 @@ func (pkg *loadPkg) why() string {
 	return buf.String()
 }
 
-// Why returns the "go mod why" output stanza for the given package,
+// Why returns the "forgo mod why" output stanza for the given package,
 // without the leading # comment.
 // The package graph must have been loaded already, usually by LoadPackages.
 // If there is no reason for the package to be in the current build,

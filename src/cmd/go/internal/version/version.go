@@ -22,29 +22,29 @@ import (
 )
 
 var CmdVersion = &base.Command{
-	UsageLine: "go version [-m] [-v] [-json] [file ...]",
+	UsageLine: "forgo version [-m] [-v] [-json] [file ...]",
 	Short:     "print Go version",
 	Long: `Version prints the build information for Go binary files.
 
 Go version reports the Go version used to build each of the named files.
 
-If no files are named on the command line, go version prints its own
+If no files are named on the command line, forgo version prints its own
 version information.
 
-If a directory is named, go version walks that directory, recursively,
+If a directory is named, forgo version walks that directory, recursively,
 looking for recognized Go binaries and reporting their versions.
-By default, go version does not report unrecognized files found
+By default, forgo version does not report unrecognized files found
 during a directory scan. The -v flag causes it to report unrecognized files.
 
-The -m flag causes go version to print each file's embedded
+The -m flag causes forgo version to print each file's embedded
 module version information, when available. In the output, the module
 information consists of multiple lines following the version line, each
 indented by a leading tab character.
 
 The -json flag is similar to -m but outputs the runtime/debug.BuildInfo in JSON format.
-If flag -json is specified without -m, go version reports an error.
+If flag -json is specified without -m, forgo version reports an error.
 
-See also: go doc runtime/debug.BuildInfo.
+See also: forgo doc runtime/debug.BuildInfo.
 `,
 }
 
@@ -67,7 +67,7 @@ func runVersion(ctx context.Context, cmd *base.Command, args []string) {
 		// Don't error if the flags came from GOFLAGS, since that can be
 		// a reasonable use case. For example, imagine GOFLAGS=-v to
 		// turn "verbose mode" on for all Go commands, which should not
-		// break "go version".
+		// break "forgo version".
 		var argOnlyFlag string
 		if !base.InGOFLAGS("-m") && *versionM {
 			argOnlyFlag = "-m"
@@ -80,7 +80,7 @@ func runVersion(ctx context.Context, cmd *base.Command, args []string) {
 			argOnlyFlag = "-json"
 		}
 		if argOnlyFlag != "" {
-			fmt.Fprintf(os.Stderr, "go: 'go version' only accepts %s flag with arguments\n", argOnlyFlag)
+			fmt.Fprintf(os.Stderr, "forgo: 'forgo version' only accepts %s flag with arguments\n", argOnlyFlag)
 			base.SetExitStatus(2)
 			return
 		}
@@ -96,7 +96,7 @@ func runVersion(ctx context.Context, cmd *base.Command, args []string) {
 	}
 
 	if !*versionM && *versionJson {
-		fmt.Fprintf(os.Stderr, "go: 'go version' with -json flag requires -m flag\n")
+		fmt.Fprintf(os.Stderr, "forgo: 'forgo version' with -json flag requires -m flag\n")
 		base.SetExitStatus(2)
 		return
 	}

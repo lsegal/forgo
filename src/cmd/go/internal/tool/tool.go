@@ -34,10 +34,10 @@ import (
 
 var CmdTool = &base.Command{
 	Run:       runTool,
-	UsageLine: "go tool [-n] command [args...]",
-	Short:     "run specified go tool",
+	UsageLine: "forgo tool [-n] command [args...]",
+	Short:     "run specified forgo tool",
 	Long: `
-Tool runs the go tool command identified by the arguments.
+Tool runs the forgo tool command identified by the arguments.
 
 Go ships with a number of builtin tools, and additional tools
 may be defined in the go.mod of the current module.
@@ -52,9 +52,9 @@ instead of the go.mod in the module root directory.
 
 Tool also provides the -C, -overlay, and -modcacherw build flags.
 
-For more about build flags, see 'go help build'.
+For more about build flags, see 'forgo help build'.
 
-For more about each builtin tool command, see 'go doc cmd/<command>'.
+For more about each builtin tool command, see 'forgo doc cmd/<command>'.
 `,
 }
 
@@ -62,7 +62,7 @@ var toolN bool
 
 // Return whether tool can be expected in the gccgo tool directory.
 // Other binaries could be in the same directory so don't
-// show those with the 'go tool' command.
+// show those with the 'forgo tool' command.
 func isGccgoTool(tool string) bool {
 	switch tool {
 	case "cgo", "fix", "cover", "godoc", "vet":
@@ -91,7 +91,7 @@ func runTool(ctx context.Context, cmd *base.Command, args []string) {
 		if toolName == "dist" && len(args) > 1 && args[1] == "list" {
 			// cmd/distpack removes the 'dist' tool from the toolchain to save space,
 			// since it is normally only used for building the toolchain in the first
-			// place. However, 'go tool dist list' is useful for listing all supported
+			// place. However, 'forgo tool dist list' is useful for listing all supported
 			// platforms.
 			//
 			// If the dist tool does not exist, impersonate this command.
@@ -136,14 +136,14 @@ func runTool(ctx context.Context, cmd *base.Command, args []string) {
 func listTools(loaderstate *modload.State, ctx context.Context) {
 	f, err := os.Open(build.ToolDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "go: no tool directory: %s\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: no tool directory: %s\n", err)
 		base.SetExitStatus(2)
 		return
 	}
 	defer f.Close()
 	names, err := f.Readdirnames(-1)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "go: can't read tool directory: %s\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: can't read tool directory: %s\n", err)
 		base.SetExitStatus(2)
 		return
 	}
@@ -171,18 +171,18 @@ func listTools(loaderstate *modload.State, ctx context.Context) {
 }
 
 func impersonateDistList(args []string) (handled bool) {
-	fs := flag.NewFlagSet("go tool dist list", flag.ContinueOnError)
+	fs := flag.NewFlagSet("forgo tool dist list", flag.ContinueOnError)
 	jsonFlag := fs.Bool("json", false, "produce JSON output")
 	brokenFlag := fs.Bool("broken", false, "include broken ports")
 
-	// The usage for 'go tool dist' claims that
+	// The usage for 'forgo tool dist' claims that
 	// “All commands take -v flags to emit extra information”,
 	// but list -v appears not to have any effect.
 	_ = fs.Bool("v", false, "emit extra information")
 
 	if err := fs.Parse(args); err != nil || len(fs.Args()) > 0 {
 		// Unrecognized flag or argument.
-		// Force fallback to the real 'go tool dist'.
+		// Force fallback to the real 'forgo tool dist'.
 		return false
 	}
 
@@ -283,7 +283,7 @@ func builtTool(runAction *work.Action) string {
 	if toolN {
 		// #72824: If -n is set, use the cached path if we can.
 		// This is only necessary if the binary wasn't cached
-		// before this invocation of the go command: if the binary
+		// before this invocation of the forgo command: if the binary
 		// was cached, BuiltTarget() will be the cached executable.
 		// It's only in the "first run", where we actually do the build
 		// and save the result to the cache that BuiltTarget is not
@@ -303,7 +303,7 @@ func builtTool(runAction *work.Action) string {
 
 func buildAndRunBuiltinTool(loaderstate *modload.State, ctx context.Context, toolName, tool string, args []string) {
 	// Override GOOS and GOARCH for the build to build the tool using
-	// the same GOOS and GOARCH as this go command.
+	// the same GOOS and GOARCH as this forgo command.
 	cfg.ForceHost()
 
 	// Ignore go.mod and go.work: we don't need them, and we want to be able
@@ -321,11 +321,11 @@ func buildAndRunBuiltinTool(loaderstate *modload.State, ctx context.Context, too
 
 func buildAndRunModtool(loaderstate *modload.State, ctx context.Context, toolName, tool string, args []string) {
 	runFunc := func(b *work.Builder, ctx context.Context, a *work.Action) error {
-		// Use the ExecCmd to run the binary, as go run does. ExecCmd allows users
+		// Use the ExecCmd to run the binary, as forgo run does. ExecCmd allows users
 		// to provide a runner to run the binary, for example a simulator for binaries
 		// that are cross-compiled to a different platform.
 		cmdline := str.StringList(work.FindExecCmd(), builtTool(a), a.Args)
-		// Use same environment go run uses to start the executable:
+		// Use same environment forgo run uses to start the executable:
 		// the original environment with cfg.GOROOTbin added to the path.
 		env := slices.Clip(cfg.OrigEnv)
 		env = base.AppendPATH(env)
@@ -352,7 +352,7 @@ func buildAndRunTool(loaderstate *modload.State, ctx context.Context, tool strin
 
 	a1 := b.LinkAction(loaderstate, work.ModeBuild, work.ModeBuild, p)
 	a1.CacheExecutable = true
-	a := &work.Action{Mode: "go tool", Actor: runTool, Args: args, Deps: []*work.Action{a1}}
+	a := &work.Action{Mode: "forgo tool", Actor: runTool, Args: args, Deps: []*work.Action{a1}}
 	b.Do(ctx, a)
 }
 
@@ -391,7 +391,7 @@ func runBuiltTool(toolName string, env, cmdline []string) error {
 		// it printed any messages it wanted to print.
 		e, ok := err.(*exec.ExitError)
 		if !ok || !e.Exited() || cfg.BuildX {
-			fmt.Fprintf(os.Stderr, "go tool %s: %s\n", toolName, err)
+			fmt.Fprintf(os.Stderr, "forgo tool %s: %s\n", toolName, err)
 		}
 		if ok {
 			base.SetExitStatus(e.ExitCode())

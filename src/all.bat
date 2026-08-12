@@ -13,4 +13,4 @@ if not exist make.bat (
 
 call .\make.bat --no-banner || exit /b 1
 call .\run.bat --no-rebuild || exit /b 1
-..\bin\go tool dist banner
+..\bin\forgo tool dist banner

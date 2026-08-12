@@ -15,7 +15,7 @@
 //     validation and certification are stored in GOROOT/lib/fips140
 //     and can be substituted into the build instead.
 //
-// This package provides the logic needed by the rest of the go command
+// This package provides the logic needed by the rest of the forgo command
 // to make those decisions and implement the resulting policy.
 //
 // [Init] must be called to initialize the FIPS logic. It may fail and
@@ -38,7 +38,7 @@
 // fips.o file. Since the first build target always uses a.Objdir set to
 // $WORK/b001, a build like
 //
-//	GOFIPS140=latest go build -work my/binary
+//	GOFIPS140=latest forgo build -work my/binary
 //
 // will leave fips.o behind in $WORK/b001
 // (unless the build result is cached, of course).
@@ -67,7 +67,7 @@
 // crypto/internal/fips140/v1.2.3/sha256 and returns the actual source directory
 // in the unpacked snapshot. Using the actual directory instead of the
 // virtual directory GOROOT/src/crypto/internal/fips140/v1.2.3 makes sure
-// that other tools using go list -json output can find the sources,
+// that other tools using forgo list -json output can find the sources,
 // as well as making sure builds have a real directory in which to run the
 // assembler, compiler, and so on. The translation of the import path happens
 // in the same code that handles mapping golang.org/x/mod to
@@ -121,10 +121,10 @@ func Init() {
 	// toolchain selection, as the GOEXPERIMENT may be valid for the
 	// selected toolchain version.
 	if cfg.ExperimentErr == nil && cfg.Experiment.BoringCrypto && Enabled() {
-		base.Fatalf("go: cannot use GOFIPS140 with GOEXPERIMENT=boringcrypto")
+		base.Fatalf("forgo: cannot use GOFIPS140 with GOEXPERIMENT=boringcrypto")
 	}
 	if slices.Contains(cfg.BuildContext.BuildTags, "purego") && Enabled() {
-		base.Fatalf("go: cannot use GOFIPS140 with the purego build tag")
+		base.Fatalf("forgo: cannot use GOFIPS140 with the purego build tag")
 	}
 }
 
@@ -179,10 +179,10 @@ func initVersion() {
 	// a .zip (a source snapshot like v1.2.0.zip)
 	// or a .txt (a redirect like inprocess.txt, containing a version number).
 	if strings.Contains(v, "/") || strings.Contains(v, `\`) || strings.Contains(v, "..") {
-		base.Fatalf("go: malformed GOFIPS140 version %q", cfg.GOFIPS140)
+		base.Fatalf("forgo: malformed GOFIPS140 version %q", cfg.GOFIPS140)
 	}
 	if cfg.GOROOT == "" {
-		base.Fatalf("go: missing GOROOT for GOFIPS140")
+		base.Fatalf("forgo: missing GOROOT for GOFIPS140")
 	}
 
 	file := filepath.Join(cfg.GOROOT, "lib", "fips140", v)
@@ -190,7 +190,7 @@ func initVersion() {
 		v = strings.TrimSpace(string(data))
 		file = filepath.Join(cfg.GOROOT, "lib", "fips140", v)
 		if _, err := os.Stat(file + ".zip"); err != nil {
-			base.Fatalf("go: unknown GOFIPS140 version %q (from %q)", v, cfg.GOFIPS140)
+			base.Fatalf("forgo: unknown GOFIPS140 version %q (from %q)", v, cfg.GOFIPS140)
 		}
 	}
 
@@ -201,7 +201,7 @@ func initVersion() {
 		return
 	}
 
-	base.Fatalf("go: unknown GOFIPS140 version %q", v)
+	base.Fatalf("forgo: unknown GOFIPS140 version %q", v)
 }
 
 // Dir reports the directory containing the crypto/internal/fips140 source code.
@@ -227,7 +227,7 @@ func initDir() {
 	file := filepath.Join(cfg.GOROOT, "lib/fips140", v+".zip")
 	zdir, err := modfetch.NewFetcher().Unzip(context.Background(), mod, file)
 	if err != nil {
-		base.Fatalf("go: unpacking GOFIPS140=%v: %v", v, err)
+		base.Fatalf("forgo: unpacking GOFIPS140=%v: %v", v, err)
 	}
 	dir = filepath.Join(zdir, "fips140")
 }

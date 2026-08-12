@@ -56,12 +56,12 @@ import (
 
 // A Package describes a single package found in a directory.
 type Package struct {
-	PackagePublic                 // visible in 'go list'
-	Internal      PackageInternal // for use inside go command only
+	PackagePublic                 // visible in 'forgo list'
+	Internal      PackageInternal // for use inside forgo command only
 }
 
 type PackagePublic struct {
-	// Note: These fields are part of the go command's public API.
+	// Note: These fields are part of the forgo command's public API.
 	// See list.go. It is okay to add fields, but not to change or
 	// remove existing ones. Keep in sync with ../list/list.go
 	Dir           string                `json:",omitempty"` // directory containing package sources
@@ -74,8 +74,8 @@ type PackagePublic struct {
 	Root          string                `json:",omitempty"` // Go root, Go path dir, or module root dir containing this package
 	ConflictDir   string                `json:",omitempty"` // Dir is hidden by this other directory
 	ForTest       string                `json:",omitempty"` // package is only for use in named test
-	Export        string                `json:",omitempty"` // file containing export data (set by go list -export)
-	BuildID       string                `json:",omitempty"` // build ID of the compiled package (set by go list -export)
+	Export        string                `json:",omitempty"` // file containing export data (set by forgo list -export)
+	BuildID       string                `json:",omitempty"` // build ID of the compiled package (set by forgo list -export)
 	Module        *modinfo.ModulePublic `json:",omitempty"` // info about package's module, if any
 	Match         []string              `json:",omitempty"` // command-line patterns matching this package
 	Goroot        bool                  `json:",omitempty"` // is this package found in the Go root?
@@ -89,7 +89,7 @@ type PackagePublic struct {
 	// Stale and StaleReason remain here *only* for the list command.
 	// They are only initialized in preparation for list execution.
 	// The regular build determines staleness on the fly during action execution.
-	Stale       bool   `json:",omitempty"` // would 'go install' do anything for this package?
+	Stale       bool   `json:",omitempty"` // would 'forgo install' do anything for this package?
 	StaleReason string `json:",omitempty"` // why is Stale true?
 
 	// Source files
@@ -131,7 +131,7 @@ type PackagePublic struct {
 	// Error information
 	// Incomplete is above, packed into the other bools
 	Error      *PackageError   `json:",omitempty"` // error loading this package (not dependencies)
-	DepsErrors []*PackageError `json:",omitempty"` // errors loading dependencies, collected by go list before output
+	DepsErrors []*PackageError `json:",omitempty"` // errors loading dependencies, collected by forgo list before output
 
 	// Test information
 	// If you add to this list you MUST add to p.AllFiles (below) too.
@@ -352,7 +352,7 @@ func (p *Package) setLoadPackageDataError(err error, path string, stk *ImportSta
 // loaded during the initial load of p, so they list the imports found in
 // the source file, but most processing should be over the vendor-resolved
 // import paths. We do this resolution lazily both to avoid file system work
-// and because the eventual real load of the test imports (during 'go test')
+// and because the eventual real load of the test imports (during 'forgo test')
 // can produce better error messages if it starts with the original paths.
 // The initial load of p loads all the non-test imports and rewrites
 // the vendored paths, so nothing should ever call p.vendored(p.Imports).
@@ -376,7 +376,7 @@ func (p *Package) Resolve(s *modload.State, imports []string) []string {
 // CoverSetup holds parameters related to coverage setup for a given package (covermode, etc).
 type CoverSetup struct {
 	Mode    string // coverage mode for this package
-	Cfg     string // path to config file to pass to "go tool cover"
+	Cfg     string // path to config file to pass to "forgo tool cover"
 	GenMeta bool   // ask cover tool to emit a static meta data if set
 }
 
@@ -668,11 +668,11 @@ const (
 	// disallowVendor will reject direct use of paths containing /vendor/.
 	ResolveImport = 1 << iota
 
-	// ResolveModule is for download (part of "go get") and indicates
+	// ResolveModule is for download (part of "forgo get") and indicates
 	// that the module adjustment should be done, but not vendor adjustment.
 	ResolveModule
 
-	// GetTestDeps is for download (part of "go get") and indicates
+	// GetTestDeps is for download (part of "forgo get") and indicates
 	// that test dependencies should be fetched too.
 	GetTestDeps
 
@@ -857,7 +857,7 @@ func loadPackageData(loaderstate *modload.State, ctx context.Context, path, pare
 	}
 
 	if strings.Contains(path, "@") {
-		return nil, false, errors.New("can only use path@version syntax with 'go get' and 'go install' in module-aware mode")
+		return nil, false, errors.New("can only use path@version syntax with 'forgo get' and 'forgo install' in module-aware mode")
 	}
 
 	// Determine canonical package path and directory.
@@ -869,7 +869,7 @@ func loadPackageData(loaderstate *modload.State, ctx context.Context, path, pare
 	// Note that when modules are enabled, local import paths are normally
 	// canonicalized by modload.LoadPackages before now. However, if there's an
 	// error resolving a local path, it will be returned untransformed
-	// so that 'go list -e' reports something useful.
+	// so that 'forgo list -e' reports something useful.
 	importKey := importSpec{
 		path:        path,
 		parentPath:  parentPath,
@@ -1048,7 +1048,7 @@ var preloadWorkerCount = runtime.GOMAXPROCS(0)
 // package graph. flush must be called when package loading is complete
 // to ensure preload goroutines are no longer active. This is necessary
 // because of global mutable state that cannot safely be read and written
-// concurrently. In particular, packageDataCache may be cleared by "go get"
+// concurrently. In particular, packageDataCache may be cleared by "forgo get"
 // in GOPATH mode, and modload.loaded (accessed via modload.Lookup) may be
 // modified by modload.LoadPackages.
 type preload struct {
@@ -1344,7 +1344,7 @@ func isVersionElement(s string) bool {
 // Define “new” code as code with a go.mod file in the same directory
 // or a parent directory. If an import in new code says x/y/v2/z but
 // x/y/v2/z does not exist and x/y/go.mod says “module x/y/v2”,
-// then go build will read the import as x/y/z instead.
+// then forgo build will read the import as x/y/z instead.
 // See golang.org/issue/25069.
 func moduleImportPath(path, parentPath, parentDir, parentRoot string) (found string) {
 	if parentRoot == "" {
@@ -1783,7 +1783,7 @@ func (p *Package) load(loaderstate *modload.State, ctx context.Context, opts Pac
 	}
 
 	// setError sets p.Error if it hasn't already been set. We may proceed
-	// after encountering some errors so that 'go list -e' has more complete
+	// after encountering some errors so that 'forgo list -e' has more complete
 	// output. If there's more than one error, we should report the first.
 	setError := func(err error) {
 		if p.Error == nil {
@@ -1848,7 +1848,7 @@ func (p *Package) load(loaderstate *modload.State, ctx context.Context, opts Pac
 			}
 		}
 		if InstallTargetDir(p) == ToTool {
-			// This is for 'go tool'.
+			// This is for 'forgo tool'.
 			// Override all the usual logic and force it into the tool directory.
 			if cfg.BuildToolchainName == "gccgo" {
 				p.Target = filepath.Join(build.ToolDir, elem)
@@ -2104,9 +2104,9 @@ func (e *EmbedError) Unwrap() error {
 }
 
 // ResolveEmbed resolves //go:embed patterns and returns only the file list.
-// For use by go mod vendor to find embedded files it should copy into the
+// For use by forgo mod vendor to find embedded files it should copy into the
 // vendor directory.
-// TODO(#42504): Once go mod vendor uses load.PackagesAndErrors, just
+// TODO(#42504): Once forgo mod vendor uses load.PackagesAndErrors, just
 // call (*Package).ResolveEmbed
 func ResolveEmbed(dir string, patterns []string) ([]string, error) {
 	files, _, err := resolveEmbed(dir, patterns)
@@ -2116,7 +2116,7 @@ func ResolveEmbed(dir string, patterns []string) ([]string, error) {
 var embedfollowsymlinks = godebug.New("embedfollowsymlinks")
 
 // resolveEmbed resolves //go:embed patterns to precise file lists.
-// It sets files to the list of unique files matched (for go list),
+// It sets files to the list of unique files matched (for forgo list),
 // and it sets pmap to the more precise mapping from
 // patterns to files.
 func resolveEmbed(pkgdir string, patterns []string) (files []string, pmap map[string][]string, err error) {
@@ -3213,7 +3213,7 @@ func mainPackagesOnly(pkgs []*Package, matches []*search.Match) []*Package {
 			}
 		}
 		if !foundMain {
-			fmt.Fprintf(os.Stderr, "go: warning: %q matched only non-main packages\n", m.Pattern())
+			fmt.Fprintf(os.Stderr, "forgo: warning: %q matched only non-main packages\n", m.Pattern())
 		}
 	}
 
@@ -3415,7 +3415,7 @@ func PackagesAndErrorsOutsideModule(loaderstate *modload.State, ctx context.Cont
 		return nil, fmt.Errorf("%s: %w", args[0], err)
 	}
 	if deprecation != "" {
-		fmt.Fprintf(os.Stderr, "go: module %s is deprecated: %s\n", rootMod.Path, modload.ShortMessage(deprecation, ""))
+		fmt.Fprintf(os.Stderr, "forgo: module %s is deprecated: %s\n", rootMod.Path, modload.ShortMessage(deprecation, ""))
 	}
 	data, err := loaderstate.Fetcher().GoMod(ctx, rootMod.Path, rootMod.Version)
 	if err != nil {
@@ -3490,9 +3490,9 @@ func EnsureImport(s *modload.State, p *Package, pkg string) {
 	p.Internal.Imports = append(p.Internal.Imports, p1)
 }
 
-// PrepareForCoverageBuild is a helper invoked for "go install
-// -cover", "go run -cover", and "go build -cover" (but not used by
-// "go test -cover"). It walks through the packages being built (and
+// PrepareForCoverageBuild is a helper invoked for "forgo install
+// -cover", "forgo run -cover", and "forgo build -cover" (but not used by
+// "forgo test -cover"). It walks through the packages being built (and
 // dependencies) and marks them for coverage instrumentation when
 // appropriate, and possibly adding additional deps where needed.
 func PrepareForCoverageBuild(s *modload.State, pkgs []*Package) {

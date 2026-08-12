@@ -23,17 +23,17 @@ import (
 )
 
 var cmdVerify = &base.Command{
-	UsageLine: "go mod verify",
+	UsageLine: "forgo mod verify",
 	Short:     "verify dependencies have expected content",
 	Long: `
 Verify checks that the dependencies of the current module,
 which are stored in a local downloaded source cache, have not been
 modified since being downloaded. If all the modules are unmodified,
 verify prints "all modules verified." Otherwise it reports which
-modules have been changed and causes 'go mod' to exit with a
+modules have been changed and causes 'forgo mod' to exit with a
 non-zero status.
 
-See https://golang.org/ref/mod#go-mod-verify for more about 'go mod verify'.
+See https://golang.org/ref/mod#go-mod-verify for more about 'forgo mod verify'.
 	`,
 	Run: runVerify,
 }
@@ -49,7 +49,7 @@ func runVerify(ctx context.Context, cmd *base.Command, args []string) {
 
 	if len(args) != 0 {
 		// NOTE(rsc): Could take a module pattern.
-		base.Fatalf("go: verify takes no arguments")
+		base.Fatalf("forgo: verify takes no arguments")
 	}
 	moduleLoaderState.ForceUseModules = true
 	moduleLoaderState.RootMode = modload.NeedRoot

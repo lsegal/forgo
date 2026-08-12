@@ -136,7 +136,7 @@ func parseErrorFromString(s string) error {
 	}
 	var p parseError
 	if err := json.Unmarshal([]byte(s), &p); err != nil {
-		base.Fatalf(`go: invalid parse error value in index: %q. This indicates a corrupted index. Run "go clean -cache" to reset the module cache.`, s)
+		base.Fatalf(`go: invalid parse error value in index: %q. This indicates a corrupted index. Run "forgo clean -cache" to reset the module cache.`, s)
 	}
 	if p.ErrorList != nil {
 		return *p.ErrorList

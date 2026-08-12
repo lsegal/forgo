@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package cfg holds configuration shared by multiple parts
-// of the go command.
+// of the forgo command.
 package cfg
 
 import (
@@ -34,7 +34,7 @@ var (
 
 	ExeSuffix = exeSuffix()
 
-	// ModulesEnabled specifies whether the go command is running
+	// ModulesEnabled specifies whether the forgo command is running
 	// in module-aware mode (as opposed to GOPATH mode).
 	// It is equal to modload.Enabled, but not all packages can import modload.
 	ModulesEnabled bool
@@ -116,7 +116,7 @@ var (
 func defaultContext() build.Context {
 	ctxt := build.Default
 
-	ctxt.JoinPath = filepath.Join // back door to say "do not use go command"
+	ctxt.JoinPath = filepath.Join // back door to say "do not use forgo command"
 
 	// Override defaults computed in go/build with defaults
 	// from go environment configuration file, if known.
@@ -208,7 +208,7 @@ func init() {
 }
 
 // ForceHost forces GOOS and GOARCH to runtime.GOOS and runtime.GOARCH.
-// This is used by go tool to build tools for the go command's own
+// This is used by forgo tool to build tools for the forgo command's own
 // GOOS and GOARCH.
 func ForceHost() {
 	Goos = runtime.GOOS
@@ -328,8 +328,8 @@ type EnvVar struct {
 // OrigEnv is the original environment of the program at startup.
 var OrigEnv []string
 
-// CmdEnv is the new environment for running go tool commands.
-// User binaries (during go test or go run) are run with OrigEnv,
+// CmdEnv is the new environment for running forgo tool commands.
+// User binaries (during forgo test or forgo run) are run with OrigEnv,
 // not CmdEnv.
 var CmdEnv []EnvVar
 
@@ -399,8 +399,8 @@ func readEnvFile(file string, source string) {
 		if i < 0 || line[0] < 'A' || 'Z' < line[0] {
 			// Line is missing = (or empty) or a comment or not a valid env name. Ignore.
 			// This should not happen in the user file, since the file should be maintained almost
-			// exclusively by "go env -w", but better to silently ignore than to make
-			// the go command unusable just because somehow the env file has
+			// exclusively by "forgo env -w", but better to silently ignore than to make
+			// the forgo command unusable just because somehow the env file has
 			// gotten corrupted.
 			// In the GOROOT/go.env file, we expect comments.
 			continue
@@ -424,7 +424,7 @@ func readEnvFile(file string, source string) {
 // If Getenv is called for a key that cannot be set
 // in the go/env file (for example GODEBUG), it panics.
 // This ensures that CanGetenv is accurate, so that
-// 'go env -w' stays in sync with what Getenv can retrieve.
+// 'forgo env -w' stays in sync with what Getenv can retrieve.
 func Getenv(key string) string {
 	if !CanGetenv(key) {
 		switch key {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:generate go test cmd/go -v -run=^TestDocsUpToDate$ -fixdocs
+//go:generate forgo test cmd/go -v -run=^TestDocsUpToDate$ -fixdocs
 
 package main
 
@@ -126,11 +126,11 @@ func main() {
 	}
 
 	if cfg.GOROOT == "" {
-		fmt.Fprintf(os.Stderr, "go: cannot find GOROOT directory: 'go' binary is trimmed and GOROOT is not set\n")
+		fmt.Fprintf(os.Stderr, "forgo: cannot find GOROOT directory: 'forgo' binary is trimmed and GOROOT is not set\n")
 		os.Exit(2)
 	}
 	if fi, err := os.Stat(cfg.GOROOT); err != nil || !fi.IsDir() {
-		fmt.Fprintf(os.Stderr, "go: cannot find GOROOT directory: %v\n", cfg.GOROOT)
+		fmt.Fprintf(os.Stderr, "forgo: cannot find GOROOT directory: %v\n", cfg.GOROOT)
 		os.Exit(2)
 	}
 	switch strings.ToLower(cfg.GOROOT) {
@@ -164,7 +164,7 @@ func main() {
 			// in the middle of directory elements, such as /tmp/git-1.8.2~rc3
 			// or C:\PROGRA~1. Only ~ as a path prefix has meaning to the shell.
 			if strings.HasPrefix(p, "~") {
-				fmt.Fprintf(os.Stderr, "go: GOPATH entry cannot start with shell metacharacter '~': %q\n", p)
+				fmt.Fprintf(os.Stderr, "forgo: GOPATH entry cannot start with shell metacharacter '~': %q\n", p)
 				os.Exit(2)
 			}
 			if !filepath.IsAbs(p) {
@@ -174,7 +174,7 @@ func main() {
 					cfg.BuildContext.GOPATH = ""
 				} else {
 					counterErrorsGOPATHEntryRelative.Inc()
-					fmt.Fprintf(os.Stderr, "go: GOPATH entry is relative; must be absolute path: %q.\nFor more details see: 'go help gopath'\n", p)
+					fmt.Fprintf(os.Stderr, "forgo: GOPATH entry is relative; must be absolute path: %q.\nFor more details see: 'forgo help gopath'\n", p)
 					os.Exit(2)
 				}
 			}
@@ -190,7 +190,7 @@ func main() {
 			base.Exit()
 		}
 		if args[used] == "help" {
-			// Accept 'go mod help' and 'go mod help foo' for 'go help mod' and 'go help mod foo'.
+			// Accept 'forgo mod help' and 'forgo mod help foo' for 'forgo help mod' and 'forgo help mod foo'.
 			counter.Inc("go/subcommand:" + strings.ReplaceAll(cfg.CmdName, " ", "-") + "-" + strings.Join(args[used:], "-"))
 			help.Help(os.Stdout, append(slices.Clip(args[:used]), args[used+1:]...))
 			base.Exit()
@@ -204,7 +204,7 @@ func main() {
 			cmdName = args[0]
 		}
 		counter.Inc("go/subcommand:unknown")
-		fmt.Fprintf(os.Stderr, "go %s: unknown command\nRun 'go help%s' for usage.\n", cmdName, helpArg)
+		fmt.Fprintf(os.Stderr, "forgo %s: unknown command\nRun 'forgo help%s' for usage.\n", cmdName, helpArg)
 		base.SetExitStatus(2)
 		base.Exit()
 	}
@@ -220,13 +220,13 @@ func main() {
 	base.Exit()
 }
 
-// cmdIsGoTelemetryOff reports whether the command is "go telemetry off". This
+// cmdIsGoTelemetryOff reports whether the command is "forgo telemetry off". This
 // is used to decide whether to disable the opening of counter files. See #69269.
 func cmdIsGoTelemetryOff() bool {
 	restArgs := os.Args[1:]
 	// skipChdirFlag skips the -C flag, which is the only flag that can appear
-	// in a valid 'go telemetry off' command, and which hasn't been processed
-	// yet. We need to determine if the command is 'go telemetry off' before we open
+	// in a valid 'forgo telemetry off' command, and which hasn't been processed
+	// yet. We need to determine if the command is 'forgo telemetry off' before we open
 	// the counter file, but we want to process -C after we open counters so that
 	// we can increment the flag counter for it.
 	skipChdirFlag := func() {
@@ -288,7 +288,7 @@ func lookupCmd(args []string) (cmd *base.Command, used int) {
 }
 
 func invoke(cmd *base.Command, args []string) {
-	// 'go env' handles checking the build config
+	// 'forgo env' handles checking the build config
 	if cmd != envcmd.CmdEnv {
 		buildcfg.Check()
 		if cfg.ExperimentErr != nil {
@@ -378,7 +378,7 @@ func maybeStartTrace(pctx context.Context) context.Context {
 //
 //  1. Toolchain selection needs to be in the right directory to look for go.mod and go.work.
 //
-//  2. A toolchain switch later on reinvokes the new go command with the same arguments.
+//  2. A toolchain switch later on reinvokes the new forgo command with the same arguments.
 //     The parent toolchain has already done the chdir; the child must not try to do it again.
 func handleChdirFlag() {
 	_, used := lookupCmd(os.Args[1:])
@@ -406,6 +406,6 @@ func handleChdirFlag() {
 	counter.Inc("go/flag:C")
 
 	if err := os.Chdir(dir); err != nil {
-		base.Fatalf("go: %v", err)
+		base.Fatalf("forgo: %v", err)
 	}
 }

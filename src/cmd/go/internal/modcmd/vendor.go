@@ -31,7 +31,7 @@ import (
 )
 
 var cmdVendor = &base.Command{
-	UsageLine: "go mod vendor [-e] [-v] [-o outdir]",
+	UsageLine: "forgo mod vendor [-e] [-v] [-o outdir]",
 	Short:     "make vendored copy of dependencies",
 	Long: `
 Vendor resets the main module's vendor directory to include all packages
@@ -45,11 +45,11 @@ The -e flag causes vendor to attempt to proceed despite errors
 encountered while loading packages.
 
 The -o flag causes vendor to create the vendor directory at the given
-path instead of "vendor". The go command can only use a vendor directory
+path instead of "vendor". The forgo command can only use a vendor directory
 named "vendor" within the module root directory, so this flag is
 primarily useful for other tools.
 
-See https://golang.org/ref/mod#go-mod-vendor for more about 'go mod vendor'.
+See https://golang.org/ref/mod#go-mod-vendor for more about 'forgo mod vendor'.
 	`,
 	Run: runVendor,
 }
@@ -69,14 +69,14 @@ func runVendor(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	moduleLoaderState.InitWorkfile()
 	if modload.WorkFilePath(moduleLoaderState) != "" {
-		base.Fatalf("go: 'go mod vendor' cannot be run in workspace mode. Run 'go work vendor' to vendor the workspace or set 'GOWORK=off' to exit workspace mode.")
+		base.Fatalf("forgo: 'forgo mod vendor' cannot be run in workspace mode. Run 'forgo work vendor' to vendor the workspace or set 'GOWORK=off' to exit workspace mode.")
 	}
 	RunVendor(moduleLoaderState, ctx, vendorE, vendorO, args)
 }
 
 func RunVendor(loaderstate *modload.State, ctx context.Context, vendorE bool, vendorO string, args []string) {
 	if len(args) != 0 {
-		base.Fatalf("go: 'go mod vendor' accepts no arguments")
+		base.Fatalf("forgo: 'forgo mod vendor' accepts no arguments")
 	}
 	loaderstate.ForceUseModules = true
 	loaderstate.RootMode = modload.NeedRoot
@@ -233,7 +233,7 @@ func RunVendor(loaderstate *modload.State, ctx context.Context, vendorE bool, ve
 	}
 
 	if buf.Len() == 0 {
-		fmt.Fprintf(os.Stderr, "go: no dependencies to vendor\n")
+		fmt.Fprintf(os.Stderr, "forgo: no dependencies to vendor\n")
 		return
 	}
 
@@ -256,7 +256,7 @@ func moduleLine(m, r module.Version) string {
 	}
 	if r.Path != "" {
 		if str.HasFilePathPrefix(filepath.Clean(r.Path), "vendor") {
-			base.Fatalf("go: replacement path %s inside vendor directory", r.Path)
+			base.Fatalf("forgo: replacement path %s inside vendor directory", r.Path)
 		}
 		b.WriteString(" => ")
 		b.WriteString(r.Path)
@@ -324,13 +324,13 @@ func vendorPkg(s *modload.State, vdir, pkg string) {
 		embedPatterns = bp.EmbedPatterns
 	} else {
 		// Maintain the behavior of https://github.com/golang/go/issues/63473
-		// so that we continue to agree with older versions of the go command
+		// so that we continue to agree with older versions of the forgo command
 		// about the contents of vendor directories in existing modules
 		embedPatterns = str.StringList(bp.EmbedPatterns, bp.TestEmbedPatterns, bp.XTestEmbedPatterns)
 	}
 	embeds, err := load.ResolveEmbed(bp.Dir, embedPatterns)
 	if err != nil {
-		format := "go: resolving embeds in %s: %v\n"
+		format := "forgo: resolving embeds in %s: %v\n"
 		if vendorE {
 			fmt.Fprintf(os.Stderr, format, pkg, err)
 		} else {
@@ -365,7 +365,7 @@ func vendorPkg(s *modload.State, vdir, pkg string) {
 		}()
 		if err != nil {
 			if vendorE {
-				fmt.Fprintf(os.Stderr, "go: %v\n", err)
+				fmt.Fprintf(os.Stderr, "forgo: %v\n", err)
 			} else {
 				base.Error(err)
 			}
@@ -500,8 +500,8 @@ func copyDir(dst, src string, match func(dir string, info fs.DirEntry) bool, cop
 }
 
 // checkPathCollisions will fail if case-insensitive collisions are present.
-// The reason why we do this check in go mod vendor is to keep consistency
-// with go build. If modifying, consider changing load() in
+// The reason why we do this check in forgo mod vendor is to keep consistency
+// with forgo build. If modifying, consider changing load() in
 // src/cmd/go/internal/load/pkg.go
 func checkPathCollisions(modpkgs map[module.Version][]string) {
 	var foldPath = make(map[string]string, len(modpkgs))

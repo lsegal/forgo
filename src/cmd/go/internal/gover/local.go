@@ -10,18 +10,18 @@ import (
 	"strconv"
 )
 
-// TestVersion is initialized in the go command test binary
+// TestVersion is initialized in the forgo command test binary
 // to be $TESTGO_VERSION, to allow tests to override the
-// go command's idea of its own version as returned by Local.
+// forgo command's idea of its own version as returned by Local.
 var TestVersion string
 
-// Local returns the local Go version, the one implemented by this go command.
+// Local returns the local Go version, the one implemented by this forgo command.
 func Local() string {
 	v, _ := local()
 	return v
 }
 
-// LocalToolchain returns the local toolchain name, the one implemented by this go command.
+// LocalToolchain returns the local toolchain name, the one implemented by this forgo command.
 func LocalToolchain() string {
 	_, t := local()
 	return t

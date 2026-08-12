@@ -29,7 +29,7 @@ import (
 
 var CmdVet = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "go vet [build flags] [-vettool prog] [vet flags] [packages]",
+	UsageLine:   "forgo vet [build flags] [-vettool prog] [vet flags] [packages]",
 	Short:       "report likely mistakes in packages",
 	Long: `
 Vet runs the Go vet tool (cmd/vet) on the named packages
@@ -51,29 +51,29 @@ The -vettool=prog flag selects a different analysis tool with
 alternative or additional checks. For example, the 'shadow' analyzer
 can be built and run using these commands:
 
-  go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
-  go vet -vettool=$(which shadow)
+  forgo install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
+  forgo vet -vettool=$(which shadow)
 
 Alternative vet tools should be built atop golang.org/x/tools/go/analysis/unitchecker,
-which handles the interaction with go vet.
+which handles the interaction with forgo vet.
 
-The default vet tool is 'go tool vet' or cmd/vet.
-For help on its checkers and their flags, run 'go tool vet help'.
-For details of a specific checker such as 'printf', see 'go tool vet help printf'.
+The default vet tool is 'forgo tool vet' or cmd/vet.
+For help on its checkers and their flags, run 'forgo tool vet help'.
+For details of a specific checker such as 'printf', see 'forgo tool vet help printf'.
 
-For more about specifying packages, see 'go help packages'.
+For more about specifying packages, see 'forgo help packages'.
 
-The build flags supported by go vet are those that control package resolution
+The build flags supported by forgo vet are those that control package resolution
 and execution, such as -C, -n, -x, -v, -tags, and -toolexec.
-For more about these flags, see 'go help build'.
+For more about these flags, see 'forgo help build'.
 
-See also: go fmt, go fix.
+See also: forgo fmt, forgo fix.
 	`,
 }
 
 var CmdFix = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "go fix [build flags] [-fixtool prog] [fix flags] [packages]",
+	UsageLine:   "forgo fix [build flags] [-fixtool prog] [fix flags] [packages]",
 	Short:       "apply fixes suggested by static checkers",
 	Long: `
 Fix runs the Go fix tool (cmd/fix) on the named packages
@@ -86,20 +86,20 @@ It supports these flags:
 	exit with a non-zero status if the diff is not empty
 
 The -fixtool=prog flag selects a different analysis tool with
-alternative or additional fixers; see the documentation for go vet's
+alternative or additional fixers; see the documentation for forgo vet's
 -vettool flag for details.
 
-The default fix tool is 'go tool fix' or cmd/fix.
-For help on its fixers and their flags, run 'go tool fix help'.
-For details of a specific fixer such as 'hostport', see 'go tool fix help hostport'.
+The default fix tool is 'forgo tool fix' or cmd/fix.
+For help on its fixers and their flags, run 'forgo tool fix help'.
+For details of a specific fixer such as 'hostport', see 'forgo tool fix help hostport'.
 
-For more about specifying packages, see 'go help packages'.
+For more about specifying packages, see 'forgo help packages'.
 
-The build flags supported by go fix are those that control package resolution
+The build flags supported by forgo fix are those that control package resolution
 and execution, such as -C, -n, -x, -v, -tags, and -toolexec.
-For more about these flags, see 'go help build'.
+For more about these flags, see 'forgo help build'.
 
-See also: go fmt, go vet.
+See also: forgo fmt, forgo vet.
 	`,
 }
 
@@ -113,15 +113,15 @@ func init() {
 }
 
 var (
-	// "go vet -fix" causes fixes to be applied.
+	// "forgo vet -fix" causes fixes to be applied.
 	vetFixFlag = CmdVet.Flag.Bool("fix", false, "apply the first fix (if any) for each diagnostic")
 
-	// The "go fix -fix=name,..." flag is an obsolete flag formerly
+	// The "forgo fix -fix=name,..." flag is an obsolete flag formerly
 	// used to pass a list of names to the old "cmd/fix -r".
 	fixFixFlag = CmdFix.Flag.String("fix", "", "obsolete; no effect")
 )
 
-// run implements both "go vet" and "go fix".
+// run implements both "forgo vet" and "forgo fix".
 
 func run(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
@@ -165,14 +165,14 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 	//   as described below:
 	//
 	// command args                 tool args
-	// go vet               =>      cmd/vet -json           Parse stdout, print diagnostics to stderr.
-	// go vet -json         =>      cmd/vet -json           Pass stdout through.
-	// go vet -fix [-diff]  =>      cmd/vet -fix [-diff]    Pass stdout through (and exit 1 if diffs).
-	// go fix [-diff]       =>      cmd/fix -fix [-diff]    Pass stdout through (and exit 1 if diffs).
-	// go fix -json         =>      cmd/fix -json           Pass stdout through.
+	// forgo vet               =>      cmd/vet -json           Parse stdout, print diagnostics to stderr.
+	// forgo vet -json         =>      cmd/vet -json           Pass stdout through.
+	// forgo vet -fix [-diff]  =>      cmd/vet -fix [-diff]    Pass stdout through (and exit 1 if diffs).
+	// forgo fix [-diff]       =>      cmd/fix -fix [-diff]    Pass stdout through (and exit 1 if diffs).
+	// forgo fix -json         =>      cmd/fix -json           Pass stdout through.
 	//
 	// Notes:
-	// * -diff requires "go vet -fix" or "go fix", and no -json.
+	// * -diff requires "forgo vet -fix" or "forgo fix", and no -json.
 	// * -json output is the same in "vet" and "fix" modes,
 	//   and describes both diagnostics and fixes (but does not apply them).
 	// * -c=n is supported by the unitchecker, but we reimplement it
@@ -182,7 +182,7 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 
 	applyFixes := false
 	if cmd.Name() == "fix" || *vetFixFlag {
-		// fix mode: 'go fix' or 'go vet -fix'
+		// fix mode: 'forgo fix' or 'forgo vet -fix'
 		if jsonFlag {
 			if diffFlag {
 				base.Fatalf("-json and -diff cannot be used together")
@@ -193,7 +193,7 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 				toolFlags = append(toolFlags, "-diff")
 				// In -diff mode, the tool prints unified diffs to stdout.
 				// Copy stdout through and exit non-zero if diffs were printed,
-				// consistent with gofmt -d and go mod tidy -diff.
+				// consistent with gofmt -d and forgo mod tidy -diff.
 				work.VetHandleStdout = copyAndDetectDiff
 			} else {
 				applyFixes = true
@@ -203,7 +203,7 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 			base.Fatalf("-c flag cannot be used when applying fixes")
 		}
 	} else {
-		// vet mode: 'go vet' without -fix
+		// vet mode: 'forgo vet' without -fix
 		if !jsonFlag {
 			// Post-process the JSON diagnostics on stdout and format
 			// it as "file:line: message" diagnostics on stderr.
@@ -214,17 +214,17 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 			work.VetHandleStdout = printJSONDiagnostics
 		}
 		if diffFlag {
-			base.Fatalf("go vet -diff flag requires -fix")
+			base.Fatalf("forgo vet -diff flag requires -fix")
 		}
 	}
 
-	// Implement legacy "go fix -fix=name,..." flag.
+	// Implement legacy "forgo fix -fix=name,..." flag.
 	if *fixFixFlag != "" {
-		fmt.Fprintf(os.Stderr, "go %s: the -fix=%s flag is obsolete and has no effect", cmd.Name(), *fixFixFlag)
+		fmt.Fprintf(os.Stderr, "forgo %s: the -fix=%s flag is obsolete and has no effect", cmd.Name(), *fixFixFlag)
 
 		// The buildtag fixer is now implemented by cmd/fix.
 		if slices.Contains(strings.Split(*fixFixFlag, ","), "buildtag") {
-			fmt.Fprintf(os.Stderr, "go %s: to enable the buildtag check, use -buildtag", cmd.Name())
+			fmt.Fprintf(os.Stderr, "forgo %s: to enable the buildtag check, use -buildtag", cmd.Name())
 		}
 	}
 
@@ -283,7 +283,7 @@ func run(ctx context.Context, cmd *base.Command, args []string) {
 			continue
 		}
 		if len(ptest.GoFiles) == 0 && len(ptest.CgoFiles) == 0 && pxtest == nil {
-			base.Errorf("go: can't %s %s: no Go files in %s", cmd.Name(), p.ImportPath, p.Dir)
+			base.Errorf("forgo: can't %s %s: no Go files in %s", cmd.Name(), p.ImportPath, p.Dir)
 			continue
 		}
 		if len(ptest.GoFiles) > 0 || len(ptest.CgoFiles) > 0 {
@@ -349,11 +349,11 @@ func readZip(zipfile string, out map[string][]byte) error {
 	return nil
 }
 
-// copyAndDetectDiff copies the tool's stdout to the go command's stdout
+// copyAndDetectDiff copies the tool's stdout to the forgo command's stdout
 // and sets exit status 1 if any output was produced (meaning diffs exist).
-// This is used in -diff mode to implement the convention that "go fix -diff"
+// This is used in -diff mode to implement the convention that "forgo fix -diff"
 // exits non-zero when the diff is not empty, consistent with gofmt -d
-// and go mod tidy -diff.
+// and forgo mod tidy -diff.
 func copyAndDetectDiff(r io.Reader) error {
 	stdouterrMu.Lock()
 	defer stdouterrMu.Unlock()

@@ -169,8 +169,8 @@ func unzip(ctx context.Context, mod module.Version, zipfile string) (dir string,
 	// opened files in the temporary directory.
 	//
 	// Go 1.14.2 and higher respect .partial files. Older versions may use
-	// partially extracted directories. 'go mod verify' can detect this,
-	// and 'go clean -modcache' can fix it.
+	// partially extracted directories. 'forgo mod verify' can detect this,
+	// and 'forgo clean -modcache' can fix it.
 	if err := os.MkdirAll(parentDir, 0o777); err != nil {
 		return "", err
 	}
@@ -227,9 +227,9 @@ func (f *Fetcher) DownloadZip(ctx context.Context, mod module.Version) (zipfile 
 					goos, goarch, _ := strings.Cut(vers[i+1:], "-")
 					vers = vers[:i] + " (" + goos + "/" + goarch + ")"
 				}
-				fmt.Fprintf(os.Stderr, "go: downloading %s\n", vers)
+				fmt.Fprintf(os.Stderr, "forgo: downloading %s\n", vers)
 			} else {
-				fmt.Fprintf(os.Stderr, "go: downloading %s %s\n", mod.Path, vers)
+				fmt.Fprintf(os.Stderr, "forgo: downloading %s %s\n", mod.Path, vers)
 			}
 		}
 		unlock, err := lockVersion(ctx, mod)
@@ -611,7 +611,7 @@ func readGoSum(dst map[module.Version][]string, file string, data []byte) {
 		}
 		if len(f) != 3 {
 			if cfg.CmdName == "mod tidy" {
-				// ignore malformed line so that go mod tidy can fix go.sum
+				// ignore malformed line so that forgo mod tidy can fix go.sum
 				continue
 			} else {
 				base.Fatalf("malformed go.sum:\n%s:%d: wrong number of fields %v\n", file, lineno, len(f))
@@ -951,7 +951,7 @@ Outer:
 		return ErrGoSumDirty
 	}
 	if fsys.Replaced(f.goSumFile) {
-		base.Fatalf("go: updates to go.sum needed, but go.sum is part of the overlay specified with -overlay")
+		base.Fatalf("forgo: updates to go.sum needed, but go.sum is part of the overlay specified with -overlay")
 	}
 
 	// Make a best-effort attempt to acquire the side lock, only to exclude
@@ -1067,7 +1067,7 @@ This download does NOT match an earlier download recorded in go.sum.
 The bits may have been replaced on the origin server, or an attacker may
 have intercepted the download attempt.
 
-For more information, see 'go help module-auth'.
+For more information, see 'forgo help module-auth'.
 `
 
 const sumdbMismatch = `
@@ -1077,7 +1077,7 @@ This download does NOT match the one reported by the checksum server.
 The bits may have been replaced on the origin server, or an attacker may
 have intercepted the download attempt.
 
-For more information, see 'go help module-auth'.
+For more information, see 'forgo help module-auth'.
 `
 
 const sumdbAbsent = `
@@ -1090,7 +1090,7 @@ The checksum server may be malfunctioning, or an attacker may have
 intercepted the checksum request.
 The download cannot be verified.
 
-For more information, see 'go help module-auth'.
+For more information, see 'forgo help module-auth'.
 `
 
 const hashVersionMismatch = `
@@ -1099,7 +1099,7 @@ SECURITY WARNING
 This download is listed in go.sum, but using an unknown hash algorithm.
 The download cannot be verified.
 
-For more information, see 'go help module-auth'.
+For more information, see 'forgo help module-auth'.
 
 `
 
@@ -1107,7 +1107,7 @@ var HelpModuleAuth = &base.Command{
 	UsageLine: "module-auth",
 	Short:     "module authentication using go.sum",
 	Long: `
-When the go command downloads a module zip file or go.mod file into the
+When the forgo command downloads a module zip file or go.mod file into the
 module cache, it computes a cryptographic hash and compares it with a known
 value to verify the file hasn't changed since it was first downloaded. Known
 hashes are stored in a file in the module root directory named go.sum. Hashes
@@ -1122,12 +1122,12 @@ var HelpPrivate = &base.Command{
 	UsageLine: "private",
 	Short:     "configuration for downloading non-public code",
 	Long: `
-The go command defaults to downloading modules from the public Go module
+The forgo command defaults to downloading modules from the public Go module
 mirror at proxy.golang.org. It also defaults to validating downloaded modules,
 regardless of source, against the public Go checksum database at sum.golang.org.
 These defaults work well for publicly available source code.
 
-The GOPRIVATE environment variable controls which modules the go command
+The GOPRIVATE environment variable controls which modules the forgo command
 considers to be private (not available publicly) and should therefore not use
 the proxy or checksum database. The variable is a comma-separated list of
 glob patterns (in the syntax of Go's path.Match) of module path prefixes.
@@ -1135,7 +1135,7 @@ For example,
 
 	GOPRIVATE=*.corp.example.com,rsc.io/private
 
-causes the go command to treat as private any module with a path prefix
+causes the forgo command to treat as private any module with a path prefix
 matching either pattern, including git.corp.example.com/xyzzy, rsc.io/private,
 and rsc.io/private/quux.
 
@@ -1152,12 +1152,12 @@ users would configure go using:
 	GONOPROXY=none
 
 The GOPRIVATE variable is also used to define the "public" and "private"
-patterns for the GOVCS variable; see 'go help vcs'. For that usage,
+patterns for the GOVCS variable; see 'forgo help vcs'. For that usage,
 GOPRIVATE applies even in GOPATH mode. In that case, it matches import paths
 instead of module paths.
 
-The 'go env -w' command (see 'go help env') can be used to set these variables
-for future go command invocations.
+The 'forgo env -w' command (see 'forgo help env') can be used to set these variables
+for future forgo command invocations.
 
 For more details, see https://golang.org/ref/mod#private-modules.
 `,

@@ -124,7 +124,7 @@ func newGitRepo(ctx context.Context, remote string, local bool) (Repo, error) {
 			// Git for Windows by default does not support paths longer than
 			// MAX_PATH (260 characters) because that may interfere with navigation
 			// in some Windows programs. However, cmd/go should be able to handle
-			// long paths just fine, and we expect people to use 'go clean' to
+			// long paths just fine, and we expect people to use 'forgo clean' to
 			// manipulate the module cache, so it should be harmless to set here,
 			// and in some cases may be necessary in order to download modules with
 			// long branch names.
@@ -610,7 +610,7 @@ func (r *gitRepo) stat(ctx context.Context, rev string) (info *RevInfo, err erro
 // fetchRefsLocked requires that r.mu remain locked for the duration of the call.
 func (r *gitRepo) fetchRefsLocked(ctx context.Context) error {
 	if r.local {
-		panic("go: fetchRefsLocked called in local only mode.")
+		panic("forgo: fetchRefsLocked called in local only mode.")
 	}
 	if r.fetchLevel < fetchAll {
 		// NOTE: To work around a bug affecting Git clients up to at least 2.23.0
@@ -883,7 +883,7 @@ func (r *gitRepo) DescendsFrom(ctx context.Context, rev, tag string) (bool, erro
 		// Fetch the complete history for all refs and heads. It would be more
 		// efficient to only fetch the history from rev to tag, but that's much more
 		// complicated, and any kind of shallow fetch is fairly likely to trigger
-		// bugs in JGit servers and/or the go command anyway.
+		// bugs in JGit servers and/or the forgo command anyway.
 		if err := r.fetchRefsLocked(ctx); err != nil {
 			return false, err
 		}

@@ -118,7 +118,7 @@ func get(security SecurityMode, url *urlpkg.URL) (*Response, error) {
 
 	fetch := func(url *urlpkg.URL) (*http.Response, error) {
 		// Note: The -v build flag does not mean "print logging information",
-		// despite its historical misuse for this in GOPATH-based go get.
+		// despite its historical misuse for this in GOPATH-based forgo get.
 		// We print extra logging in -x mode instead, which traces what
 		// commands are executed.
 		if cfg.BuildX {

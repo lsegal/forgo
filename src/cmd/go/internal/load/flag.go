@@ -21,7 +21,7 @@ var (
 
 // A PerPackageFlag is a command-line flag implementation (a flag.Value)
 // that allows specifying different effective flags for different packages.
-// See 'go help build' for more details about per-package flags.
+// See 'forgo help build' for more details about per-package flags.
 type PerPackageFlag struct {
 	raw     string
 	present bool

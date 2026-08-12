@@ -373,7 +373,7 @@ func svnStatus(vcsSvn *Cmd, rootDir string) (Status, error) {
 	}, nil
 }
 
-// fossilRepoName is the name go get associates with a fossil repository. In the
+// fossilRepoName is the name forgo get associates with a fossil repository. In the
 // real world the file can be named anything.
 const fossilRepoName = ".fossil"
 
@@ -513,7 +513,7 @@ func (v *Cmd) run1(dir string, cmdline string, keyval []string, verbose bool) ([
 	_, err := pathcache.LookPath(v.Cmd)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
-			"go: missing %s command. See https://golang.org/s/gogetcmd\n",
+			"forgo: missing %s command. See https://golang.org/s/gogetcmd\n",
 			v.Name)
 		return nil, err
 	}
@@ -790,7 +790,7 @@ func checkGOVCS(vcs *Cmd, root string) error {
 		if private {
 			what = "private"
 		}
-		return fmt.Errorf("GOVCS disallows using %s for %s %s; see 'go help vcs'", vcs.Cmd, what, root)
+		return fmt.Errorf("GOVCS disallows using %s for %s %s; see 'forgo help vcs'", vcs.Cmd, what, root)
 	}
 
 	return nil

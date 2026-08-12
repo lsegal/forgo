@@ -13,17 +13,17 @@ var HelpC = &base.Command{
 There are two different ways to call between Go and C/C++ code.
 
 The first is the cgo tool, which is part of the Go distribution. For
-information on how to use it see the cgo documentation (go doc cmd/cgo).
+information on how to use it see the cgo documentation (forgo doc cmd/cgo).
 
 The second is the SWIG program, which is a general tool for
 interfacing between languages. For information on SWIG see
-https://swig.org/. When running go build, any file with a .swig
+https://swig.org/. When running forgo build, any file with a .swig
 extension will be passed to SWIG. Any file with a .swigcxx extension
 will be passed to SWIG with the -c++ option. A package can't be just
 a .swig or .swigcxx file; there must be at least one .go file, even if
 it has just a package clause.
 
-When either cgo or SWIG is used, go build will pass any .c, .m, .s, .S
+When either cgo or SWIG is used, forgo build will pass any .c, .m, .s, .S
 or .sx files to the C compiler, and any .cc, .cpp, .cxx files to the C++
 compiler. The CC or CXX environment variables may be set to determine
 the C or C++ compiler, respectively, to use.
@@ -36,7 +36,7 @@ var HelpPackages = &base.Command{
 	Long: `
 Many commands apply to a set of packages:
 
-	go <action> [packages]
+	forgo <action> [packages]
 
 Usually, [packages] is a list of import paths.
 
@@ -46,13 +46,13 @@ denotes the package in that directory.
 
 Otherwise, the import path P denotes the package found in
 the directory DIR/src/P for some DIR listed in the GOPATH
-environment variable (For more details see: 'go help gopath').
+environment variable (For more details see: 'forgo help gopath').
 
 If no import paths are given, the action applies to the
 package in the current directory.
 
 There are five reserved names for paths that should not be used
-for packages to be built with the go tool:
+for packages to be built with the forgo tool:
 
 - "main" denotes the top-level package in a stand-alone executable.
 
@@ -96,7 +96,7 @@ and the pattern cmd/... matches it.
 See golang.org/s/go15vendor for more about vendoring.
 
 An import path can also name a package to be downloaded from
-a remote repository. Run 'go help importpath' for details.
+a remote repository. Run 'forgo help importpath' for details.
 
 Every package in a program must have a unique import path.
 By convention, this is arranged by starting each path with a
@@ -114,7 +114,7 @@ The name main indicates a command, not a library.
 Commands are built into binaries and cannot be imported.
 The name documentation indicates documentation for
 a non-Go program in the directory. Files in package documentation
-are ignored by the go command.
+are ignored by the forgo command.
 
 As a special case, if the package list is a list of .go files from a
 single directory, the command is applied to a single synthesized
@@ -122,7 +122,7 @@ package made up of exactly those files, ignoring any build constraints
 in those files and ignoring any other files in the directory.
 
 Directory and file names that begin with "." or "_" are ignored
-by the go tool, as are directories named "testdata".
+by the forgo tool, as are directories named "testdata".
 	`,
 }
 
@@ -131,10 +131,10 @@ var HelpImportPath = &base.Command{
 	Short:     "import path syntax",
 	Long: `
 
-An import path (see 'go help packages') denotes a package stored in the local
+An import path (see 'forgo help packages') denotes a package stored in the local
 file system. In general, an import path denotes either a standard package (such
 as "unicode/utf8") or a package found in one of the work spaces (For more
-details see: 'go help gopath').
+details see: 'forgo help gopath').
 
 Relative import paths
 
@@ -144,10 +144,10 @@ The toolchain supports relative import paths as a shortcut in two ways.
 First, a relative path can be used as a shorthand on the command line.
 If you are working in the directory containing the code imported as
 "unicode" and want to run the tests for "unicode/utf8", you can type
-"go test ./utf8" instead of needing to specify the full path.
-Similarly, in the reverse situation, "go test .." will test "unicode" from
+"forgo test ./utf8" instead of needing to specify the full path.
+Similarly, in the reverse situation, "forgo test .." will test "unicode" from
 the "unicode/utf8" directory. Relative patterns are also allowed, like
-"go test ./..." to test all subdirectories. See 'go help packages' for details
+"forgo test ./..." to test all subdirectories. See 'forgo help packages' for details
 on the pattern syntax.
 
 Second, if you are compiling a Go program not in a work space,
@@ -155,7 +155,7 @@ you can use a relative path in an import statement in that program
 to refer to nearby code also not in a work space.
 This makes it easy to experiment with small multipackage programs
 outside of the usual work spaces, but such programs cannot be
-installed with "go install" (there is no work space in which to install them),
+installed with "forgo install" (there is no work space in which to install them),
 so they are rebuilt from scratch each time they are built.
 To avoid ambiguity, Go programs cannot use relative import paths
 within a work space.
@@ -193,7 +193,7 @@ A few common code hosting sites have special syntax:
 		import "hub.jazz.net/git/user/project/sub/directory"
 
 For code hosted on other servers, import paths may either be qualified
-with the version control type, or the go tool can dynamically fetch
+with the version control type, or the forgo tool can dynamically fetch
 the import path over https/http and discover where the code resides
 from a <meta> tag in the HTML.
 
@@ -230,10 +230,10 @@ download tries https://, then git+ssh://.
 By default, downloads are restricted to known secure protocols
 (e.g. https, ssh). To override this setting for Git downloads, the
 GIT_ALLOW_PROTOCOL environment variable can be set (For more details see:
-'go help environment').
+'forgo help environment').
 
 If the import path is not a known code hosting site and also lacks a
-version control qualifier, the go tool attempts to fetch the import
+version control qualifier, the forgo tool attempts to fetch the import
 over https/http and looks for a <meta> tag in the document's HTML
 <head>.
 
@@ -242,18 +242,18 @@ The meta tag has the form:
 	<meta name="go-import" content="import-prefix vcs repo-root">
 
 Starting in Go 1.25, an optional subdirectory will be recognized by the
-go command:
+forgo command:
 
 	<meta name="go-import" content="import-prefix vcs repo-root subdir">
 
 The import-prefix is the import path corresponding to the repository
 root. It must be a prefix or an exact match of the package being
-fetched with "go get". If it's not an exact match, another http
+fetched with "forgo get". If it's not an exact match, another http
 request is made at the prefix to verify the <meta> tags match.
 
 The meta tag should appear as early in the file as possible.
 In particular, it should appear before any raw JavaScript or CSS,
-to avoid confusing the go command's restricted parser.
+to avoid confusing the forgo command's restricted parser.
 
 The vcs is one of "bzr", "fossil", "git", "hg", "svn".
 
@@ -279,14 +279,14 @@ If that page contains the meta tag
 
 	<meta name="go-import" content="example.org git https://code.org/r/p/exproj">
 
-the go tool will verify that https://example.org/?go-get=1 contains the
+the forgo tool will verify that https://example.org/?go-get=1 contains the
 same meta tag and then download the code from the Git repository at https://code.org/r/p/exproj
 
 If that page contains the meta tag
 
 	<meta name="go-import" content="example.org git https://code.org/r/p/exproj foo/subdir">
 
-the go tool will verify that https://example.org/?go-get=1 contains the same meta
+the forgo tool will verify that https://example.org/?go-get=1 contains the same meta
 tag and then download the code from the "foo/subdir" subdirectory within the Git repository
 at https://code.org/r/p/exproj
 
@@ -316,7 +316,7 @@ followed (before the next newline) by a comment of one of these two forms:
 	package math // import "path"
 	package math /* import "path" */
 
-The go command will refuse to install a package with an import comment
+The forgo command will refuse to install a package with an import comment
 unless it is being referred to by that import path. In this way, import comments
 let package authors make sure the custom import path is used and not a
 direct path to the underlying code hosting site.
@@ -348,7 +348,7 @@ If the environment variable is unset, GOPATH defaults
 to a subdirectory named "go" in the user's home directory
 ($HOME/go on Unix, %USERPROFILE%\go on Windows),
 unless that directory holds a Go distribution.
-Run "go env GOPATH" to see the current GOPATH.
+Run "forgo env GOPATH" to see the current GOPATH.
 
 See https://golang.org/wiki/SettingGOPATH to set a custom GOPATH.
 
@@ -477,13 +477,13 @@ of "crash/bang" resolves to "foo/vendor/crash/bang", not the
 top-level "crash/bang".
 
 Code in vendor directories is not subject to import path
-checking (see 'go help importpath').
+checking (see 'forgo help importpath').
 
-When 'go get' checks out or updates a git repository, it now also
+When 'forgo get' checks out or updates a git repository, it now also
 updates submodules.
 
 Vendor directories do not affect the placement of new repositories
-being checked out for the first time by 'go get': those are always
+being checked out for the first time by 'forgo get': those are always
 placed in the main GOPATH, never in a vendor subtree.
 
 See https://golang.org/s/go15vendor for details.
@@ -495,24 +495,24 @@ var HelpEnvironment = &base.Command{
 	Short:     "environment variables",
 	Long: `
 
-The go command and the tools it invokes consult environment variables
+The forgo command and the tools it invokes consult environment variables
 for configuration. If an environment variable is unset or empty, the go
 command uses a sensible default setting. To see the effective setting of
-the variable <NAME>, run 'go env <NAME>'. To change the default setting,
-run 'go env -w <NAME>=<VALUE>'. Defaults changed using 'go env -w'
+the variable <NAME>, run 'forgo env <NAME>'. To change the default setting,
+run 'forgo env -w <NAME>=<VALUE>'. Defaults changed using 'forgo env -w'
 are recorded in a Go environment configuration file stored in the
 per-user configuration directory, as reported by os.UserConfigDir.
 The location of the configuration file can be changed by setting
-the environment variable GOENV, and 'go env GOENV' prints the
-effective location, but 'go env -w' cannot change the default location.
-See 'go help env' for details.
+the environment variable GOENV, and 'forgo env GOENV' prints the
+effective location, but 'forgo env -w' cannot change the default location.
+See 'forgo help env' for details.
 
 General-purpose environment variables:
 
 	GCCGO
-		The gccgo command to run for 'go build -compiler=gccgo'.
+		The gccgo command to run for 'forgo build -compiler=gccgo'.
 	GO111MODULE
-		Controls whether the go command runs in module-aware mode or GOPATH mode.
+		Controls whether the forgo command runs in module-aware mode or GOPATH mode.
 		May be "off", "on", or "auto".
 		See https://golang.org/ref/mod#mod-commands.
 	GOARCH
@@ -520,28 +520,28 @@ General-purpose environment variables:
 		Examples are amd64, 386, arm, ppc64.
 	GOAUTH
 		Controls authentication for go-import and HTTPS module mirror interactions.
-		See 'go help goauth'.
+		See 'forgo help goauth'.
 	GOBIN
-		The directory where 'go install' will install a command.
+		The directory where 'forgo install' will install a command.
 	GOCACHE
-		The directory where the go command will store cached
+		The directory where the forgo command will store cached
 		information for reuse in future builds. Must be an absolute path.
 	GOCACHEPROG
 		A command (with optional space-separated flags) that implements an
-		external go command build cache.
-		See 'go doc cmd/go/internal/cacheprog'.
+		external forgo command build cache.
+		See 'forgo doc cmd/go/internal/cacheprog'.
 	GODEBUG
 		Enable various debugging facilities for programs built with Go,
-		including the go command. Cannot be set using 'go env -w'.
+		including the forgo command. Cannot be set using 'forgo env -w'.
 		See https://go.dev/doc/godebug for details.
 	GOENV
 		The location of the Go environment configuration file.
-		Cannot be set using 'go env -w'.
+		Cannot be set using 'forgo env -w'.
 		Setting GOENV=off in the environment disables the use of the
 		default configuration file.
 	GOFLAGS
 		A space-separated list of -flag=value settings to apply
-		to go commands by default, when the given flag is known by
+		to forgo commands by default, when the given flag is known by
 		the current command. Each entry must be a standalone flag.
 		Because the entries are space-separated, flag values must
 		not contain spaces. Flags listed on the command line
@@ -553,12 +553,12 @@ General-purpose environment variables:
 		GOINSECURE does not disable checksum database validation. GOPRIVATE or
 		GONOSUMDB may be used to achieve that.
 	GOMODCACHE
-		The directory where the go command will store downloaded modules.
+		The directory where the forgo command will store downloaded modules.
 	GOOS
 		The operating system for which to compile code.
 		Examples are linux, darwin, windows, netbsd.
 	GOPATH
-		Controls where various files are stored. See: 'go help gopath'.
+		Controls where various files are stored. See: 'forgo help gopath'.
 	GOPRIVATE, GONOPROXY, GONOSUMDB
 		Comma-separated list of glob patterns (in the syntax of Go's path.Match)
 		of module path prefixes that should always be fetched directly
@@ -573,18 +573,18 @@ General-purpose environment variables:
 		The name of checksum database to use and optionally its public key and
 		URL. See https://golang.org/ref/mod#authenticating.
 	GOTMPDIR
-		Temporary directory used by the go command and testing package.
+		Temporary directory used by the forgo command and testing package.
 		Overrides the platform-specific temporary directory such as "/tmp".
-		The go command and testing package will write temporary source files,
+		The forgo command and testing package will write temporary source files,
 		packages, and binaries here.
 	GOTOOLCHAIN
 		Controls which Go toolchain is used. See https://go.dev/doc/toolchain.
 	GOVCS
 		Lists version control commands that may be used with matching servers.
-		See 'go help vcs'.
+		See 'forgo help vcs'.
 	GOWORK
 		In module aware mode, use the given go.work file as a workspace file.
-		By default or when GOWORK is "auto", the go command searches for a
+		By default or when GOWORK is "auto", the forgo command searches for a
 		file named go.work in the current directory and then containing directories
 		until one is found. If a valid go.work file is found, the modules
 		specified will collectively be used as the main modules. If GOWORK
@@ -679,7 +679,7 @@ Environment variables for use with code coverage:
 
 	GOCOVERDIR
 		Directory into which to write code coverage data files
-		generated by running a "go build -cover" binary.
+		generated by running a "forgo build -cover" binary.
 
 Special-purpose environment variables:
 
@@ -705,11 +705,11 @@ Special-purpose environment variables:
 	GIT_ALLOW_PROTOCOL
 		Defined by Git. A colon-separated list of schemes that are allowed
 		to be used with git fetch/clone. If set, any scheme not explicitly
-		mentioned will be considered insecure by 'go get'.
+		mentioned will be considered insecure by 'forgo get'.
 		Because the variable is defined by Git, the default value cannot
-		be set using 'go env -w'.
+		be set using 'forgo env -w'.
 
-Additional information available from 'go env' but not read from the environment:
+Additional information available from 'forgo env' but not read from the environment:
 
 	GOEXE
 		The executable file name suffix (".exe" on Windows, "" on other systems).
@@ -726,7 +726,7 @@ Additional information available from 'go env' but not read from the environment
 		If module-aware mode is disabled, GOMOD will be the empty string.
 	GOTELEMETRY
 		The current Go telemetry mode ("off", "local", or "on").
-		See "go help telemetry" for more information.
+		See "forgo help telemetry" for more information.
 	GOTELEMETRYDIR
 		The directory Go telemetry data is written is written to.
 	GOTOOLDIR
@@ -740,7 +740,7 @@ var HelpFileType = &base.Command{
 	UsageLine: "filetype",
 	Short:     "file types",
 	Long: `
-The go command examines the contents of a restricted set of files
+The forgo command examines the contents of a restricted set of files
 in each directory. It identifies which files to examine based on
 the extension of the file name. These extensions are:
 
@@ -768,7 +768,7 @@ the extension of the file name. These extensions are:
 		System object files.
 
 Files of each of these types except .syso may contain build
-constraints, but the go command stops scanning for build constraints
+constraints, but the forgo command stops scanning for build constraints
 at the first item in the file that is not a blank line or //-style
 line comment. See the go/build package documentation for
 more details.
@@ -779,7 +779,7 @@ var HelpBuildmode = &base.Command{
 	UsageLine: "buildmode",
 	Short:     "build modes",
 	Long: `
-The 'go build' and 'go install' commands take a -buildmode argument which
+The 'forgo build' and 'forgo install' commands take a -buildmode argument which
 indicates which kind of object file is to be built. Currently supported values
 are:
 
@@ -834,15 +834,15 @@ var HelpCache = &base.Command{
 	UsageLine: "cache",
 	Short:     "build and test caching",
 	Long: `
-The go command caches build outputs for reuse in future builds.
+The forgo command caches build outputs for reuse in future builds.
 The default location for cache data is a subdirectory named go-build
 in the standard user cache directory for the current operating system.
-The cache is safe for concurrent invocations of the go command.
+The cache is safe for concurrent invocations of the forgo command.
 Setting the GOCACHE environment variable overrides this default,
-and running 'go env GOCACHE' prints the current cache directory.
+and running 'forgo env GOCACHE' prints the current cache directory.
 
-The go command periodically deletes cached data that has not been
-used recently. Running 'go clean -cache' deletes all cached data.
+The forgo command periodically deletes cached data that has not been
+used recently. Running 'forgo clean -cache' deletes all cached data.
 
 The build cache correctly accounts for changes to Go source files,
 compilers, compiler options, and so on: cleaning the cache explicitly
@@ -850,32 +850,32 @@ should not be necessary in typical use. However, the build cache
 does not detect changes to C libraries imported with cgo.
 If you have made changes to the C libraries on your system, you
 will need to clean the cache explicitly or else use the -a build flag
-(see 'go help build') to force rebuilding of packages that
+(see 'forgo help build') to force rebuilding of packages that
 depend on the updated C libraries.
 
-The go command also caches successful package test results.
-See 'go help test' for details. Running 'go clean -testcache' removes
+The forgo command also caches successful package test results.
+See 'forgo help test' for details. Running 'forgo clean -testcache' removes
 all cached test results (but not cached build results).
 
-The go command also caches values used in fuzzing with 'go test -fuzz',
+The forgo command also caches values used in fuzzing with 'forgo test -fuzz',
 specifically, values that expanded code coverage when passed to a
 fuzz function. These values are not used for regular building and
 testing, but they're stored in a subdirectory of the build cache.
-Running 'go clean -fuzzcache' removes all cached fuzzing values.
+Running 'forgo clean -fuzzcache' removes all cached fuzzing values.
 This may make fuzzing less effective, temporarily.
 
 The GODEBUG environment variable can enable printing of debugging
 information about the state of the cache:
 
-GODEBUG=gocacheverify=1 causes the go command to bypass the
+GODEBUG=gocacheverify=1 causes the forgo command to bypass the
 use of any cache entries and instead rebuild everything and check
 that the results match existing cache entries.
 
-GODEBUG=gocachehash=1 causes the go command to print the inputs
+GODEBUG=gocachehash=1 causes the forgo command to print the inputs
 for all of the content hashes it uses to construct cache lookup keys.
 The output is voluminous but can be useful for debugging the cache.
 
-GODEBUG=gocachetest=1 causes the go command to print details of its
+GODEBUG=gocachetest=1 causes the forgo command to print details of its
 decisions about whether to reuse a cached test result.
 `,
 }
@@ -924,10 +924,10 @@ During a particular build, the following build tags are satisfied:
 	- "unix", if GOOS is a Unix or Unix-like system.
 	- the compiler being used, either "gc" or "gccgo"
 	- "cgo", if the cgo command is supported (see CGO_ENABLED in
-	  'go help environment').
+	  'forgo help environment').
 	- a term for each Go major release, through the current version:
 	  "go1.1" from Go version 1.1 onward, "go1.12" from Go 1.12, and so on.
-	- any additional tags given by the -tags flag (see 'go help build').
+	- any additional tags given by the -tags flag (see 'forgo help build').
 
 There are no separate build tags for beta or minor releases.
 
@@ -1040,7 +1040,7 @@ netrc
 	Uses credentials from NETRC or the .netrc file in your home directory.
 git dir
 	Runs 'git credential fill' in dir and uses its credentials. The
-	go command will run 'git credential approve/reject' to update
+	forgo command will run 'git credential approve/reject' to update
 	the credential helper's cache.
 command
 	Executes the given command (a space-separated argument list) and attaches
@@ -1062,7 +1062,7 @@ command
 
 		Example: Data
 
-	If the server responds with any 4xx code, the go command will write the
+	If the server responds with any 4xx code, the forgo command will write the
 	following to the program's stdin:
 		Response      = StatusLine { HeaderLine } BlankLine .
 		StatusLine    = Protocol Space Status '\n' .
@@ -1080,9 +1080,9 @@ command
 
 	Note: it is safe to use net/http.ReadResponse to parse this input.
 
-Before the first HTTPS fetch, the go command will invoke each GOAUTH
+Before the first HTTPS fetch, the forgo command will invoke each GOAUTH
 command in the list with no additional arguments and no input.
-If the server responds with any 4xx code, the go command will invoke the
+If the server responds with any 4xx code, the forgo command will invoke the
 GOAUTH commands again with the URL as an additional command-line argument
 and the HTTP Response to the program's stdin.
 If the server responds with an error again, the fetch fails: a URL-specific
@@ -1094,7 +1094,7 @@ var HelpBuildJSON = &base.Command{
 	UsageLine: "buildjson",
 	Short:     "build -json encoding",
 	Long: `
-The 'go build', 'go install', and 'go test' commands take a -json flag that
+The 'forgo build', 'forgo install', and 'forgo test' commands take a -json flag that
 reports build output and failures as structured JSON output on standard
 output.
 
@@ -1108,8 +1108,8 @@ corresponding to the Go struct:
 	}
 
 The ImportPath field gives the package ID of the package being built.
-This matches the Package.ImportPath field of go list -json and the
-TestEvent.FailedBuild field of go test -json. Note that it does not
+This matches the Package.ImportPath field of forgo list -json and the
+TestEvent.FailedBuild field of forgo test -json. Note that it does not
 match TestEvent.Package.
 
 The Action field is one of the following:
@@ -1122,13 +1122,13 @@ the build's output. The concatenation of the Output fields of all output
 events is the exact output of the build. A single event may contain one
 or more lines of output and there may be more than one output event for
 a given ImportPath. This matches the definition of the TestEvent.Output
-field produced by go test -json.
+field produced by forgo test -json.
 
-For go test -json, this struct is designed so that parsers can distinguish
+For forgo test -json, this struct is designed so that parsers can distinguish
 interleaved TestEvents and BuildEvents by inspecting the Action field.
 Furthermore, as with TestEvent, parsers can simply concatenate the Output
 fields of all events to reconstruct the text format output, as it would
-have appeared from go build without the -json flag.
+have appeared from forgo build without the -json flag.
 
 Note that there may also be non-JSON error text on standard error, even
 with the -json flag. Typically, this indicates an early, serious error.

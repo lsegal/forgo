@@ -26,8 +26,8 @@ var initDefaultCacheOnce = sync.OnceValue(initDefaultCache)
 // Because the cache lives outside the normal Go trees, we leave the
 // README as a courtesy to explain where it came from.
 const cacheREADME = `This directory holds cached build artifacts from the Go build system.
-Run "go clean -cache" if the directory is getting too large.
-Run "go clean -fuzzcache" to delete the fuzz cache.
+Run "forgo clean -cache" if the directory is getting too large.
+Run "forgo clean -fuzzcache" to delete the fuzz cache.
 See go.dev to learn more about Go.
 `
 

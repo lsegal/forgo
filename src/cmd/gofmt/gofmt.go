@@ -74,7 +74,7 @@ var (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: gofmt [flags] [path ...]\n")
+	fmt.Fprintf(os.Stderr, "usage: forgofmt [flags] [path ...]\n")
 	flag.PrintDefaults()
 }
 
@@ -91,7 +91,10 @@ func initParserMode() {
 }
 
 func isGoFilename(name string) bool {
-	return !strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".go")
+	if strings.HasPrefix(name, ".") {
+		return false
+	}
+	return strings.HasSuffix(name, ".go") || strings.HasSuffix(name, ".fgo")
 }
 
 // A sequencer performs concurrent tasks that may write output, but emits that
@@ -485,7 +488,7 @@ func writeFile(filename string, orig, formatted []byte, perm fs.FileMode, size i
 	defer fout.Close() // for error paths
 
 	restoreFail := func(err error) {
-		fmt.Fprintf(os.Stderr, "gofmt: %s: error restoring file to original: %v; backup in %s\n", filename, err, bakname)
+		fmt.Fprintf(os.Stderr, "forgofmt: %s: error restoring file to original: %v; backup in %s\n", filename, err, bakname)
 	}
 
 	n, err := fout.Write(formatted)

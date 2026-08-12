@@ -13,7 +13,7 @@ const (
 	NarrowAllVersion = "1.16"
 
 	// DefaultGoModVersion is the Go version to assume for go.mod files
-	// that do not declare a Go version. The go command has been
+	// that do not declare a Go version. The forgo command has been
 	// writing go versions to modules since Go 1.12, so a go.mod
 	// without a version is either very old or recently hand-written.
 	// Since we can't tell which, we have to assume it's very old.
@@ -42,8 +42,8 @@ const (
 	SeparateIndirectVersion = "1.17"
 
 	// tidyGoModSumVersion is the Go version at which
-	// 'go mod tidy' preserves go.mod checksums needed to build test dependencies
-	// of packages in "all", so that 'go test all' can be run without checksum
+	// 'forgo mod tidy' preserves go.mod checksums needed to build test dependencies
+	// of packages in "all", so that 'forgo test all' can be run without checksum
 	// errors.
 	// See https://go.dev/issue/56222.
 	TidyGoModSumVersion = "1.21"

@@ -11,7 +11,7 @@ import (
 )
 
 // ShortTestFlags returns the set of "-test." flag shorthand names that end
-// users may pass to 'go test'.
+// users may pass to 'forgo test'.
 func ShortTestFlags() []string {
 	testing.Init()
 

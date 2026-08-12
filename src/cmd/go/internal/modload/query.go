@@ -1083,7 +1083,7 @@ func (e *PackageNotInModuleError) ImportPath() string {
 //
 // versionHasGoMod fetches the go.mod file (possibly a fake) and true if it
 // contains anything other than a module directive with the same path. When a
-// module does not have a real go.mod file, the go command acts as if it had one
+// module does not have a real go.mod file, the forgo command acts as if it had one
 // that only contained a module directive. Normal go.mod files created after
 // 1.12 at least have a go directive.
 //
@@ -1096,7 +1096,7 @@ func (e *PackageNotInModuleError) ImportPath() string {
 // this lets us fetch from the .mod endpoint which is much faster than the .zip
 // endpoint. The .mod file is used anyway, even if the .zip file contains a
 // go.mod with different content. Second, if we don't fetch the .zip, then
-// we don't need to verify it in go.sum. This makes 'go list -m -u' faster
+// we don't need to verify it in go.sum. This makes 'forgo list -m -u' faster
 // and simpler.
 func versionHasGoMod(loaderstate *State, _ context.Context, m module.Version) (bool, error) {
 	_, data, err := rawGoModData(loaderstate, m)

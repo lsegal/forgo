@@ -80,7 +80,7 @@ func (e *ImportMissingError) Error() string {
 			if !module.IsZeroPseudoVersion(e.replaced.Version) {
 				suggestArg = e.replaced.String()
 			}
-			return fmt.Sprintf("module %s provides package %s and is replaced but not required; to add it:\n\tgo get %s", e.replaced.Path, e.Path, suggestArg)
+			return fmt.Sprintf("module %s provides package %s and is replaced but not required; to add it:\n	forgo get %s", e.replaced.Path, e.Path, suggestArg)
 		}
 
 		message := fmt.Sprintf("no required module provides package %s", e.Path)
@@ -88,9 +88,9 @@ func (e *ImportMissingError) Error() string {
 			return fmt.Sprintf("%s: %v", message, e.QueryErr)
 		}
 		if e.ImportingMainModule.Path != "" && e.ImportingMainModule != e.modContainingCWD {
-			return fmt.Sprintf("%s; to add it:\n\tcd %s\n\tgo get %s", message, e.modRoot, e.Path)
+			return fmt.Sprintf("%s; to add it:\n\tcd %s\n	forgo get %s", message, e.modRoot, e.Path)
 		}
-		return fmt.Sprintf("%s; to add it:\n\tgo get %s", message, e.Path)
+		return fmt.Sprintf("%s; to add it:\n	forgo get %s", message, e.Path)
 	}
 
 	if e.newMissingVersion != "" {
@@ -157,7 +157,7 @@ type DirectImportFromImplicitDependencyError struct {
 }
 
 func (e *DirectImportFromImplicitDependencyError) Error() string {
-	return fmt.Sprintf("package %s imports %s from implicitly required module; to add missing requirements, run:\n\tgo get %s@%s", e.ImporterPath, e.ImportedPath, e.Module.Path, e.Module.Version)
+	return fmt.Sprintf("package %s imports %s from implicitly required module; to add missing requirements, run:\n	forgo get %s@%s", e.ImporterPath, e.ImportedPath, e.Module.Path, e.Module.Version)
 }
 
 func (e *DirectImportFromImplicitDependencyError) ImportPath() string {
@@ -169,7 +169,7 @@ func (e *DirectImportFromImplicitDependencyError) ImportPath() string {
 // We might need sums for multiple modules to verify the package is unique.
 //
 // TODO(#43653): consolidate multiple errors of this type into a single error
-// that suggests a 'go get' command for root packages that transitively import
+// that suggests a 'forgo get' command for root packages that transitively import
 // packages from modules with missing sums. load.CheckPackageErrors would be
 // a good place to consolidate errors, but we'll need to attach the import
 // stack here.
@@ -195,17 +195,17 @@ func (e *ImportMissingSumError) Error() string {
 	var hint string
 	if e.importer == "" {
 		// Importing package is unknown, or the missing package was named on the
-		// command line. Recommend 'go mod download' for the modules that could
+		// command line. Recommend 'forgo mod download' for the modules that could
 		// provide the package, since that shouldn't change go.mod.
 		if len(e.mods) > 0 {
 			args := make([]string, len(e.mods))
 			for i, mod := range e.mods {
 				args[i] = mod.Path
 			}
-			hint = fmt.Sprintf("; to add:\n\tgo mod download %s", strings.Join(args, " "))
+			hint = fmt.Sprintf("; to add:\n	forgo mod download %s", strings.Join(args, " "))
 		}
 	} else {
-		// Importing package is known (common case). Recommend 'go get' on the
+		// Importing package is known (common case). Recommend 'forgo get' on the
 		// current version of the importing package.
 		tFlag := ""
 		if e.importerIsTest {
@@ -215,7 +215,7 @@ func (e *ImportMissingSumError) Error() string {
 		if e.importerVersion != "" {
 			version = "@" + e.importerVersion
 		}
-		hint = fmt.Sprintf("; to add:\n\tgo get%s %s%s", tFlag, e.importer, version)
+		hint = fmt.Sprintf("; to add:\n	forgo get%s %s%s", tFlag, e.importer, version)
 	}
 	return message + hint
 }
@@ -263,7 +263,7 @@ func (e *invalidImportError) Unwrap() error {
 // lexically could have provided the package but did not.
 //
 // If skipModFile is true, the go.mod file for the package is not loaded. This
-// allows 'go mod tidy' to preserve a minor checksum-preservation bug
+// allows 'forgo mod tidy' to preserve a minor checksum-preservation bug
 // (https://go.dev/issue/56222) for modules with 'go' versions between 1.17 and
 // 1.20, preventing unnecessary go.sum churn and network access in those
 // modules.
@@ -282,10 +282,10 @@ func importFromModules(loaderstate *State, ctx context.Context, path string, rs 
 		return invalidf("%q is relative, but relative import paths are not supported in module mode", path)
 	}
 	if filepath.IsAbs(path) {
-		return invalidf("%q is not a package path; see 'go help packages'", path)
+		return invalidf("%q is not a package path; see 'forgo help packages'", path)
 	}
 	if search.IsMetaPackage(path) {
-		return invalidf("%q is not an importable package; see 'go help packages'", path)
+		return invalidf("%q is not an importable package; see 'forgo help packages'", path)
 	}
 
 	if path == "C" {
@@ -359,7 +359,7 @@ func importFromModules(loaderstate *State, ctx context.Context, path string, rs 
 					if loaderstate.inWorkspaceMode() {
 						subCommand = "work"
 					}
-					fmt.Fprintf(os.Stderr, "go: ignoring package %s which exists in the vendor directory but is missing from vendor/modules.txt. To sync the vendor directory run go %s vendor.\n", path, subCommand)
+					fmt.Fprintf(os.Stderr, "forgo: ignoring package %s which exists in the vendor directory but is missing from vendor/modules.txt. To sync the vendor directory run go %s vendor.\n", path, subCommand)
 				}
 			}
 		}
@@ -635,7 +635,7 @@ func queryImport(loaderstate *State, ctx context.Context, path string, rs *Requi
 	// Look up module containing the package, for addition to the build list.
 	// Goal is to determine the module, download it to dir,
 	// and return m, dir, ImportMissingError.
-	fmt.Fprintf(os.Stderr, "go: finding module for package %s\n", path)
+	fmt.Fprintf(os.Stderr, "forgo: finding module for package %s\n", path)
 
 	mg, err := rs.Graph(loaderstate, ctx)
 	if err != nil {

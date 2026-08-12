@@ -423,14 +423,14 @@ func (sh *Shell) ShowCmd(dir string, format string, args ...any) {
 // shorter. This is usually more pleasant. For example, if fmt doesn't compile
 // and we are in src/html, the output is
 //
-//	$ go build
+//	$ forgo build
 //	# fmt
 //	../fmt/print.go:1090: undefined: asdf
 //	$
 //
 // instead of
 //
-//	$ go build
+//	$ forgo build
 //	# fmt
 //	/usr/gopher/go/src/fmt/print.go:1090: undefined: asdf
 //	$
@@ -652,8 +652,8 @@ func (sh *Shell) runOut(dir string, env []string, cmdargs ...any) ([]byte, error
 	// Add the TOOLEXEC_IMPORTPATH environment variable for -toolexec tools.
 	// It doesn't really matter if -toolexec isn't being used.
 	// Note that a.Package.Desc is not really an import path,
-	// but this is consistent with 'go list -f {{.ImportPath}}'.
-	// Plus, it is useful to uniquely identify packages in 'go list -json'.
+	// but this is consistent with 'forgo list -f {{.ImportPath}}'.
+	// Plus, it is useful to uniquely identify packages in 'forgo list -json'.
 	if a != nil && a.Package != nil {
 		cmd.Env = append(cmd.Env, "TOOLEXEC_IMPORTPATH="+a.Package.Desc())
 	}

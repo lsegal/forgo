@@ -88,7 +88,7 @@ type Repo interface {
 }
 
 // An Origin describes the provenance of a given repo method result.
-// It can be passed to CheckReuse (usually in a different go command invocation)
+// It can be passed to CheckReuse (usually in a different forgo command invocation)
 // to see whether the result remains up-to-date.
 type Origin struct {
 	VCS    string `json:",omitempty"` // "git" etc

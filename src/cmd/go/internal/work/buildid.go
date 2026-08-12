@@ -124,7 +124,7 @@ func contentID(buildID string) string {
 // invoked via a wrapper program specified by -toolexec and we don't know
 // what the wrapper program does. In particular, we want "-toolexec toolstash"
 // to continue working: it does no good if "-toolexec toolstash" is executing a
-// stashed copy of the compiler but the go command is acting as if it will run
+// stashed copy of the compiler but the forgo command is acting as if it will run
 // the standard copy of the compiler. The solution is to ask the tool binary to tell
 // us its own build ID using the "-V=full" flag now supported by all tools.
 // Then we know we're getting the build ID of the compiler that will actually run
@@ -146,7 +146,7 @@ func contentID(buildID string) string {
 func (b *Builder) toolID(name string) string {
 	return b.toolIDCache.Do(name, func() string {
 		path := base.Tool(name)
-		desc := "go tool " + name
+		desc := "forgo tool " + name
 
 		// Special case: -{vet,fix}tool overrides usual cmd/{vet,fix}
 		// for testing or supplying an alternative analysis tool.
@@ -165,13 +165,13 @@ func (b *Builder) toolID(name string) string {
 			if stderr.Len() > 0 {
 				os.Stderr.WriteString(stderr.String())
 			}
-			base.Fatalf("go: error obtaining buildID for %s: %v", desc, err)
+			base.Fatalf("forgo: error obtaining buildID for %s: %v", desc, err)
 		}
 
 		line := stdout.String()
 		f := strings.Fields(line)
 		if len(f) < 3 || f[0] != name && path != VetTool || f[1] != "version" || strings.Contains(f[2], "devel") && !strings.HasPrefix(f[len(f)-1], "buildID=") {
-			base.Fatalf("go: parsing buildID from %s -V=full: unexpected output:\n\t%s", desc, line)
+			base.Fatalf("forgo: parsing buildID from %s -V=full: unexpected output:\n\t%s", desc, line)
 		}
 		if strings.Contains(f[2], "devel") {
 			// On the development branch, use the content ID part of the build ID.
@@ -539,7 +539,7 @@ func (b *Builder) useCache(a *Action, actionHash cache.ActionID, target string, 
 	// TODO(matloob): If we end up caching all executables, the test executable will
 	// already be cached so building it won't do any work. But for now we won't
 	// cache all executables and instead only want to cache some:
-	// we only cache executables produced for 'go run' (and soon, for 'go tool').
+	// we only cache executables produced for 'forgo run' (and soon, for 'forgo tool').
 	//
 	// Special case for linking a test binary: if the only thing we
 	// want the binary for is to run the test, and the test result is cached,

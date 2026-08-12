@@ -37,7 +37,7 @@ import (
 // Generally, the module versions in mustSelect are due to the module or a
 // package within the module matching an explicit command line argument to 'go
 // get', and the versions in tryUpgrade are transitive dependencies that are
-// either being upgraded by 'go get -u' or being added to satisfy some
+// either being upgraded by 'forgo get -u' or being added to satisfy some
 // otherwise-missing package import.
 //
 // If pruning is enabled, the roots of the edited requirements include an
@@ -74,7 +74,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 			// that it must be a version supported by the requested toolchain, and
 			// that toolchain does not support pruning.
 			//
-			// TODO(bcmills): 'go get' ought to reject explicit toolchain versions
+			// TODO(bcmills): 'forgo get' ought to reject explicit toolchain versions
 			// older than gover.GoStrictVersion. Once that is fixed, is this still
 			// needed?
 			rootPruning = unpruned
@@ -119,7 +119,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 			continue
 		}
 		if cfg.BuildV {
-			fmt.Fprintf(os.Stderr, "go: trying upgrade to %v\n", r)
+			fmt.Fprintf(os.Stderr, "forgo: trying upgrade to %v\n", r)
 		}
 		selectedRoot[r.Path] = r.Version
 	}
@@ -150,7 +150,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 	// versions of the roots. Now we need to load the actual module graph and
 	// restore the invariant that every root is the selected version of its path.
 	//
-	// For 'go mod tidy' we would do that using expandGraph, which upgrades the
+	// For 'forgo mod tidy' we would do that using expandGraph, which upgrades the
 	// roots until their requirements are internally consistent and then drops out
 	// the old roots. However, here we need to do more: we also need to make sure
 	// the modules in mustSelect don't get upgraded above their intended versions.
@@ -180,7 +180,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 	//
 	// We make a best effort to fix incompatibilities, subject to two properties:
 	//
-	// 	1. If the user runs 'go get' with a set of mutually-compatible module
+	// 	1. If the user runs 'forgo get' with a set of mutually-compatible module
 	// 	versions, we should accept those versions.
 	//
 	// 	2. If we end up upgrading or downgrading a module, it should be
@@ -335,7 +335,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 				var last module.Version = path[len(path)-1]
 				mustV, ok := mustSelectVersion[last.Path]
 				if !ok {
-					fmt.Fprintf(os.Stderr, "go: %v\n", conflict)
+					fmt.Fprintf(os.Stderr, "forgo: %v\n", conflict)
 					panic("internal error: found a version conflict, but no constraint it violates")
 				}
 				conflict.Constraint = module.Version{
@@ -350,7 +350,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 				//
 				// In theory we could try removing module paths that don't appear in
 				// mustSelect (added by tryUpgrade or already present in rs) in order to
-				// get graph pruning to take effect, but (a) it is likely that 'go mod
+				// get graph pruning to take effect, but (a) it is likely that 'forgo mod
 				// tidy' would re-add those roots and reintroduce unwanted upgrades,
 				// causing confusion, and (b) deciding which roots to try to eliminate
 				// would add a lot of complexity.
@@ -378,7 +378,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 				u := module.Version{Path: m.Path, Version: v}
 				uPruning, ok := t.extendedRootPruning[m]
 				if !ok {
-					fmt.Fprintf(os.Stderr, "go: %v\n", conflict)
+					fmt.Fprintf(os.Stderr, "forgo: %v\n", conflict)
 					panic(fmt.Sprintf("internal error: selected version of root %v is %v, but it was not expanded as a new root", m, u))
 				}
 				if !t.check(u, uPruning).isDisqualified() && !rejectedRoot[u] {
@@ -405,7 +405,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 				// that doesn't have that problem. However, we only want to downgrade
 				// away from an *existing* requirement if we can confirm that it actually
 				// conflicts with mustSelect. (For example, we don't want
-				// 'go get -u ./...' to incidentally downgrade some dependency whose
+				// 'forgo get -u ./...' to incidentally downgrade some dependency whose
 				// go.mod file is unavailable or has a bad checksum.)
 				conflicts = append(conflicts, conflict)
 				continue
@@ -456,7 +456,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 				} else {
 					action = fmt.Sprintf("trying %s", prev)
 				}
-				fmt.Fprintf(os.Stderr, "go: %s\n\t%s\n", conflict.Summary(), action)
+				fmt.Fprintf(os.Stderr, "forgo: %s\n\t%s\n", conflict.Summary(), action)
 			}
 		}
 		if rootsDirty {
@@ -498,7 +498,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 			if cfg.BuildV {
 				gover.ModSort(upgradedFrom) // Make logging deterministic.
 				for _, m := range upgradedFrom {
-					fmt.Fprintf(os.Stderr, "go: accepting indirect upgrade from %v to %s\n", m, selectedRoot[m.Path])
+					fmt.Fprintf(os.Stderr, "forgo: accepting indirect upgrade from %v to %s\n", m, selectedRoot[m.Path])
 				}
 			}
 			continue
@@ -553,7 +553,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 	// direct import before the edit continues to do so after. There are a few
 	// edge cases where that can change, such as if a package moves into or out of
 	// a nested module or disappears entirely. If that happens, the user can run
-	// 'go mod tidy' to clean up the direct/indirect annotations.)
+	// 'forgo mod tidy' to clean up the direct/indirect annotations.)
 	//
 	// TODO(bcmills): Would it make more sense to leave the direct map as-is
 	// but allow it to refer to modules that are no longer in the build list?
@@ -585,7 +585,7 @@ func editRequirements(loaderstate *State, ctx context.Context, rs *Requirements,
 			// preserves the exact (edited) build list that we already computed.
 			//
 			// However, it does that by shoving the whole build list into the roots of
-			// the graph. 'go get' will check for that sort of transition and log a
+			// the graph. 'forgo get' will check for that sort of transition and log a
 			// message reminding the user how to clean up this mess we're about to
 			// make. 😅
 			edited, err = convertPruning(loaderstate, ctx, edited, pruned)

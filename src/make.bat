@@ -114,9 +114,18 @@ if x%1==x--dist-tool (
 :: Throw ours, built with the bootstrap toolchain, away after bootstrap.
 .\cmd\dist\dist.exe bootstrap -a %* || exit /b 1
 del .\cmd\dist\dist.exe
+
+:: forgo: cmd/dist and cmd/go are kept 100% stock (see README.md's "Least
+:: invasive by design") so the bootstrap above still produces bin\go.exe.
+:: Rename it to bin\forgo.exe here, in the wrapper script, instead of
+:: patching cmd/go's self-references to its own binary name -- that would
+:: fight every future upstream merge. No bin\go.exe is left behind.
+if exist "%GOROOT%\bin\go.exe" move /Y "%GOROOT%\bin\go.exe" "%GOROOT%\bin\forgo.exe" >NUL
+if exist "%GOROOT%\bin\gofmt.exe" move /Y "%GOROOT%\bin\gofmt.exe" "%GOROOT%\bin\forgofmt.exe" >NUL
+
 goto :eof
 
-:: DO NOT ADD ANY NEW CODE HERE.
+:: DO NOT ADD ANY NEW CODE HERE (except the forgo rename above).
 :: The bootstrap+del above are the final step of make.bat.
 :: If something must be added, add it to cmd/dist's cmdbootstrap,
 :: to avoid needing three copies in three different shell languages

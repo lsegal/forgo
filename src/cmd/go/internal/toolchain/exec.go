@@ -17,7 +17,7 @@ import (
 )
 
 // execGoToolchain execs the Go toolchain with the given name (gotoolchain),
-// GOROOT directory, and go command executable.
+// GOROOT directory, and forgo command executable.
 // The GOROOT directory is empty if we are invoking a command named
 // gotoolchain found in $PATH.
 func execGoToolchain(gotoolchain, dir, exe string) {
@@ -29,9 +29,9 @@ func execGoToolchain(gotoolchain, dir, exe string) {
 	}
 	if toolchainTrace {
 		if dir == "" {
-			fmt.Fprintf(os.Stderr, "go: using %s toolchain located in system PATH (%s)\n", gotoolchain, exe)
+			fmt.Fprintf(os.Stderr, "forgo: using %s toolchain located in system PATH (%s)\n", gotoolchain, exe)
 		} else {
-			fmt.Fprintf(os.Stderr, "go: using %s toolchain from cache located at %s\n", gotoolchain, exe)
+			fmt.Fprintf(os.Stderr, "forgo: using %s toolchain from cache located at %s\n", gotoolchain, exe)
 		}
 	}
 

@@ -33,14 +33,14 @@ import (
 
 var CmdGenerate = &base.Command{
 	Run:       runGenerate,
-	UsageLine: "go generate [-run regexp] [-n] [-v] [-x] [build flags] [file.go... | packages]",
+	UsageLine: "forgo generate [-run regexp] [-n] [-v] [-x] [build flags] [file.go... | packages]",
 	Short:     "generate Go files by processing source",
 	Long: `
 Generate runs commands described by directives within existing
 files. Those commands can run any process but the intent is to
 create or update Go source files.
 
-Go generate is never run automatically by go build, go test,
+Go generate is never run automatically by forgo build, forgo test,
 and so on. It must be run explicitly.
 
 Go generate scans the file for directives, which are lines of
@@ -54,7 +54,7 @@ that can be run locally. It must either be in the shell path
 (gofmt), a fully qualified path (/usr/you/bin/mytool), or a
 command alias, described below.
 
-Note that go generate does not parse the file, so lines that look
+Note that forgo generate does not parse the file, so lines that look
 like directives in comments or multiline strings will be treated
 as directives.
 
@@ -95,7 +95,7 @@ Go generate sets several variables when it runs the generator:
 		The $PATH of the parent process, with $GOROOT/bin
 		placed at the beginning. This causes generators
 		that execute 'go' commands to use the same 'go'
-		as the parent 'go generate' command.
+		as the parent 'forgo generate' command.
 
 Other than variable substitution and quoted-string evaluation, no
 special processing such as "globbing" is performed on the command
@@ -118,24 +118,24 @@ string xxx represents the command identified by the arguments. This
 can be used to create aliases or to handle multiword generators.
 For example,
 
-	//go:generate -command foo go tool foo
+	//go:generate -command foo forgo tool foo
 
 specifies that the command "foo" represents the generator
-"go tool foo".
+"forgo tool foo".
 
 Generate processes packages in the order given on the command line,
 one at a time. If the command line lists .go files from a single directory,
 they are treated as a single package. Within a package, generate processes the
 source files in a package in file name order, one at a time. Within
 a source file, generate runs generators in the order they appear
-in the file, one at a time. The go generate tool also sets the build
-tag "generate" so that files may be examined by go generate but ignored
+in the file, one at a time. The forgo generate tool also sets the build
+tag "generate" so that files may be examined by forgo generate but ignored
 during build.
 
 For packages with invalid code, generate processes only source files with a
 valid package clause.
 
-If any generator returns an error exit status, "go generate" skips
+If any generator returns an error exit status, "forgo generate" skips
 all further processing for that package.
 
 The generator is run in the package's source directory.
@@ -161,9 +161,9 @@ processed.
 The -n flag prints commands that would be executed.
 The -x flag prints commands as they are executed.
 
-For more about build flags, see 'go help build'.
+For more about build flags, see 'forgo help build'.
 
-For more about specifying packages, see 'go help packages'.
+For more about specifying packages, see 'forgo help packages'.
 	`,
 }
 
@@ -208,7 +208,7 @@ func runGenerate(ctx context.Context, cmd *base.Command, args []string) {
 	for _, pkg := range load.PackagesAndErrors(moduleLoaderState, ctx, pkgOpts, args) {
 		if moduleLoaderState.Enabled() && pkg.Module != nil && !pkg.Module.Main {
 			if !printed {
-				fmt.Fprintf(os.Stderr, "go: not generating in packages in dependency modules\n")
+				fmt.Fprintf(os.Stderr, "forgo: not generating in packages in dependency modules\n")
 				printed = true
 			}
 			continue
@@ -487,8 +487,8 @@ func (g *Generator) setShorthand(words []string) {
 func (g *Generator) exec(words []string) {
 	path := words[0]
 	if path != "" && !strings.Contains(path, string(os.PathSeparator)) {
-		// If a generator says '//go:generate go run <blah>' it almost certainly
-		// intends to use the same 'go' as 'go generate' itself.
+		// If a generator says '//go:generate forgo run <blah>' it almost certainly
+		// intends to use the same 'go' as 'forgo generate' itself.
 		// Prefer to resolve the binary from GOROOT/bin, and for consistency
 		// prefer to resolve any other commands there too.
 		gorootBinPath, err := pathcache.LookPath(filepath.Join(cfg.GOROOTbin, path))

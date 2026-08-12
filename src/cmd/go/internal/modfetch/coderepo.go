@@ -297,8 +297,8 @@ func (r *codeRepo) appendIncompatibleVersions(ctx context.Context, origin *codeh
 			// versions for this major version.
 			//
 			// If we're wrong about a minor version in the middle, users will still be
-			// able to 'go get' specific tags for that version explicitly — they just
-			// won't appear in 'go list' or as the results for queries with inequality
+			// able to 'forgo get' specific tags for that version explicitly — they just
+			// won't appear in 'forgo list' or as the results for queries with inequality
 			// bounds.
 			continue
 		}

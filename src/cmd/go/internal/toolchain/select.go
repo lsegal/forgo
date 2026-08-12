@@ -53,7 +53,7 @@ const (
 
 	// countEnv is a special environment variable
 	// that is incremented during each toolchain switch, to detect loops.
-	// It is cleared before invoking programs in 'go run', 'go test', 'go generate', and 'go tool'
+	// It is cleared before invoking programs in 'forgo run', 'forgo test', 'forgo generate', and 'forgo tool'
 	// by invoking them in an environment filtered with FilterEnv,
 	// so user programs should not see this in their environment.
 	countEnv = "GOTOOLCHAIN_INTERNAL_SWITCH_COUNT"
@@ -61,7 +61,7 @@ const (
 	// maxSwitch is the maximum toolchain switching depth.
 	// Most uses should never see more than three.
 	// (Perhaps one for the initial GOTOOLCHAIN dispatch,
-	// a second for go get doing an upgrade, and a third if
+	// a second for forgo get doing an upgrade, and a third if
 	// for some reason the chosen upgrade version is too small
 	// by a little.)
 	// When the count reaches maxSwitch - 10, we start logging
@@ -97,20 +97,20 @@ var (
 // See https://go.dev/doc/toolchain#select.
 func Select() {
 	moduleLoaderState := modload.NewState()
-	log.SetPrefix("go: ")
+	log.SetPrefix("forgo: ")
 	defer log.SetPrefix("")
 
 	if !moduleLoaderState.WillBeEnabled() {
 		return
 	}
 
-	// As a special case, let "go env GOTOOLCHAIN" and "go env -w GOTOOLCHAIN=..."
+	// As a special case, let "forgo env GOTOOLCHAIN" and "forgo env -w GOTOOLCHAIN=..."
 	// be handled by the local toolchain, since an older toolchain may not understand it.
-	// This provides an easy way out of "go env -w GOTOOLCHAIN=go1.19" and makes
-	// sure that "go env GOTOOLCHAIN" always prints the local go command's interpretation of it.
+	// This provides an easy way out of "forgo env -w GOTOOLCHAIN=go1.19" and makes
+	// sure that "forgo env GOTOOLCHAIN" always prints the local forgo command's interpretation of it.
 	// We look for these specific command lines in order to avoid mishandling
 	//
-	//	GOTOOLCHAIN=go1.999 go env -newflag GOTOOLCHAIN
+	//	GOTOOLCHAIN=go1.999 forgo env -newflag GOTOOLCHAIN
 	//
 	// where -newflag is a flag known to Go 1.999 but not known to us.
 	if (len(os.Args) == 3 && os.Args[1] == "env" && os.Args[2] == "GOTOOLCHAIN") ||
@@ -118,7 +118,7 @@ func Select() {
 		return
 	}
 
-	// As a special case, let "go env GOMOD" and "go env GOWORK" be handled by
+	// As a special case, let "forgo env GOMOD" and "forgo env GOWORK" be handled by
 	// the local toolchain. Users expect to be able to look up GOMOD and GOWORK
 	// since the go.mod and go.work file need to be determined to determine
 	// the minimum toolchain. See issue #61455.
@@ -134,7 +134,7 @@ func Select() {
 		// so this should not happen, unless a packager
 		// has deleted the GOTOOLCHAIN line from go.env.
 		// It can also happen if GOROOT is missing or broken,
-		// in which case best to let the go command keep running
+		// in which case best to let the forgo command keep running
 		// and diagnose the problem.
 		return
 	}
@@ -166,7 +166,7 @@ func Select() {
 		}
 		mode = suffix
 		if toolchainTrace {
-			fmt.Fprintf(&toolchainTraceBuffer, "go: default toolchain set to %s from GOTOOLCHAIN=%s\n", minToolchain, gotoolchain)
+			fmt.Fprintf(&toolchainTraceBuffer, "forgo: default toolchain set to %s from GOTOOLCHAIN=%s\n", minToolchain, gotoolchain)
 		}
 	}
 
@@ -187,7 +187,7 @@ func Select() {
 			// will provoke an error about the toolchain being too old.
 			// That's what people who use toolchain default want:
 			// only ever use the toolchain configured by the user
-			// (including its environment and go env -w file).
+			// (including its environment and forgo env -w file).
 			gover.Startup.AutoToolchain = toolchain
 		} else {
 			if toolchain != "" {
@@ -205,7 +205,7 @@ func Select() {
 						if strings.Contains(cfg.Getenv("GOTOOLCHAIN"), "+") { // go1.2.3+auto
 							modeFormat = fmt.Sprintf("<name>+%s", mode)
 						}
-						fmt.Fprintf(&toolchainTraceBuffer, "go: upgrading toolchain to %s (required by toolchain line in %s; upgrade allowed by GOTOOLCHAIN=%s)\n", toolchain, base.ShortPath(file), modeFormat)
+						fmt.Fprintf(&toolchainTraceBuffer, "forgo: upgrading toolchain to %s (required by toolchain line in %s; upgrade allowed by GOTOOLCHAIN=%s)\n", toolchain, base.ShortPath(file), modeFormat)
 					}
 					gotoolchain = toolchain
 					minVers = toolVers
@@ -229,7 +229,7 @@ func Select() {
 					if strings.Contains(cfg.Getenv("GOTOOLCHAIN"), "+") { // go1.2.3+auto
 						modeFormat = fmt.Sprintf("<name>+%s", mode)
 					}
-					fmt.Fprintf(&toolchainTraceBuffer, "go: upgrading toolchain to %s (required by go line in %s; upgrade allowed by GOTOOLCHAIN=%s)\n", gotoolchain, base.ShortPath(file), modeFormat)
+					fmt.Fprintf(&toolchainTraceBuffer, "forgo: upgrading toolchain to %s (required by go line in %s; upgrade allowed by GOTOOLCHAIN=%s)\n", gotoolchain, base.ShortPath(file), modeFormat)
 				}
 			}
 		}
@@ -251,7 +251,7 @@ func Select() {
 		// the child has made the same version determination as the parent.
 		// This turns out not always to be the case. Specifically, if we are
 		// running Go 1.21 with GOTOOLCHAIN=go1.22+auto, which invokes
-		// Go 1.22, then 'go get go@1.23.0' or 'go get needs_go_1_23'
+		// Go 1.22, then 'forgo get go@1.23.0' or 'forgo get needs_go_1_23'
 		// will invoke Go 1.23, but as the Go 1.23 child the reason for that
 		// will not be apparent here: it will look like we should be using Go 1.22.
 		// We rely on the targetEnv being set to know not to downgrade.
@@ -271,7 +271,7 @@ func Select() {
 	if gotoolchain == "local" || gotoolchain == gover.LocalToolchain() {
 		// Let the current binary handle the command.
 		if toolchainTrace {
-			fmt.Fprintf(os.Stderr, "go: using local toolchain %s\n", gover.LocalToolchain())
+			fmt.Fprintf(os.Stderr, "forgo: using local toolchain %s\n", gover.LocalToolchain())
 		}
 		return
 	}
@@ -304,13 +304,13 @@ var TestVersionSwitch string
 // as a source of Go toolchains. Otherwise Exec tries the PATH but then downloads
 // a toolchain if necessary.
 func Exec(s *modload.State, gotoolchain string) {
-	log.SetPrefix("go: ")
+	log.SetPrefix("forgo: ")
 
 	writeBits = sysWriteBits()
 
 	count, _ := strconv.Atoi(os.Getenv(countEnv))
 	if count >= maxSwitch-10 {
-		fmt.Fprintf(os.Stderr, "go: switching from go%v to %v [depth %d]\n", gover.Local(), gotoolchain, count)
+		fmt.Fprintf(os.Stderr, "forgo: switching from go%v to %v [depth %d]\n", gover.Local(), gotoolchain, count)
 	}
 	if count >= maxSwitch {
 		base.Fatalf("too many toolchain switches")
@@ -343,7 +343,7 @@ func Exec(s *modload.State, gotoolchain string) {
 
 	// Look in PATH for the toolchain before we download one.
 	// This allows custom toolchains as well as reuse of toolchains
-	// already installed using go install golang.org/dl/go1.2.3@latest.
+	// already installed using forgo install golang.org/dl/go1.2.3@latest.
 	if exe, err := pathcache.LookPath(gotoolchain); err == nil {
 		execGoToolchain(gotoolchain, "", exe)
 	}
@@ -412,12 +412,12 @@ func Exec(s *modload.State, gotoolchain string) {
 			}
 
 			// Set the bits in pkg/tool before bin/go.
-			// If we are racing with another go command and do bin/go first,
-			// then the check of bin/go above might succeed, the other go command
-			// would skip its own mode-setting, and then the go command might
+			// If we are racing with another forgo command and do bin/go first,
+			// then the check of bin/go above might succeed, the other forgo command
+			// would skip its own mode-setting, and then the forgo command might
 			// try to run a tool before we get to setting the bits on pkg/tool.
 			// Setting pkg/tool and lib before bin/go avoids that ordering problem.
-			// The only other tool the go command invokes is gofmt,
+			// The only other tool the forgo command invokes is gofmt,
 			// so we set that one explicitly before handling bin (which will include bin/go).
 			allowExec(filepath.Join(dir, "pkg/tool"), "")
 			allowExec(filepath.Join(dir, "lib"), "go_?*_?*_exec")
@@ -434,7 +434,7 @@ func Exec(s *modload.State, gotoolchain string) {
 				return err
 			}
 			if path == srcUGoMod {
-				// Leave for last, in case we are racing with another go command.
+				// Leave for last, in case we are racing with another forgo command.
 				return nil
 			}
 			if pdir, name := filepath.Split(path); name == "_go.mod" {
@@ -454,7 +454,7 @@ func Exec(s *modload.State, gotoolchain string) {
 		}
 	}
 
-	// Reinvoke the go command.
+	// Reinvoke the forgo command.
 	execGoToolchain(gotoolchain, dir, filepath.Join(dir, "bin/go"))
 }
 
@@ -501,11 +501,11 @@ func raceSafeCopy(old, new string) error {
 		return err
 	}
 	defer os.Chmod(dir, info.Mode())
-	// Note: create the file writable, so that a racing go command
+	// Note: create the file writable, so that a racing forgo command
 	// doesn't get an error before we store the actual data.
 	f, err := os.OpenFile(new, os.O_CREATE|os.O_WRONLY, writeBits&^0o111)
 	if err != nil {
-		// If OpenFile failed because a racing go command completed our work
+		// If OpenFile failed because a racing forgo command completed our work
 		// (and then OpenFile failed because the directory or file is now read-only),
 		// count that as a success.
 		if size(old) == size(new) {
@@ -527,7 +527,7 @@ func raceSafeCopy(old, new string) error {
 func modGoToolchain(loaderstate *modload.State) (file, goVers, toolchain string) {
 	wd := base.UncachedCwd()
 	file = loaderstate.FindGoWork(wd)
-	// $GOWORK can be set to a file that does not yet exist, if we are running 'go work init'.
+	// $GOWORK can be set to a file that does not yet exist, if we are running 'forgo work init'.
 	// Do not try to load the file in that case
 	if _, err := os.Stat(file); err != nil {
 		file = ""
@@ -546,7 +546,7 @@ func modGoToolchain(loaderstate *modload.State) (file, goVers, toolchain string)
 	return file, gover.GoModLookup(data, "go"), gover.GoModLookup(data, "toolchain")
 }
 
-// maybeSwitchForGoInstallVersion reports whether the command line is go install m@v or go run m@v.
+// maybeSwitchForGoInstallVersion reports whether the command line is forgo install m@v or forgo run m@v.
 // If so, switch to the go version required to build m@v if it's higher than minVers.
 func maybeSwitchForGoInstallVersion(loaderstate *modload.State, minVers string) {
 	// Note: We assume there are no flags between 'go' and 'install' or 'run'.
@@ -639,7 +639,7 @@ func maybeSwitchForGoInstallVersion(loaderstate *modload.State, minVers string) 
 				return
 			}
 
-			// We would like to let 'go install -newflag pkg@version' work even
+			// We would like to let 'forgo install -newflag pkg@version' work even
 			// across a toolchain switch. To make that work, assume by default that
 			// the pkg@version is the last argument and skip the remaining args unless
 			// we spot a plausible "-modcacherw" flag.
@@ -669,7 +669,7 @@ func maybeSwitchForGoInstallVersion(loaderstate *modload.State, minVers string) 
 	}
 	path, version, _, err := modload.ParsePathVersion(pkgArg)
 	if err != nil {
-		base.Fatalf("go: %v", err)
+		base.Fatalf("forgo: %v", err)
 	}
 	if path == "" || version == "" || gover.IsToolchain(path) {
 		return
@@ -681,14 +681,14 @@ func maybeSwitchForGoInstallVersion(loaderstate *modload.State, minVers string) 
 		base.SetFromGOFLAGS(fs)
 	}
 
-	// It would be correct to do nothing here, and let "go run" or "go install"
+	// It would be correct to do nothing here, and let "forgo run" or "forgo install"
 	// do the toolchain switch.
 	// Our goal instead is, since we have gone to the trouble of handling
 	// unknown flags to some degree, to run the switch now, so that
 	// these commands can switch to a newer toolchain directed by the
 	// go.mod which may actually understand the flag.
 	// This was brought up during the go.dev/issue/57001 proposal discussion
-	// and may end up being common in self-contained "go install" or "go run"
+	// and may end up being common in self-contained "forgo install" or "forgo run"
 	// command lines if we add new flags in the future.
 
 	// Set up modules without an explicit go.mod, to download go.mod.
@@ -707,7 +707,7 @@ func maybeSwitchForGoInstallVersion(loaderstate *modload.State, minVers string) 
 	noneSelected := func(path string) (version string) { return "none" }
 	_, err = modload.QueryPackages(loaderstate, ctx, path, version, noneSelected, allowed)
 	if errors.Is(err, gover.ErrTooNew) {
-		// Run early switch, same one go install or go run would eventually do,
+		// Run early switch, same one forgo install or forgo run would eventually do,
 		// if it understood all the command-line flags.
 		s := NewSwitcher(loaderstate)
 		s.Error(err)

@@ -5,7 +5,7 @@
 // Package modget implements the module-aware “go get” command.
 package modget
 
-// The arguments to 'go get' are patterns with optional version queries, with
+// The arguments to 'forgo get' are patterns with optional version queries, with
 // the version queries defaulting to "upgrade".
 //
 // The patterns are normally interpreted as package patterns. However, if a
@@ -54,7 +54,7 @@ import (
 var CmdGet = &base.Command{
 	// Note: flags below are listed explicitly because they're the most common.
 	// Do not send CLs removing them because they're covered by [get flags].
-	UsageLine: "go get [-t] [-u] [-tool] [build flags] [packages]",
+	UsageLine: "forgo get [-t] [-u] [-tool] [build flags] [packages]",
 	Short:     "add dependencies to current module and install them",
 	Long: `
 Get resolves its command-line arguments to packages at specific module versions,
@@ -63,38 +63,38 @@ module cache.
 
 To add a dependency for a package or upgrade it to its latest version:
 
-	go get example.com/pkg
+	forgo get example.com/pkg
 
 To upgrade or downgrade a package to a specific version:
 
-	go get example.com/pkg@v1.2.3
+	forgo get example.com/pkg@v1.2.3
 
 To remove a dependency on a module and downgrade modules that require it:
 
-	go get example.com/mod@none
+	forgo get example.com/mod@none
 
 To upgrade the minimum required Go version to the latest released Go version:
 
-	go get go@latest
+	forgo get go@latest
 
 To upgrade the Go toolchain to the latest patch release of the current Go toolchain:
 
-	go get toolchain@patch
+	forgo get toolchain@patch
 
 See https://golang.org/ref/mod#go-get for details.
 
-In earlier versions of Go, 'go get' was used to build and install packages.
-Now, 'go get' is dedicated to adjusting dependencies in go.mod. 'go install'
+In earlier versions of Go, 'forgo get' was used to build and install packages.
+Now, 'forgo get' is dedicated to adjusting dependencies in go.mod. 'forgo install'
 may be used to build and install commands instead. When a version is specified,
-'go install' runs in module-aware mode and ignores the go.mod file in the
+'forgo install' runs in module-aware mode and ignores the go.mod file in the
 current directory. For example:
 
-	go install example.com/pkg@v1.2.3
-	go install example.com/pkg@latest
+	forgo install example.com/pkg@v1.2.3
+	forgo install example.com/pkg@latest
 
-See 'go help install' or https://golang.org/ref/mod#go-install for details.
+See 'forgo help install' or https://golang.org/ref/mod#go-install for details.
 
-'go get' accepts the following flags.
+'forgo get' accepts the following flags.
 
 The -t flag instructs get to consider modules needed to build tests of
 packages specified on the command line.
@@ -116,16 +116,16 @@ The -x flag prints commands as they are executed. This is useful for
 debugging version control commands when a module is downloaded directly
 from a repository.
 
-For more about build flags, see 'go help build'.
+For more about build flags, see 'forgo help build'.
 
 For more about modules, see https://golang.org/ref/mod.
 
-For more about using 'go get' to update the minimum Go version and
+For more about using 'forgo get' to update the minimum Go version and
 suggested Go toolchain, see https://go.dev/doc/toolchain.
 
-For more about specifying packages, see 'go help packages'.
+For more about specifying packages, see 'forgo help packages'.
 
-See also: go build, go install, go clean, go mod.
+See also: forgo build, forgo install, forgo clean, forgo mod.
 	`,
 }
 
@@ -133,17 +133,17 @@ var HelpVCS = &base.Command{
 	UsageLine: "vcs",
 	Short:     "controlling version control with GOVCS",
 	Long: `
-The 'go get' command can run version control commands like git
+The 'forgo get' command can run version control commands like git
 to download imported code. This functionality is critical to the decentralized
 Go package ecosystem, in which code can be imported from any server,
 but it is also a potential security problem, if a malicious server finds a
 way to cause the invoked version control command to run unintended code.
 
-To balance the functionality and security concerns, the 'go get' command
+To balance the functionality and security concerns, the 'forgo get' command
 by default will only use git and hg to download code from public servers.
 But it will use any known version control system (bzr, fossil, git, hg, svn)
 to download code from private servers, defined as those hosting packages
-matching the GOPRIVATE variable (see 'go help private'). The rationale behind
+matching the GOPRIVATE variable (see 'forgo help private'). The rationale behind
 allowing only Git and Mercurial is that these two systems have had the most
 attention to issues of being run as clients of untrusted servers. In contrast,
 Bazaar, Fossil, and Subversion have primarily been used in trusted,
@@ -151,8 +151,8 @@ authenticated environments and are not as well scrutinized as attack surfaces.
 
 The version control command restrictions only apply when using direct version
 control access to download code. When downloading modules from a proxy,
-'go get' uses the proxy protocol instead, which is always permitted.
-By default, the 'go get' command uses the Go module mirror (proxy.golang.org)
+'forgo get' uses the proxy protocol instead, which is always permitted.
+By default, the 'forgo get' command uses the Go module mirror (proxy.golang.org)
 for public packages and only falls back to version control for private
 packages or when the mirror refuses to serve a public package (typically for
 legal reasons). Therefore, clients can still access public code served from
@@ -174,7 +174,7 @@ is a pipe-separated list of allowed version control commands, or "all"
 to allow use of any known command, or "off" to disallow all commands.
 Note that if a module matches a pattern with vcslist "off", it may still be
 downloaded if the origin server uses the "mod" scheme, which instructs the
-go command to download the module using the GOPROXY protocol.
+forgo command to download the module using the GOPROXY protocol.
 The earliest matching pattern in the list applies, even if later patterns
 might also match.
 
@@ -192,7 +192,7 @@ module or import paths. A path is private if it matches the GOPRIVATE
 variable; otherwise it is public.
 
 If no rules in the GOVCS variable match a particular module or import path,
-the 'go get' command applies its default rule, which can now be summarized
+the 'forgo get' command applies its default rule, which can now be summarized
 in GOVCS notation as 'public:git|hg,private:all'.
 
 To allow unfettered use of any version control system for any package, use:
@@ -203,8 +203,8 @@ To disable all use of version control, use:
 
 	GOVCS=*:off
 
-The 'go env -w' command (see 'go help env') can be used to set the GOVCS
-variable for future go command invocations.
+The 'forgo env -w' command (see 'forgo help env') can be used to set the GOVCS
+variable for future forgo command invocations.
 `,
 }
 
@@ -278,25 +278,25 @@ func runGet(ctx context.Context, cmd *base.Command, args []string) {
 	case "", "upgrade", "patch":
 		// ok
 	default:
-		base.Fatalf("go: unknown upgrade flag -u=%s", getU.rawVersion)
+		base.Fatalf("forgo: unknown upgrade flag -u=%s", getU.rawVersion)
 	}
 	if getD.set {
 		if !getD.value {
-			base.Fatalf("go: -d flag may not be set to false")
+			base.Fatalf("forgo: -d flag may not be set to false")
 		}
-		fmt.Fprintf(os.Stderr, "go: -d flag is deprecated. -d=true is a no-op\n")
+		fmt.Fprintf(os.Stderr, "forgo: -d flag is deprecated. -d=true is a no-op\n")
 	}
 	if *getF {
-		fmt.Fprintf(os.Stderr, "go: -f flag is a no-op\n")
+		fmt.Fprintf(os.Stderr, "forgo: -f flag is a no-op\n")
 	}
 	if *getFix {
-		fmt.Fprintf(os.Stderr, "go: -fix flag is a no-op\n")
+		fmt.Fprintf(os.Stderr, "forgo: -fix flag is a no-op\n")
 	}
 	if *getM {
-		base.Fatalf("go: -m flag is no longer supported")
+		base.Fatalf("forgo: -m flag is no longer supported")
 	}
 	if *getInsecure {
-		base.Fatalf("go: -insecure flag is no longer supported; use GOINSECURE instead")
+		base.Fatalf("forgo: -insecure flag is no longer supported; use GOINSECURE instead")
 	}
 
 	moduleLoaderState.ForceUseModules = true
@@ -307,21 +307,21 @@ func runGet(ctx context.Context, cmd *base.Command, args []string) {
 	modload.ExplicitWriteGoMod = true
 
 	// Allow looking up modules for import paths when outside of a module.
-	// 'go get' is expected to do this, unlike other commands.
+	// 'forgo get' is expected to do this, unlike other commands.
 	moduleLoaderState.AllowMissingModuleImports()
 
-	// 'go get' no longer builds or installs packages, so there's nothing to do
+	// 'forgo get' no longer builds or installs packages, so there's nothing to do
 	// if there's no go.mod file.
 	// TODO(#40775): make modload.Init return ErrNoModRoot instead of exiting.
 	// We could handle that here by printing a different message.
 	modload.Init(moduleLoaderState)
 	if !moduleLoaderState.HasModRoot() {
-		base.Fatalf("go: go.mod file not found in current directory or any parent directory.\n" +
-			"\t'go get' is no longer supported outside a module.\n" +
-			"\tTo build and install a command, use 'go install' with a version,\n" +
-			"\tlike 'go install example.com/cmd@latest'\n" +
+		base.Fatalf("forgo: go.mod file not found in current directory or any parent directory.\n" +
+			"\t'forgo get' is no longer supported outside a module.\n" +
+			"\tTo build and install a command, use 'forgo install' with a version,\n" +
+			"\tlike 'forgo install example.com/cmd@latest'\n" +
 			"\tFor more information, see https://golang.org/doc/go-get-install-deprecation\n" +
-			"\tor run 'go help get' or 'go help install'.")
+			"\tor run 'forgo help get' or 'forgo help install'.")
 	}
 
 	dropToolchain, queries := parseArgs(moduleLoaderState, ctx, args)
@@ -345,7 +345,7 @@ func runGet(ctx context.Context, cmd *base.Command, args []string) {
 		r.performPatternAllQueries(moduleLoaderState, ctx)
 
 		if changed := r.resolveQueries(moduleLoaderState, ctx, queries); changed {
-			// 'go get' arguments can be (and often are) package patterns rather than
+			// 'forgo get' arguments can be (and often are) package patterns rather than
 			// (just) modules. A package can be provided by any module with a prefix
 			// of its import path, and a wildcard can even match packages in modules
 			// with totally different paths. Because of these effects, and because any
@@ -355,7 +355,7 @@ func runGet(ctx context.Context, cmd *base.Command, args []string) {
 			//
 			// The result of any version query for a given module — even "upgrade" or
 			// "patch" — is always relative to the build list at the start of
-			// the 'go get' command, not an intermediate state, and is therefore
+			// the 'forgo get' command, not an intermediate state, and is therefore
 			// deterministic and therefore cacheable, and the constraints on the
 			// selected version of each module can only narrow as we iterate.
 			//
@@ -414,7 +414,7 @@ func runGet(ctx context.Context, cmd *base.Command, args []string) {
 	oldReqs := reqsFromGoMod(modload.ModFile(moduleLoaderState))
 
 	if err := modload.WriteGoMod(moduleLoaderState, ctx, opts); err != nil {
-		// A TooNewError can happen for 'go get go@newversion'
+		// A TooNewError can happen for 'forgo get go@newversion'
 		// when all the required modules are old enough
 		// but the command line is not.
 		// TODO(bcmills): modload.EditBuildList should catch this instead,
@@ -444,7 +444,7 @@ func updateTools(loaderstate *modload.State, ctx context.Context, queries []*que
 	patterns := []string{}
 	for _, q := range queries {
 		if search.IsMetaPackage(q.pattern) || q.pattern == "toolchain" {
-			base.Fatalf("go: go get -tool does not work with \"%s\".", q.pattern)
+			base.Fatalf("forgo: forgo get -tool does not work with \"%s\".", q.pattern)
 		}
 		patterns = append(patterns, q.pattern)
 	}
@@ -476,7 +476,7 @@ func parseArgs(loaderstate *modload.State, ctx context.Context, rawArgs []string
 		if q.version == "none" {
 			switch q.pattern {
 			case "go":
-				base.Errorf("go: cannot use go@none")
+				base.Errorf("forgo: cannot use go@none")
 				continue
 			case "toolchain":
 				dropToolchain = true
@@ -490,16 +490,16 @@ func parseArgs(loaderstate *modload.State, ctx context.Context, rawArgs []string
 			q.raw = ""
 		}
 
-		// Guard against 'go get x.go', a common mistake.
+		// Guard against 'forgo get x.go', a common mistake.
 		// Note that package and module paths may end with '.go', so only print an error
 		// if the argument has no version and either has no slash or refers to an existing file.
 		if strings.HasSuffix(q.raw, ".go") && q.rawVersion == "" {
 			if !strings.Contains(q.raw, "/") {
-				base.Errorf("go: %s: arguments must be package or module paths", q.raw)
+				base.Errorf("forgo: %s: arguments must be package or module paths", q.raw)
 				continue
 			}
 			if fi, err := os.Stat(q.raw); err == nil && !fi.IsDir() {
-				base.Errorf("go: %s exists as a file, but 'go get' requires package arguments", q.raw)
+				base.Errorf("forgo: %s exists as a file, but 'forgo get' requires package arguments", q.raw)
 				continue
 			}
 		}
@@ -531,7 +531,7 @@ type resolver struct {
 	buildList        []module.Version
 	buildListVersion map[string]string // index of buildList (module path → version)
 
-	initialVersion map[string]string // index of the initial build list at the start of 'go get'
+	initialVersion map[string]string // index of the initial build list at the start of 'forgo get'
 
 	missing []pathSet // candidates for missing transitive dependencies
 
@@ -609,7 +609,7 @@ func newResolver(loaderstate *modload.State, ctx context.Context, queries []*que
 }
 
 // initialSelected returns the version of the module with the given path that
-// was selected at the start of this 'go get' invocation.
+// was selected at the start of this 'forgo get' invocation.
 func (r *resolver) initialSelected(mPath string) (version string) {
 	v, ok := r.initialVersion[mPath]
 	if !ok {
@@ -711,7 +711,7 @@ func (r *resolver) matchInModule(loaderstate *modload.State, ctx context.Context
 // Each candidate set has only one possible module version: the matched
 // module at version "none".
 //
-// We interpret arguments to 'go get' as packages first, and fall back to
+// We interpret arguments to 'forgo get' as packages first, and fall back to
 // modules second. However, no module exists at version "none", and therefore no
 // package exists at that version either: we know that the argument cannot match
 // any packages, and thus it must match modules instead.
@@ -1095,7 +1095,7 @@ func (r *resolver) performWorkQueries(loaderstate *modload.State, ctx context.Co
 			// There are a few other places outside the modload package where we expect
 			// a single main module.
 			if len(loaderstate.MainModules.Versions()) != 1 {
-				panic("internal error: number of main modules is not exactly one in resolution phase of go get")
+				panic("internal error: number of main modules is not exactly one in resolution phase of forgo get")
 			}
 			mainModule := loaderstate.MainModules.Versions()[0]
 
@@ -1152,7 +1152,7 @@ func (r *resolver) performPatternAllQueries(loaderstate *modload.State, ctx cont
 	r.loadPackages(loaderstate, ctx, []string{"all"}, findPackage)
 
 	// Since we built up the candidate lists concurrently, they may be in a
-	// nondeterministic order. We want 'go get' to be fully deterministic,
+	// nondeterministic order. We want 'forgo get' to be fully deterministic,
 	// including in which errors it chooses to report, so sort the candidates
 	// into a deterministic-but-arbitrary order.
 	for _, q := range r.patternAllQueries {
@@ -1244,7 +1244,7 @@ func (r *resolver) findAndUpgradeImports(loaderstate *modload.State, ctx context
 	r.loadPackages(loaderstate, ctx, patterns, findPackage)
 
 	// Since we built up the candidate lists concurrently, they may be in a
-	// nondeterministic order. We want 'go get' to be fully deterministic,
+	// nondeterministic order. We want 'forgo get' to be fully deterministic,
 	// including in which errors it chooses to report, so sort the candidates
 	// into a deterministic-but-arbitrary order.
 	sort.Slice(upgrades, func(i, j int) bool {
@@ -1270,7 +1270,7 @@ func (r *resolver) loadPackages(loaderstate *modload.State, ctx context.Context,
 		Tags:                     imports.AnyTags(),
 		VendorModulesInGOROOTSrc: true,
 		LoadTests:                *getT,
-		AssumeRootsImported:      true, // After 'go get foo', imports of foo should build.
+		AssumeRootsImported:      true, // After 'forgo get foo', imports of foo should build.
 		SilencePackageErrors:     true, // May be fixed by subsequent upgrades or downgrades.
 		Switcher:                 toolchain.NewSwitcher(loaderstate),
 	}
@@ -1423,7 +1423,7 @@ func (r *resolver) resolveQueries(loaderstate *modload.State, ctx context.Contex
 	// iteration, so any ambiguous queries will remain so. In order to make
 	// progress, resolve them arbitrarily but deterministically.
 	//
-	// If that results in conflicting versions, the user can re-run 'go get'
+	// If that results in conflicting versions, the user can re-run 'forgo get'
 	// with additional explicit versions for the conflicting packages or
 	// modules.
 	resolvedArbitrarily := 0
@@ -1528,7 +1528,7 @@ func (r *resolver) disambiguate(s *modload.State, cs pathSet) (filtered pathSet,
 			//
 			// The command could be something like
 			//
-			// 	go get example.com/foo/bar@none example.com/foo/bar/baz@latest
+			// 	forgo get example.com/foo/bar@none example.com/foo/bar/baz@latest
 			//
 			// in which case we *cannot* resolve the package from
 			// example.com/foo/bar (because it is constrained to version
@@ -1543,7 +1543,7 @@ func (r *resolver) disambiguate(s *modload.State, cs pathSet) (filtered pathSet,
 		//
 		// For example, consider the command
 		//
-		// 	go get example.com/foo@latest example.com/foo/bar/baz@latest
+		// 	forgo get example.com/foo@latest example.com/foo/bar/baz@latest
 		//
 		// If modules example.com/foo and example.com/foo/bar both provide
 		// package example.com/foo/bar/baz, then we *must* resolve the package
@@ -1583,7 +1583,7 @@ func (r *resolver) disambiguate(s *modload.State, cs pathSet) (filtered pathSet,
 // from among those in the given set.
 //
 // chooseArbitrarily prefers module paths that were already in the build list at
-// the start of 'go get', prefers modules that provide packages over those that
+// the start of 'forgo get', prefers modules that provide packages over those that
 // do not, and chooses the first module meeting those criteria (so biases toward
 // longer paths).
 func (r *resolver) chooseArbitrarily(cs pathSet) (isPackage bool, m module.Version) {
@@ -1627,8 +1627,8 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 		exitWorkspace, err = modload.EnterWorkspace(loaderstate, ctx)
 		if err != nil {
 			// A TooNewError can happen for
-			// go get go@newversion when all the required modules
-			// are old enough but the go command itself is not new
+			// forgo get go@newversion when all the required modules
+			// are old enough but the forgo command itself is not new
 			// enough. See the related comment on the SwitchOrFatal
 			// in runGet when WriteGoMod returns an error.
 			toolchain.SwitchOrFatal(loaderstate, ctx, err)
@@ -1641,7 +1641,7 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 	// relevant nor actionable.
 	type modFlags int
 	const (
-		resolved modFlags = 1 << iota // version resolved by 'go get'
+		resolved modFlags = 1 << iota // version resolved by 'forgo get'
 		named                         // explicitly named on command line or provides a named package
 		hasPkg                        // needed to build named packages
 		direct                        // provides a direct dependency of the main module or workspace modules
@@ -1756,7 +1756,7 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 	}
 
 	// exit the workspace if we had entered it earlier. We want to add the sums
-	// to the go.sum file for the module we're running go get from.
+	// to the go.sum file for the module we're running forgo get from.
 	if exitWorkspace != nil {
 		// Wait for retraction and deprecation checks (that depend on the global
 		// modload state containing the workspace) to finish before we reset the
@@ -1767,7 +1767,7 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 
 	// Load sums for updated modules that had sums before. When we update a
 	// module, we may update another module in the build list that provides a
-	// package in 'all' that wasn't loaded as part of this 'go get' command.
+	// package in 'all' that wasn't loaded as part of this 'forgo get' command.
 	// If we don't add a sum for that module, builds may fail later.
 	// Note that an incidentally updated package could still import packages
 	// from unknown modules or from modules in the build list that we didn't
@@ -1813,13 +1813,13 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 	// Only errors fetching sums are hard errors.
 	for _, mm := range deprecations {
 		if mm.message != "" {
-			fmt.Fprintf(os.Stderr, "go: module %s is deprecated: %s\n", mm.m.Path, mm.message)
+			fmt.Fprintf(os.Stderr, "forgo: module %s is deprecated: %s\n", mm.m.Path, mm.message)
 		}
 	}
 	var retractPath string
 	for _, mm := range retractions {
 		if mm.message != "" {
-			fmt.Fprintf(os.Stderr, "go: warning: %v\n", mm.message)
+			fmt.Fprintf(os.Stderr, "forgo: warning: %v\n", mm.message)
 			if retractPath == "" {
 				retractPath = mm.m.Path
 			} else {
@@ -1828,7 +1828,7 @@ func (r *resolver) checkPackageProblems(loaderstate *modload.State, ctx context.
 		}
 	}
 	if retractPath != "" {
-		fmt.Fprintf(os.Stderr, "go: to switch to the latest unretracted version, run:\n\tgo get %s@latest\n", retractPath)
+		fmt.Fprintf(os.Stderr, "forgo: to switch to the latest unretracted version, run:\n	forgo get %s@latest\n", retractPath)
 	}
 	for _, err := range sumErrs {
 		if err != nil {
@@ -1933,17 +1933,17 @@ func (r *resolver) reportChanges(oldReqs, newReqs []module.Version) {
 
 	for _, c := range sortedChanges {
 		if c.old == "" {
-			fmt.Fprintf(os.Stderr, "go: added %s %s\n", c.path, c.new)
+			fmt.Fprintf(os.Stderr, "forgo: added %s %s\n", c.path, c.new)
 		} else if c.new == "none" || c.new == "" {
-			fmt.Fprintf(os.Stderr, "go: removed %s %s\n", c.path, c.old)
+			fmt.Fprintf(os.Stderr, "forgo: removed %s %s\n", c.path, c.old)
 		} else if gover.ModCompare(c.path, c.new, c.old) > 0 {
-			fmt.Fprintf(os.Stderr, "go: upgraded %s %s => %s\n", c.path, c.old, c.new)
+			fmt.Fprintf(os.Stderr, "forgo: upgraded %s %s => %s\n", c.path, c.old, c.new)
 			if c.path == "go" && gover.Compare(c.old, gover.ExplicitIndirectVersion) < 0 && gover.Compare(c.new, gover.ExplicitIndirectVersion) >= 0 {
-				fmt.Fprintf(os.Stderr, "\tnote: expanded dependencies to upgrade to go %s or higher; run 'go mod tidy' to clean up\n", gover.ExplicitIndirectVersion)
+				fmt.Fprintf(os.Stderr, "\tnote: expanded dependencies to upgrade to go %s or higher; run 'forgo mod tidy' to clean up\n", gover.ExplicitIndirectVersion)
 			}
 
 		} else {
-			fmt.Fprintf(os.Stderr, "go: downgraded %s %s => %s\n", c.path, c.old, c.new)
+			fmt.Fprintf(os.Stderr, "forgo: downgraded %s %s => %s\n", c.path, c.old, c.new)
 		}
 	}
 
@@ -2013,12 +2013,12 @@ func (r *resolver) updateBuildList(loaderstate *modload.State, ctx context.Conte
 		if cfg.BuildV {
 			// Log complete paths for the conflicts before we summarize them.
 			for _, c := range constraint.Conflicts {
-				fmt.Fprintf(os.Stderr, "go: %v\n", c.String())
+				fmt.Fprintf(os.Stderr, "forgo: %v\n", c.String())
 			}
 		}
 
 		// modload.EditBuildList reports constraint errors at
-		// the module level, but 'go get' operates on packages.
+		// the module level, but 'forgo get' operates on packages.
 		// Rewrite the errors to explain them in terms of packages.
 		reason := func(m module.Version) string {
 			rv, ok := r.resolvedVersion[m.Path]
@@ -2035,9 +2035,9 @@ func (r *resolver) updateBuildList(loaderstate *modload.State, ctx context.Conte
 			firstReason := reason(c.Path[0])
 			last := c.Path[len(c.Path)-1]
 			if c.Err != nil {
-				base.Errorf("go: %v %srequires %v: %v", firstReason, adverb, last, c.UnwrapModuleError())
+				base.Errorf("forgo: %v %srequires %v: %v", firstReason, adverb, last, c.UnwrapModuleError())
 			} else {
-				base.Errorf("go: %v %srequires %v, not %v", firstReason, adverb, last, reason(c.Constraint))
+				base.Errorf("forgo: %v %srequires %v, not %v", firstReason, adverb, last, reason(c.Constraint))
 			}
 		}
 		return false

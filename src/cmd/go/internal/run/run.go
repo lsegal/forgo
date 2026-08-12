@@ -20,45 +20,45 @@ import (
 )
 
 var CmdRun = &base.Command{
-	UsageLine: "go run [build flags] [-exec xprog] package [arguments...]",
+	UsageLine: "forgo run [build flags] [-exec xprog] package [arguments...]",
 	Short:     "compile and run Go program",
 	Long: `
 Run compiles and runs the named main Go package.
 Typically the package is specified as a list of .go source files from a single
 directory, but it may also be an import path, file system path, or pattern
-matching a single known package, as in 'go run .' or 'go run my/cmd'.
+matching a single known package, as in 'forgo run .' or 'forgo run my/cmd'.
 
 If the package argument has a version suffix (like @latest or @v1.0.0),
-"go run" builds the program in module-aware mode, ignoring the go.mod file in
+"forgo run" builds the program in module-aware mode, ignoring the go.mod file in
 the current directory or any parent directory, if there is one. This is useful
 for running programs without affecting the dependencies of the main module.
 
-If the package argument doesn't have a version suffix, "go run" may run in
+If the package argument doesn't have a version suffix, "forgo run" may run in
 module-aware mode or GOPATH mode, depending on the GO111MODULE environment
-variable and the presence of a go.mod file. See 'go help modules' for details.
-If module-aware mode is enabled, "go run" runs in the context of the main
+variable and the presence of a go.mod file. See 'forgo help modules' for details.
+If module-aware mode is enabled, "forgo run" runs in the context of the main
 module.
 
-By default, 'go run' runs the compiled binary directly: 'a.out arguments...'.
-If the -exec flag is given, 'go run' invokes the binary using xprog:
+By default, 'forgo run' runs the compiled binary directly: 'a.out arguments...'.
+If the -exec flag is given, 'forgo run' invokes the binary using xprog:
 	'xprog a.out arguments...'.
 If the -exec flag is not given, GOOS or GOARCH is different from the system
 default, and a program named go_$GOOS_$GOARCH_exec can be found
-on the current search path, 'go run' invokes the binary using that program,
+on the current search path, 'forgo run' invokes the binary using that program,
 for example 'go_js_wasm_exec a.out arguments...'. This allows execution of
 cross-compiled programs when a simulator or other execution method is
 available.
 
-By default, 'go run' compiles the binary without generating the information
+By default, 'forgo run' compiles the binary without generating the information
 used by debuggers, to reduce build time. To include debugger information in
-the binary, use 'go build'.
+the binary, use 'forgo build'.
 
 The exit status of Run is not the exit status of the compiled binary.
 
-For more about build flags, see 'go help build'.
-For more about specifying packages, see 'go help packages'.
+For more about build flags, see 'forgo help build'.
+For more about specifying packages, see 'forgo help packages'.
 
-See also: go build.
+See also: forgo build.
 	`,
 }
 
@@ -73,7 +73,7 @@ func init() {
 func runRun(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState := modload.NewState()
 	if shouldUseOutsideModuleMode(args) {
-		// Set global module flags for 'go run cmd@version'.
+		// Set global module flags for 'forgo run cmd@version'.
 		// This must be done before modload.Init, but we need to call work.BuildInit
 		// before loading packages, since it affects package locations, e.g.,
 		// for -race and -msan.
@@ -105,7 +105,7 @@ func runRun(ctx context.Context, cmd *base.Command, args []string) {
 			if strings.HasSuffix(file, "_test.go") {
 				// GoFilesPackage is going to assign this to TestGoFiles.
 				// Reject since it won't be part of the build.
-				base.Fatalf("go: cannot run *_test.go files (%s)", file)
+				base.Fatalf("forgo: cannot run *_test.go files (%s)", file)
 			}
 		}
 		p = load.GoFilesPackage(moduleLoaderState, ctx, pkgOpts, files)
@@ -123,19 +123,19 @@ func runRun(ctx context.Context, cmd *base.Command, args []string) {
 		}
 
 		if len(pkgs) == 0 {
-			base.Fatalf("go: no packages loaded from %s", arg)
+			base.Fatalf("forgo: no packages loaded from %s", arg)
 		}
 		if len(pkgs) > 1 {
 			names := make([]string, 0, len(pkgs))
 			for _, p := range pkgs {
 				names = append(names, p.ImportPath)
 			}
-			base.Fatalf("go: pattern %s matches multiple packages:\n\t%s", arg, strings.Join(names, "\n\t"))
+			base.Fatalf("forgo: pattern %s matches multiple packages:\n\t%s", arg, strings.Join(names, "\n\t"))
 		}
 		p = pkgs[0]
 		i++
 	} else {
-		base.Fatalf("go: no go files listed")
+		base.Fatalf("forgo: no go files listed")
 	}
 	cmdArgs := args[i:]
 	load.CheckPackageErrors([]*load.Package{p})
@@ -160,7 +160,7 @@ func runRun(ctx context.Context, cmd *base.Command, args []string) {
 			if !cfg.BuildContext.CgoEnabled {
 				hint = " (cgo is disabled)"
 			}
-			base.Fatalf("go: no suitable source files%s", hint)
+			base.Fatalf("forgo: no suitable source files%s", hint)
 		}
 		p.Internal.ExeName = src[:len(src)-len(".go")]
 	} else {
@@ -169,18 +169,18 @@ func runRun(ctx context.Context, cmd *base.Command, args []string) {
 
 	a1 := b.LinkAction(moduleLoaderState, work.ModeBuild, work.ModeBuild, p)
 	a1.CacheExecutable = true
-	a := &work.Action{Mode: "go run", Actor: work.ActorFunc(buildRunProgram), Args: cmdArgs, Deps: []*work.Action{a1}}
+	a := &work.Action{Mode: "forgo run", Actor: work.ActorFunc(buildRunProgram), Args: cmdArgs, Deps: []*work.Action{a1}}
 	b.Do(ctx, a)
 }
 
-// shouldUseOutsideModuleMode returns whether 'go run' will load packages in
+// shouldUseOutsideModuleMode returns whether 'forgo run' will load packages in
 // module-aware mode, ignoring the go.mod file in the current directory. It
 // returns true if the first argument contains "@", does not begin with "-"
 // (resembling a flag) or end with ".go" (a file). The argument must not be a
 // local or absolute file path.
 //
 // These rules are slightly different than other commands. Whether or not
-// 'go run' uses this mode, it interprets arguments ending with ".go" as files
+// 'forgo run' uses this mode, it interprets arguments ending with ".go" as files
 // and uses arguments up to the last ".go" argument to comprise the package.
 // If there are no ".go" arguments, only the first argument is interpreted
 // as a package path, since there can be only one package.

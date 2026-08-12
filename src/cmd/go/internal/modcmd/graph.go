@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// go mod graph
+// forgo mod graph
 
 package modcmd
 
@@ -21,7 +21,7 @@ import (
 )
 
 var cmdGraph = &base.Command{
-	UsageLine: "go mod graph [-go=version] [-x]",
+	UsageLine: "forgo mod graph [-go=version] [-x]",
 	Short:     "print module requirement graph",
 	Long: `
 Graph prints the module requirement graph (with replacements applied)
@@ -35,7 +35,7 @@ in the go.mod file.
 
 The -x flag causes graph to print the commands graph executes.
 
-See https://golang.org/ref/mod#go-mod-graph for more about 'go mod graph'.
+See https://golang.org/ref/mod#go-mod-graph for more about 'forgo mod graph'.
 	`,
 	Run: runGraph,
 }
@@ -56,7 +56,7 @@ func runGraph(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState.InitWorkfile()
 
 	if len(args) > 0 {
-		base.Fatalf("go: 'go mod graph' accepts no arguments")
+		base.Fatalf("forgo: 'forgo mod graph' accepts no arguments")
 	}
 	moduleLoaderState.ForceUseModules = true
 	moduleLoaderState.RootMode = modload.NeedRoot

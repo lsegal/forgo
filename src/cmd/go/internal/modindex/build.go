@@ -63,7 +63,7 @@ type Context struct {
 	// The install suffix specifies a suffix to use in the name of the installation
 	// directory. By default it is empty, but custom builds that need to keep
 	// their outputs separate can set InstallSuffix to do so. For example, when
-	// using the race detector, the go command uses InstallSuffix = "race", so
+	// using the race detector, the forgo command uses InstallSuffix = "race", so
 	// that on a Linux/386 system, packages are written to a directory named
 	// "linux_386_race" instead of the usual "linux_386".
 	InstallSuffix string

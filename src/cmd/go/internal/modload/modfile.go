@@ -67,7 +67,7 @@ func ReadModFile(gomod string, fix modfile.VersionFixer) (data []byte, f *modfil
 	}
 	if f.Module == nil {
 		// No module declaration. Must add module path.
-		return nil, nil, fmt.Errorf("error reading %s: missing module declaration. To specify the module path:\n\tgo mod edit -module=example.com/mod", base.ShortPath(gomod))
+		return nil, nil, fmt.Errorf("error reading %s: missing module declaration. To specify the module path:\n	forgo mod edit -module=example.com/mod", base.ShortPath(gomod))
 	} else if err := CheckReservedModulePath(f.Module.Mod.Path); err != nil {
 		return nil, nil, fmt.Errorf("error reading %s: invalid module path: %q", base.ShortPath(gomod), f.Module.Mod.Path)
 	}
@@ -418,7 +418,7 @@ func toReplaceMap(replacements []*modfile.Replace) map[module.Version]module.Ver
 	replaceMap := make(map[module.Version]module.Version, len(replacements))
 	for _, r := range replacements {
 		if prev, dup := replaceMap[r.Old]; dup && prev != r.New {
-			base.Fatalf("go: conflicting replacements for %v:\n\t%v\n\t%v", r.Old, prev, r.New)
+			base.Fatalf("forgo: conflicting replacements for %v:\n\t%v\n\t%v", r.Old, prev, r.New)
 		}
 		replaceMap[r.Old] = r.New
 	}
@@ -512,7 +512,7 @@ func (i *modFileIndex) modFileIsDirty(modFile *modfile.File) bool {
 			if cfg.BuildMod == "readonly" {
 				// The module's requirements are consistent; only the "// indirect"
 				// comments that are wrong. But those are only guaranteed to be accurate
-				// after a "go mod tidy" — it's a good idea to run those before
+				// after a "forgo mod tidy" — it's a good idea to run those before
 				// committing a change, but it's certainly not mandatory.
 			} else {
 				return true
@@ -605,7 +605,7 @@ func goModSummary(loaderstate *State, m module.Version) (*modFileSummary, error)
 	if mustHaveSums(loaderstate) && actual.Version != "" {
 		key := module.Version{Path: actual.Path, Version: actual.Version + "/go.mod"}
 		if !modfetch.HaveSum(loaderstate.Fetcher(), key) {
-			suggestion := fmt.Sprintf(" for go.mod file; to add it:\n\tgo mod download %s", m.Path)
+			suggestion := fmt.Sprintf(" for go.mod file; to add it:\n	forgo mod download %s", m.Path)
 			return nil, module.VersionError(actual, &sumMissingError{suggestion: suggestion})
 		}
 	}
@@ -680,7 +680,7 @@ func rawGoModSummary(loaderstate *State, m module.Version) (*modFileSummary, err
 	if gover.IsToolchain(m.Path) {
 		if m.Path == "go" && gover.Compare(m.Version, gover.GoStrictVersion) >= 0 {
 			// Declare that go 1.21.3 requires toolchain 1.21.3,
-			// so that go get knows that downgrading toolchain implies downgrading go
+			// so that forgo get knows that downgrading toolchain implies downgrading go
 			// and similarly upgrading go requires upgrading the toolchain.
 			return &modFileSummary{module: m, require: []module.Version{{Path: "toolchain", Version: "go" + m.Version}}}, nil
 		}
@@ -695,12 +695,12 @@ func rawGoModSummary(loaderstate *State, m module.Version) (*modFileSummary, err
 		panic("internal error: rawGoModSummary called on a main module")
 	}
 	if m.Version == "" && loaderstate.inWorkspaceMode() && m.Path == "command-line-arguments" {
-		// "go work sync" calls LoadModGraph to make sure the module graph is valid.
+		// "forgo work sync" calls LoadModGraph to make sure the module graph is valid.
 		// If there are no modules in the workspace, we synthesize an empty
 		// command-line-arguments module, which rawGoModData cannot read a go.mod for.
 		return &modFileSummary{module: m}, nil
 	} else if m.Version == "" && loaderstate.inWorkspaceMode() && loaderstate.MainModules.Contains(m.Path) {
-		// When go get uses EnterWorkspace to check that the workspace loads properly,
+		// When forgo get uses EnterWorkspace to check that the workspace loads properly,
 		// it will update the contents of the workspace module's modfile in memory. To use the updated
 		// contents of the modfile when doing the load, don't read from disk and instead
 		// recompute a summary using the updated contents of the modfile.
@@ -807,7 +807,7 @@ func rawGoModData(loaderstate *State, m module.Version) (name string, data []byt
 	} else {
 		if !gover.ModIsValid(m.Path, m.Version) {
 			// Disallow the broader queries supported by fetch.Lookup.
-			base.Fatalf("go: internal error: %s@%s: unexpected invalid semantic version", m.Path, m.Version)
+			base.Fatalf("forgo: internal error: %s@%s: unexpected invalid semantic version", m.Path, m.Version)
 		}
 		name = "go.mod"
 		data, err = loaderstate.Fetcher().GoMod(context.TODO(), m.Path, m.Version)

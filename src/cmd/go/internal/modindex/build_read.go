@@ -377,7 +377,7 @@ func readGoInfo(f io.Reader, info *fileInfo) error {
 			}
 			if tok == token.COMMENT && strings.HasPrefix(lit, "//go:embed") {
 				// Ignore badly-formed lines - the compiler will report them when it finds them,
-				// and we can pretend they are not there to help go list succeed with what it knows.
+				// and we can pretend they are not there to help forgo list succeed with what it knows.
 				embs, err := parseGoEmbed(fset, pos, lit)
 				if err == nil {
 					info.embeds = append(info.embeds, embs...)

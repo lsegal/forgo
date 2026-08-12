@@ -107,7 +107,7 @@ type RevInfo struct {
 // it names an importable package, but not a module.
 //
 // As a special case to incorporate code written before modules were
-// introduced, if a path p resolves using the pre-module "go get" lookup
+// introduced, if a path p resolves using the pre-module "forgo get" lookup
 // to the root of a source code repository without a go.mod file,
 // that repository is treated as if it had a go.mod in its root directory
 // declaring module path p.
@@ -119,7 +119,7 @@ type RevInfo struct {
 // pair - often written path@version - to a particular file tree.
 // For example rsc.io/qr@v0.1.0 depends on the "implicit go.mod at root of
 // repository" rule, while rsc.io/qr@v0.2.0 has an explicit go.mod.
-// Because the "go get" import paths rsc.io/qr and github.com/rsc/qr
+// Because the "forgo get" import paths rsc.io/qr and github.com/rsc/qr
 // both redirect to the Git repository https://github.com/rsc/qr,
 // github.com/rsc/qr@v0.1.0 is the same file tree as rsc.io/qr@v0.1.0
 // but a different module (a different name). In contrast, since v0.2.0

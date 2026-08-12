@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// go work init
+// forgo work init
 
 package workcmd
 
@@ -19,13 +19,13 @@ import (
 )
 
 var cmdInit = &base.Command{
-	UsageLine: "go work init [moddirs]",
+	UsageLine: "forgo work init [moddirs]",
 	Short:     "initialize workspace file",
 	Long: `Init initializes and writes a new go.work file in the
 current directory, in effect creating a new workspace at the current
 directory.
 
-go work init optionally accepts paths to the workspace modules as
+forgo work init optionally accepts paths to the workspace modules as
 arguments. If the argument is omitted, an empty workspace with no
 modules will be created.
 
@@ -55,7 +55,7 @@ func runInit(ctx context.Context, cmd *base.Command, args []string) {
 	}
 
 	if _, err := fsys.Stat(gowork); err == nil {
-		base.Fatalf("go: %s already exists", gowork)
+		base.Fatalf("forgo: %s already exists", gowork)
 	}
 
 	goV := gover.Local() // Use current Go version by default

@@ -10,14 +10,14 @@ import (
 )
 
 var CmdWork = &base.Command{
-	UsageLine: "go work",
+	UsageLine: "forgo work",
 	Short:     "workspace maintenance",
 	Long: `Work provides access to operations on workspaces.
 
 Note that support for workspaces is built into many other commands, not
-just 'go work'.
+just 'forgo work'.
 
-See 'go help modules' for information about Go's module system of which
+See 'forgo help modules' for information about Go's module system of which
 workspaces are a part.
 
 See https://go.dev/ref/mod#workspaces for an in-depth reference on
@@ -28,7 +28,7 @@ tutorial on workspaces.
 
 A workspace is specified by a go.work file that specifies a set of
 module directories with the "use" directive. These modules are used as
-root modules by the go command for builds and related operations.  A
+root modules by the forgo command for builds and related operations.  A
 workspace that does not specify modules to be used cannot be used to do
 builds from local modules.
 
@@ -64,8 +64,8 @@ go.mod file and takes precedence over replaces in go.mod files.  It is
 primarily intended to override conflicting replaces in different workspace
 modules.
 
-To determine whether the go command is operating in workspace mode, use
-the "go env GOWORK" command. This will specify the workspace file being
+To determine whether the forgo command is operating in workspace mode, use
+the "forgo env GOWORK" command. This will specify the workspace file being
 used.
 `,
 

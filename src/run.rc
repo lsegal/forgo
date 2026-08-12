@@ -5,13 +5,13 @@
 
 rfork e
 
-if(! test -f ../bin/go){
+if(! test -f ../bin/forgo){
 	echo 'run.rc must be run from $GOROOT/src after installing cmd/go' >[1=2]
 	exit wrongdir
 }
 
 GOENV=off
-eval `{../bin/go tool dist env}
+eval `{../bin/forgo tool dist env}
 
 GOPATH=/nonexist-gopath
-exec ../bin/go tool dist test -rebuild $*
+exec ../bin/forgo tool dist test -rebuild $*

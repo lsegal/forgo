@@ -79,7 +79,7 @@ func (b *Builder) Do(ctx context.Context, root *Action) {
 		c := cache.Default()
 		defer func() {
 			if err := c.Close(); err != nil {
-				base.Fatalf("go: failed to trim cache: %v", err)
+				base.Fatalf("forgo: failed to trim cache: %v", err)
 			}
 		}()
 	}
@@ -90,7 +90,7 @@ func (b *Builder) Do(ctx context.Context, root *Action) {
 	// distracted by low-level leaf actions to the detriment
 	// of completing higher-level actions. The order of
 	// work does not matter much to overall execution time,
-	// but when running "go test std" it is nice to see each test
+	// but when running "forgo test std" it is nice to see each test
 	// results as soon as possible. The priorities assigned
 	// ensure that, all else being equal, the execution prefers
 	// to do what it would have done first in a simple depth-first
@@ -105,12 +105,12 @@ func (b *Builder) Do(ctx context.Context, root *Action) {
 		if file := cfg.DebugActiongraph; file != "" {
 			if strings.HasSuffix(file, ".go") {
 				// Do not overwrite Go source code in:
-				//	go build -debug-actiongraph x.go
-				base.Fatalf("go: refusing to write action graph to %v\n", file)
+				//	forgo build -debug-actiongraph x.go
+				base.Fatalf("forgo: refusing to write action graph to %v\n", file)
 			}
 			js := actionGraphJSON(root)
 			if err := os.WriteFile(file, []byte(js), 0666); err != nil {
-				fmt.Fprintf(os.Stderr, "go: writing action graph: %v\n", err)
+				fmt.Fprintf(os.Stderr, "forgo: writing action graph: %v\n", err)
 				base.SetExitStatus(1)
 			}
 		}
@@ -377,7 +377,7 @@ func (b *Builder) buildActionID(a *Action) cache.ActionID {
 		// TODO(rsc): Convince compiler team not to add more magic environment variables,
 		// or perhaps restrict the environment variables passed to subprocesses.
 		// Because these are clumsy, undocumented special-case hacks
-		// for debugging the compiler, they are not settable using 'go env -w',
+		// for debugging the compiler, they are not settable using 'forgo env -w',
 		// and so here we use os.Getenv, not cfg.Getenv.
 		magic := []string{
 			"GOCLOBBERDEADHASH",
@@ -559,7 +559,7 @@ func (b *Builder) checkCacheForBuild(a, buildAction *Action, covMetaFileName str
 		}
 
 		// Source files might be cached, even if the full action is not
-		// (e.g., go list -compiled -find).
+		// (e.g., forgo list -compiled -find).
 		if !cachedBuild && need&needCompiledGoFiles != 0 {
 			if err := b.loadCachedCompiledGoFiles(buildAction); err == nil {
 				need &^= needCompiledGoFiles
@@ -1214,7 +1214,7 @@ func buildVetConfig(a *Action, srcfiles []string, vetDeps []*Action) {
 	// Pass list of absolute paths to vet,
 	// so that vet's error messages will use absolute paths,
 	// so that we can reformat them relative to the directory
-	// in which the go command is invoked.
+	// in which the forgo command is invoked.
 	vcfg := &vetConfig{
 		ID:           a.Package.ImportPath,
 		Compiler:     cfg.BuildToolchainName,
@@ -1283,7 +1283,7 @@ var VetFlags []string
 
 // VetHandleStdout determines how the stdout output of each vet tool
 // invocation should be handled. The default behavior is to copy it to
-// the go command's stdout, atomically.
+// the forgo command's stdout, atomically.
 var VetHandleStdout = copyToStdout
 
 // VetExplicit records whether the vet flags (which may include
@@ -1310,7 +1310,7 @@ func (b *Builder) vet(ctx context.Context, a *Action) error {
 
 	sh := b.Shell(a)
 
-	// We use "vet" terminology even when building action graphs for go fix.
+	// We use "vet" terminology even when building action graphs for forgo fix.
 	vcfg.VetxOnly = a.VetxOnly
 	vcfg.VetxOutput = a.Objdir + "vet.out"
 	vcfg.Stdout = a.Objdir + "vet.stdout"
@@ -1324,7 +1324,7 @@ func (b *Builder) vet(ctx context.Context, a *Action) error {
 
 	vetFlags := VetFlags
 
-	// In GOROOT, we enable all the vet tests during 'go test',
+	// In GOROOT, we enable all the vet tests during 'forgo test',
 	// not just the high-confidence subset. This gets us extra
 	// checking for the standard library (at some compliance cost)
 	// and helps us gain experience about how well the checks
@@ -1351,11 +1351,11 @@ func (b *Builder) vet(ctx context.Context, a *Action) error {
 		// changed here.
 		vetFlags = []string{"-unsafeptr=false"}
 
-		// Also turn off -unreachable checks during go test.
+		// Also turn off -unreachable checks during forgo test.
 		// During testing it is very common to make changes
 		// like hard-coded forced returns or panics that make
 		// code unreachable. It's unreasonable to insist on files
-		// not having any unreachable code during "go test".
+		// not having any unreachable code during "forgo test".
 		// (buildall.bash still has -unreachable enabled
 		// for the overall whole-tree scan.)
 		if cfg.CmdName == "test" {
@@ -1441,7 +1441,7 @@ cachemiss:
 		return err
 	}
 
-	// TODO(rsc): Why do we pass $GCCGO to go vet?
+	// TODO(rsc): Why do we pass $GCCGO to forgo vet?
 	env := b.cCompilerEnv()
 	if cfg.BuildToolchainName == "gccgo" {
 		env = append(env, "GCCGO="+BuildToolchain.compiler())
@@ -1905,14 +1905,14 @@ func (b *Builder) linkShared(ctx context.Context, a *Action) (err error) {
 func BuildInstallFunc(b *Builder, ctx context.Context, a *Action) (err error) {
 	defer func() {
 		if err != nil {
-			// a.Package == nil is possible for the go install -buildmode=shared
+			// a.Package == nil is possible for the forgo install -buildmode=shared
 			// action that installs libmangledname.so, which corresponds to
 			// a list of packages, not just one.
 			sep, path := "", ""
 			if a.Package != nil {
 				sep, path = " ", a.Package.ImportPath
 			}
-			err = fmt.Errorf("go %s%s%s: %v", cfg.CmdName, sep, path, err)
+			err = fmt.Errorf("forgo %s%s%s: %v", cfg.CmdName, sep, path, err)
 		}
 	}()
 	sh := b.Shell(a)
@@ -1938,7 +1938,7 @@ func BuildInstallFunc(b *Builder, ctx context.Context, a *Action) (err error) {
 		// are, as well as potentially the state of the Go build cache.
 		// We don't really want users to be able to infer (or worse start depending on)
 		// those details from whether the modification time changes during
-		// "go install", so do a best-effort update of the file times to make it
+		// "forgo install", so do a best-effort update of the file times to make it
 		// look like we rewrote a.Target even if we did not. Updating the mtime
 		// may also help other mtime-based systems that depend on our
 		// previous mtime updates that happened more often.
@@ -1962,7 +1962,7 @@ func BuildInstallFunc(b *Builder, ctx context.Context, a *Action) (err error) {
 		return nil
 	}
 
-	// If we're building for go list -export,
+	// If we're building for forgo list -export,
 	// never install anything; just keep the cache reference.
 	if b.IsCmdList {
 		a.built = a1.built
@@ -2000,7 +2000,7 @@ func BuildInstallFunc(b *Builder, ctx context.Context, a *Action) (err error) {
 	return sh.moveOrCopyFile(a.Target, a1.built, perm, false)
 }
 
-// AllowInstall returns a non-nil error if this invocation of the go command is
+// AllowInstall returns a non-nil error if this invocation of the forgo command is
 // allowed to install a.Target.
 //
 // The build of cmd/go running under its own test is forbidden from installing
@@ -2050,7 +2050,7 @@ func (b *Builder) installHeader(ctx context.Context, a *Action) error {
 
 // cover runs, in effect,
 //
-//	go tool cover -pkgcfg=<config file> -mode=b.coverMode -var="varName" -o <outfiles> <infiles>
+//	forgo tool cover -pkgcfg=<config file> -mode=b.coverMode -var="varName" -o <outfiles> <infiles>
 //
 // Return value is an updated output files list; in addition to the
 // regular outputs (instrumented source files) the cover tool also
@@ -2087,7 +2087,7 @@ func (b *Builder) writeCoverPkgInputs(a *Action, pconfigfile string, covoutputsf
 		PkgPath: p.ImportPath,
 		PkgName: p.Name,
 		// Note: coverage granularity is currently hard-wired to
-		// 'perblock'; there isn't a way using "go build -cover" or "go
+		// 'perblock'; there isn't a way using "forgo build -cover" or "go
 		// test -cover" to select it. This may change in the future
 		// depending on user demand.
 		Granularity: "perblock",

@@ -75,7 +75,7 @@ func (*mvsReqs) Max(p, v1, v2 string) string {
 }
 
 // Upgrade is a no-op, here to implement mvs.Reqs.
-// The upgrade logic for go get -u is in ../modget/get.go.
+// The upgrade logic for forgo get -u is in ../modget/get.go.
 func (*mvsReqs) Upgrade(m module.Version) (module.Version, error) {
 	return m, nil
 }

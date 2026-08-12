@@ -580,7 +580,7 @@ func pluginPath(a *Action) string {
 	for _, file := range str.StringList(p.GoFiles, p.CgoFiles, p.SFiles) {
 		data, err := os.ReadFile(filepath.Join(p.Dir, file))
 		if err != nil {
-			base.Fatalf("go: %s", err)
+			base.Fatalf("forgo: %s", err)
 		}
 		h.Write(data)
 	}

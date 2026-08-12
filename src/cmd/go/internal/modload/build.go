@@ -397,8 +397,8 @@ func moduleInfo(loaderstate *State, ctx context.Context, rs *Requirements, m mod
 	}
 
 	if rs == nil {
-		// If this was an explicitly-versioned argument to 'go mod download' or
-		// 'go list -m', report the actual requested version, not its replacement.
+		// If this was an explicitly-versioned argument to 'forgo mod download' or
+		// 'forgo list -m', report the actual requested version, not its replacement.
 		completeFromModCache(info) // Will set m.Error in vendor mode.
 		return info
 	}

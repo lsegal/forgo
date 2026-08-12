@@ -45,7 +45,7 @@ type Builder struct {
 	flagCache          map[[2]string]bool        // a cache of supported compiler flags
 	gccCompilerIDCache map[string]cache.ActionID // cache for gccCompilerID
 
-	IsCmdList           bool // running as part of go list; set p.Stale and additional fields below
+	IsCmdList           bool // running as part of forgo list; set p.Stale and additional fields below
 	NeedError           bool // list needs p.Error
 	NeedExport          bool // list needs p.Export
 	NeedCompiledGoFiles bool // list needs p.CompiledGoFiles
@@ -254,7 +254,7 @@ func actionGraphJSON(a *Action) string {
 
 	js, err := json.MarshalIndent(list, "", "\t")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "go: writing debug action graph: %v\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: writing debug action graph: %v\n", err)
 		return ""
 	}
 	return string(js)
@@ -297,13 +297,13 @@ func NewBuilder(workDir string, getVendorDir func() string) *Builder {
 		}
 		tmp, err := os.MkdirTemp(cfg.Getenv("GOTMPDIR"), "go-build")
 		if err != nil {
-			base.Fatalf("go: creating work dir: %v", err)
+			base.Fatalf("forgo: creating work dir: %v", err)
 		}
 		if !filepath.IsAbs(tmp) {
 			abs, err := filepath.Abs(tmp)
 			if err != nil {
 				os.RemoveAll(tmp)
-				base.Fatalf("go: creating work dir: %v", err)
+				base.Fatalf("forgo: creating work dir: %v", err)
 			}
 			tmp = abs
 		}
@@ -319,14 +319,14 @@ func NewBuilder(workDir string, getVendorDir func() string) *Builder {
 	}
 
 	if err := CheckGOOSARCHPair(cfg.Goos, cfg.Goarch); err != nil {
-		fmt.Fprintf(os.Stderr, "go: %v\n", err)
+		fmt.Fprintf(os.Stderr, "forgo: %v\n", err)
 		base.SetExitStatus(2)
 		base.Exit()
 	}
 
 	for _, tag := range cfg.BuildContext.BuildTags {
 		if strings.Contains(tag, ",") {
-			fmt.Fprintf(os.Stderr, "go: -tags space-separated list contains comma\n")
+			fmt.Fprintf(os.Stderr, "forgo: -tags space-separated list contains comma\n")
 			base.SetExitStatus(2)
 			base.Exit()
 		}
@@ -345,7 +345,7 @@ func (b *Builder) Close() error {
 	defer builderWorkDirs.Delete(b)
 
 	if b.WorkDir != wd.(string) {
-		base.Errorf("go: internal error: Builder WorkDir unexpectedly changed from %s to %s", wd, b.WorkDir)
+		base.Errorf("forgo: internal error: Builder WorkDir unexpectedly changed from %s to %s", wd, b.WorkDir)
 	}
 
 	if !cfg.BuildWork {
@@ -368,7 +368,7 @@ func closeBuilders() {
 	})
 
 	if leakedBuilders > 0 && base.GetExitStatus() == 0 {
-		fmt.Fprintf(os.Stderr, "go: internal error: Builder leaked on successful exit\n")
+		fmt.Fprintf(os.Stderr, "forgo: internal error: Builder leaked on successful exit\n")
 		base.SetExitStatus(1)
 	}
 }
@@ -447,7 +447,7 @@ func (b *Builder) cacheAction(mode string, p *load.Package, f func() *Action) *A
 	return a
 }
 
-// AutoAction returns the "right" action for go build or go install of p.
+// AutoAction returns the "right" action for forgo build or forgo install of p.
 func (b *Builder) AutoAction(s *modload.State, mode, depMode BuildMode, p *load.Package) *Action {
 	if p.Name == "main" {
 		return b.LinkAction(s, mode, depMode, p)
@@ -569,7 +569,7 @@ type coverProvider struct {
 type coverActor struct {
 	// name of static meta-data file fragment emitted by the cover
 	// tool as part of the package cover action, for selected
-	// "go test -cover" runs.
+	// "forgo test -cover" runs.
 	covMetaFileName string
 
 	buildAction *Action
@@ -708,7 +708,7 @@ func (b *Builder) CompileAction(mode, depMode BuildMode, p *load.Package) *Actio
 		a.Deps = append(a.Deps, cacheAction)
 
 		// Create a cover action if we need to instrument the code for coverage.
-		// The cover action always runs in the same go build invocation as the build,
+		// The cover action always runs in the same forgo build invocation as the build,
 		// and is not cached separately, so it can use the same objdir.
 		var coverAction *Action
 		if p.Internal.Cover.Mode != "" {
@@ -725,7 +725,7 @@ func (b *Builder) CompileAction(mode, depMode BuildMode, p *load.Package) *Actio
 		}
 
 		// Create actions to run swig and cgo if needed. These actions always run in the
-		// same go build invocation as the build action and their actions are not cached
+		// same forgo build invocation as the build action and their actions are not cached
 		// separately, so they can use the same objdir.
 		if p.UsesCgo() || p.UsesSwig() {
 			deps := []*Action{cacheAction}
@@ -867,7 +867,7 @@ func (b *Builder) cgoAction(p *load.Package, objdir string, deps []*Action, hasC
 	return cgoCollectAction
 }
 
-// VetAction returns the action for running go vet on package p.
+// VetAction returns the action for running forgo vet on package p.
 // It depends on the action for compiling p.
 // If the caller may be causing p to be installed, it is up to the caller
 // to make sure that the install depends on (runs after) vet.
@@ -933,7 +933,7 @@ func (b *Builder) LinkAction(s *modload.State, mode, depMode BuildMode, p *load.
 		a.Objdir = a1.Objdir
 
 		// An executable file. (This is the name of a temporary file.)
-		// Because we run the temporary file in 'go run' and 'go test',
+		// Because we run the temporary file in 'forgo run' and 'forgo test',
 		// the name will show up in ps listings. If the caller has specified
 		// a name, use that instead of a.out. The binary is generated
 		// in an otherwise empty subdirectory named exe to avoid
@@ -1067,7 +1067,7 @@ func (b *Builder) addTransitiveLinkDeps(s *modload.State, a, a1 *Action, shlib s
 		}
 	}
 
-	// If this is go build -linkshared, then the link depends on the shared libraries
+	// If this is forgo build -linkshared, then the link depends on the shared libraries
 	// in addition to the packages themselves. (The compile steps do not.)
 	if cfg.BuildLinkshared {
 		haveShlib := map[string]bool{shlib: true}
@@ -1115,8 +1115,8 @@ func (b *Builder) addInstallHeaderAction(a *Action) {
 	}
 }
 
-// buildmodeShared takes the "go build" action a1 into the building of a shared library of a1.Deps.
-// That is, the input a1 represents "go build pkgs" and the result represents "go build -buildmode=shared pkgs".
+// buildmodeShared takes the "forgo build" action a1 into the building of a shared library of a1.Deps.
+// That is, the input a1 represents "forgo build pkgs" and the result represents "forgo build -buildmode=shared pkgs".
 func (b *Builder) buildmodeShared(s *modload.State, mode, depMode BuildMode, args []string, pkgs []*load.Package, a1 *Action) *Action {
 	name, err := libname(args, pkgs)
 	if err != nil {
@@ -1164,7 +1164,7 @@ func (b *Builder) linkSharedAction(s *modload.State, mode, depMode BuildMode, sh
 		// because they are all always linked in anyhow.
 		// Maybe load.LinkerDeps should be used and updated.
 		a := &Action{
-			Mode:    "go build -buildmode=shared",
+			Mode:    "forgo build -buildmode=shared",
 			Package: p,
 			Objdir:  b.NewObjdir(),
 			Actor:   ActorFunc((*Builder).linkShared),
@@ -1239,7 +1239,7 @@ func (b *Builder) linkSharedAction(s *modload.State, mode, depMode BuildMode, sh
 			target := filepath.Join(pkgDir, shlib)
 
 			a := &Action{
-				Mode:   "go install -buildmode=shared",
+				Mode:   "forgo install -buildmode=shared",
 				Objdir: buildAction.Objdir,
 				Actor:  ActorFunc(BuildInstallFunc),
 				Deps:   []*Action{buildAction},

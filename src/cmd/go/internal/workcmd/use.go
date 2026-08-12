@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// go work use
+// forgo work use
 
 package workcmd
 
@@ -24,7 +24,7 @@ import (
 )
 
 var cmdUse = &base.Command{
-	UsageLine: "go work use [-r] [moddirs]",
+	UsageLine: "forgo work use [-r] [moddirs]",
 	Short:     "add modules to workspace file",
 	Long: `Use provides a command-line interface for adding
 directories, optionally recursively, to a go.work file.
@@ -38,7 +38,7 @@ do not exist.
 Use updates the go line in go.work to specify a version at least as
 new as all the go lines in the used modules, both preexisting ones
 and newly added ones. With no arguments, this update is the only
-thing that go work use does.
+thing that forgo work use does.
 
 The -r flag searches recursively for modules in the argument
 directories, and the use command operates as if each of the directories
@@ -66,7 +66,7 @@ func runUse(ctx context.Context, cmd *base.Command, args []string) {
 	moduleLoaderState.InitWorkfile()
 	gowork := modload.WorkFilePath(moduleLoaderState)
 	if gowork == "" {
-		base.Fatalf("go: no go.work file found\n\t(run 'go work init' first or specify path using GOWORK environment variable)")
+		base.Fatalf("forgo: no go.work file found\n\t(run 'forgo work init' first or specify path using GOWORK environment variable)")
 	}
 	wf, err := modload.ReadWorkFile(gowork)
 	if err != nil {

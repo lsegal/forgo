@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Note that these structs are publicly visible (part of go list's API)
+// Note that these structs are publicly visible (part of forgo list's API)
 // and the fields are documented in the help text in ../list/list.go
 
 type ModulePublic struct {
@@ -42,7 +42,7 @@ type ModuleError struct {
 type moduleErrorNoMethods ModuleError
 
 // UnmarshalJSON accepts both {"Err":"text"} and "text",
-// so that the output of go mod download -json can still
+// so that the output of forgo mod download -json can still
 // be unmarshaled into a ModulePublic during -reuse processing.
 func (e *ModuleError) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && data[0] == '"' {

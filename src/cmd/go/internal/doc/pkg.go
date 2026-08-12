@@ -172,7 +172,7 @@ func parsePackage(writer io.Writer, pkg *build.Package, userPath string) *Packag
 	// list, which is what we want. For instance, time.Sunday is of type
 	// time.Weekday, so it is defined in the type but not in the
 	// Consts list for the package. This prevents
-	//	go doc time.Sunday
+	//	forgo doc time.Sunday
 	// from finding the symbol. Work around this for now, but we
 	// should fix it in go/doc.
 	// A similar story applies to factory functions.

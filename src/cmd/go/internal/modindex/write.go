@@ -151,14 +151,14 @@ func (e *encoder) Uint32(n uint32) {
 // and to avoid problems on 32-bit systems we require fitting into a 32-bit int.
 func (e *encoder) Int(n int) {
 	if n < 0 || int(int32(n)) != n {
-		base.Fatalf("go: attempting to write an int to the index that overflows int32")
+		base.Fatalf("forgo: attempting to write an int to the index that overflows int32")
 	}
 	e.Uint32(uint32(n))
 }
 
 func (e *encoder) IntAt(n int, at int) {
 	if n < 0 || int(int32(n)) != n {
-		base.Fatalf("go: attempting to write an int to the index that overflows int32")
+		base.Fatalf("forgo: attempting to write an int to the index that overflows int32")
 	}
 	binary.LittleEndian.PutUint32(e.b[at:], uint32(n))
 }

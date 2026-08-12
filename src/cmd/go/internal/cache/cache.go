@@ -409,7 +409,7 @@ func (c *DiskCache) Trim() error {
 	err := lockedfile.Transform(filepath.Join(c.dir, "trim.txt"), func(data []byte) ([]byte, error) {
 		if skipTrim(data) {
 			// The timestamp in the file no longer meets the criteria for us to
-			// do a trim. It must have been updated by another go command invocation
+			// do a trim. It must have been updated by another forgo command invocation
 			// since we last read it. Skip the trim.
 			return nil, errFileChanged
 		}
@@ -485,7 +485,7 @@ func (c *DiskCache) putIndexEntry(id ActionID, out OutputID, size int64, allowVe
 		old, err := c.get(id)
 		if err == nil && (old.OutputID != out || old.Size != size) {
 			// panic to show stack trace, so we can see what code is generating this cache entry.
-			msg := fmt.Sprintf("go: internal cache error: cache verify failed: id=%x changed:<<<\n%s\n>>>\nold: %x %d\nnew: %x %d", id, reverseHash(id), out, size, old.OutputID, old.Size)
+			msg := fmt.Sprintf("forgo: internal cache error: cache verify failed: id=%x changed:<<<\n%s\n>>>\nold: %x %d\nnew: %x %d", id, reverseHash(id), out, size, old.OutputID, old.Size)
 			panic(msg)
 		}
 	}
@@ -512,7 +512,7 @@ func (c *DiskCache) putIndexEntry(id ActionID, out OutputID, size int64, allowVe
 		err = closeErr
 	}
 	if err != nil {
-		// TODO(bcmills): This Remove potentially races with another go command writing to file.
+		// TODO(bcmills): This Remove potentially races with another forgo command writing to file.
 		// Can we eliminate it?
 		os.Remove(file)
 		return err
@@ -711,8 +711,8 @@ func (c *DiskCache) copyFile(file io.ReadSeeker, executableName string, out Outp
 // The subdirectory may not exist.
 //
 // This directory is managed by the internal/fuzz package. Files in this
-// directory aren't removed by the 'go clean -cache' command or by Trim.
-// They may be removed with 'go clean -fuzzcache'.
+// directory aren't removed by the 'forgo clean -cache' command or by Trim.
+// They may be removed with 'forgo clean -fuzzcache'.
 //
 // TODO(#48526): make Trim remove unused files from this directory.
 func (c *DiskCache) FuzzDir() string {
