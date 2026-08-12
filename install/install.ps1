@@ -85,12 +85,27 @@ $installedVersion = "(unknown)"
 $versionFile = Join-Path $InstallDir "FORGO_VERSION"
 if (Test-Path $versionFile) { $installedVersion = (Get-Content $versionFile -Raw).Trim() }
 
+$binDir = Join-Path $InstallDir "bin"
+
+# Persist GOROOT for the current user.
+[Environment]::SetEnvironmentVariable("GOROOT", $InstallDir, "User")
+
+# Persist PATH for the current user, without duplicating the entry on reinstall.
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if (-not $userPath) { $userPath = "" }
+$pathEntries = $userPath.Split(';') | Where-Object { $_ -and ($_ -ne $binDir) }
+$newUserPath = (@($binDir) + $pathEntries) -join ';'
+[Environment]::SetEnvironmentVariable("PATH", $newUserPath, "User")
+
+# Reflect the change in the current session too.
+$env:GOROOT = $InstallDir
+$env:PATH = "$binDir;$env:PATH"
+
 Write-Host ""
 Write-Host "forgo $installedVersion installed to $InstallDir"
 Write-Host ""
-Write-Host "Add it to your session (or your PowerShell profile):"
-Write-Host "  `$env:GOROOT = `"$InstallDir`""
-Write-Host "  `$env:PATH = `"$InstallDir\bin;`$env:PATH`""
+Write-Host "GOROOT and PATH have been set permanently for your user account."
+Write-Host "Open a new terminal to pick them up there, or use this one now -- it's already updated."
 Write-Host ""
 Write-Host "Then verify with:"
 Write-Host "  forgo version"

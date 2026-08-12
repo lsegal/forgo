@@ -82,10 +82,57 @@ installed_version="(unknown)"
 
 echo ""
 echo "forgo ${installed_version} installed to ${INSTALL_DIR}"
+
+marker_start="# >>> forgo installer >>>"
+marker_end="# <<< forgo installer <<<"
+
+posix_block="export GOROOT=\"${INSTALL_DIR}\"
+export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+
+fish_block="set -gx GOROOT \"${INSTALL_DIR}\"
+set -gx PATH \"${INSTALL_DIR}/bin\" \$PATH"
+
+add_block() {
+	file="$1"
+	block="$2"
+	if [ -f "$file" ] && grep -qF "$marker_start" "$file" 2>/dev/null; then
+		# Already installed once; refresh in place in case INSTALL_DIR changed.
+		awk -v s="$marker_start" -v e="$marker_end" '
+			$0 == s {skip=1}
+			!skip {print}
+			$0 == e {skip=0}
+		' "$file" >"$file.forgo.tmp" && mv "$file.forgo.tmp" "$file"
+	fi
+	{
+		echo ""
+		echo "$marker_start"
+		printf '%s\n' "$block"
+		echo "$marker_end"
+	} >>"$file"
+}
+
+# bash, ash, and plain sh all read one of these depending on invocation.
+for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.zshrc"; do
+	add_block "$rc" "$posix_block"
+done
+
+if command -v fish >/dev/null 2>&1 || [ -d "$HOME/.config/fish" ]; then
+	mkdir -p "$HOME/.config/fish"
+	add_block "$HOME/.config/fish/config.fish" "$fish_block"
+fi
+
 echo ""
-echo "Add it to your shell profile:"
-echo "  export GOROOT=\"${INSTALL_DIR}\""
-echo "  export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+echo "Added to your shell startup files (.bashrc, .bash_profile, .profile, .zshrc, and fish config if present):"
+echo ""
+echo "$posix_block"
 echo ""
 echo "Then verify with:"
 echo "  forgo version"
+echo ""
+
+# Resync the current shell's environment by replacing it with a fresh login
+# shell that re-reads the startup files we just updated.
+if [ -n "${SHELL:-}" ]; then
+	echo "Restarting your shell (${SHELL}) to pick up the new PATH..."
+	exec "$SHELL" -l
+fi
