@@ -65,8 +65,24 @@ tmpdir="$(mktemp -d)"
 cleanup() { rm -rf "$tmpfile" "$tmpdir"; }
 trap cleanup EXIT
 
-if ! fetch "$url" "$tmpfile"; then
-	echo "error: failed to download ${url}" >&2
+# GitHub occasionally serves a transient error (e.g. 503) for a release
+# that's still propagating, so retry a few times with backoff before
+# giving up.
+ok=0
+attempt=1
+max_attempts=5
+while [ "$attempt" -le "$max_attempts" ]; do
+	if fetch "$url" "$tmpfile"; then
+		ok=1
+		break
+	fi
+	echo "warning: download attempt ${attempt}/${max_attempts} failed, retrying..." >&2
+	sleep $((attempt * 2))
+	attempt=$((attempt + 1))
+done
+
+if [ "$ok" -ne 1 ]; then
+	echo "error: failed to download ${url} after ${max_attempts} attempts" >&2
 	echo "       check that '${VERSION}' is a real forgo release for ${goos}/${goarch}." >&2
 	exit 1
 fi

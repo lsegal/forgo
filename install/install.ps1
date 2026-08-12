@@ -46,13 +46,27 @@ $tmpZip = Join-Path ([System.IO.Path]::GetTempPath()) ("forgo-install-" + [Syste
 $tmpExtract = Join-Path ([System.IO.Path]::GetTempPath()) ("forgo-install-" + [System.Guid]::NewGuid())
 
 try {
-    try {
-        $ProgressPreference = "SilentlyContinue" # large-file downloads are much faster without the progress UI
-        Invoke-WebRequest -Uri $url -OutFile $tmpZip -UseBasicParsing
-    } catch {
-        Write-Error "failed to download $url`nCheck that '$Version' is a real forgo release for $goos/$goarch."
-        exit 1
+    # GitHub occasionally serves a transient error (e.g. 503) for a release
+    # that's still propagating, so retry a few times with backoff before
+    # giving up.
+    $maxAttempts = 5
+    $downloaded = $false
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            $ProgressPreference = "SilentlyContinue" # large-file downloads are much faster without the progress UI
+            Invoke-WebRequest -Uri $url -OutFile $tmpZip -UseBasicParsing
+            $downloaded = $true
+            break
+        } catch {
+            if ($attempt -eq $maxAttempts) {
+                Write-Error "failed to download $url after $maxAttempts attempts`nCheck that '$Version' is a real forgo release for $goos/$goarch."
+                exit 1
+            }
+            Write-Host "warning: download attempt $attempt/$maxAttempts failed, retrying..."
+            Start-Sleep -Seconds ($attempt * 2)
+        }
     }
+    if (-not $downloaded) { exit 1 }
 
     if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -eq 0) {
         Write-Error "download of $url produced an empty file; try again"
