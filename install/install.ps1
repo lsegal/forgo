@@ -17,10 +17,12 @@ $Repo = if ($env:FORGO_REPO) { $env:FORGO_REPO } else { "lsegal/forgo" }
 $InstallDir = if ($env:FORGO_INSTALL_DIR) { $env:FORGO_INSTALL_DIR } else { Join-Path $HOME ".forgo" }
 
 $goos = "windows"
-$archRaw = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+# $env:PROCESSOR_ARCHITEW6432 is set instead of PROCESSOR_ARCHITECTURE when running a
+# 32-bit process (e.g. 32-bit PowerShell) under WOW64 on 64-bit Windows.
+$archRaw = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($archRaw) {
-    "X64" { $goarch = "amd64" }
-    "Arm64" { $goarch = "arm64" }
+    "AMD64" { $goarch = "amd64" }
+    "ARM64" { $goarch = "arm64" }
     default {
         Write-Error "unsupported architecture: $archRaw"
         exit 1
