@@ -131,6 +131,9 @@ func (w walker) node(n Node) {
 	case *ParenExpr:
 		w.node(n.X)
 
+	case *TryExpr:
+		w.node(n.X)
+
 	case *SelectorExpr:
 		w.node(n.X)
 		w.node(n.Sel)
@@ -250,6 +253,9 @@ func (w walker) node(n Node) {
 		if n.Results != nil {
 			w.node(n.Results)
 		}
+
+	case *ThrowStmt:
+		w.node(n.X)
 
 	case *IfStmt:
 		if n.Init != nil {

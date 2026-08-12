@@ -4,14 +4,14 @@ import "errors"
 
 func makeThing2(s string) (*Thing, error) {
 	if s == "" {
-		return nil, errors.New("empty")
+		throw errors.New("empty")
 	}
 	return &Thing{name: s}, nil
 }
 
 func (t *Thing) validated() (*Thing, error) {
 	if t.name == "bad" {
-		return nil, errors.New("bad thing 2")
+		throw "bad thing 2"
 	}
 	return t, nil
 }

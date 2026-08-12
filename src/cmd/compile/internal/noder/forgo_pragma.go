@@ -29,10 +29,11 @@ func (p *pragmas) ForgoComptime() bool { return p != nil && p.IsComptime }
 func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 
 // forgoTransform rewrites every forgo-specific construct (macro calls, the
-// ? operator) found across noders' parsed files into ordinary syntax the
-// rest of the compiler already understands. It must run after parsing and
-// before type checking.
+// throw statement, the ? operator) found across noders' parsed files into
+// ordinary syntax the rest of the compiler already understands. It must
+// run after parsing and before type checking.
 func forgoTransform(m posMap, noders []*noder) {
 	forgoExpandMacros(noders)
+	forgoLowerThrow(m, noders)
 	forgoLowerTry(m, noders)
 }

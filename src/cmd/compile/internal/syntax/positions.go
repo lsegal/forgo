@@ -301,6 +301,8 @@ func EndPos(n Node) Pos {
 				continue
 			}
 			return n.Pos()
+		case *ThrowStmt:
+			m = n.X
 		case *IfStmt:
 			if n.Else != nil {
 				m = n.Else

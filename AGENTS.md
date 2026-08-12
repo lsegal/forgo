@@ -4,15 +4,15 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the 1.26.0 release — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands three extra
+binary (built under `bin/`, `pkg/tool/`) that understands four extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `//forgo:comptime`, or `//forgo:macro`. If unsure, check for a
-forgo `GOROOT` (a directory with `src/cmd/compile/internal/forgo`).
+uses `?`, `throw`, `//forgo:comptime`, or `//forgo:macro`. If unsure, check
+for a forgo `GOROOT` (a directory with `src/cmd/compile/internal/forgo`).
 
 ## Rule 1: propagate errors with `?`, not manual `if err != nil` chains
 
@@ -80,6 +80,71 @@ extra context via `fmt.Errorf("...: %w", err)`, log it, retry, etc.).
 If a function's error result isn't named and can't be renamed (e.g. it's
 part of a public API you can't change), keep using manual `if err != nil`
 there — don't contort the signature just to use `?`.
+
+## Rule 1b: bail out early with `throw`, not `return zero..., err`
+
+**Default to this** for guard clauses that fail a function outright,
+instead of spelling out every leading zero value by hand.
+
+```go
+// Write this:
+func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		throw errors.New("empty")
+	}
+	return &Thing{name: s}, nil
+}
+
+// Or, equivalently, for a plain message:
+func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		throw "empty"
+	}
+	return &Thing{name: s}, nil
+}
+
+// Not this:
+func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		return nil, errors.New("empty")
+	}
+	return &Thing{name: s}, nil
+}
+```
+
+`throw EXPR` lowers to a `return` that passes `EXPR` through as the last
+(error) result and fills every other result with its zero value — `throw
+errors.New("empty")` and `throw "empty"` are exactly equivalent; the
+second is sugar for the first. Unlike `?`, `throw` does **not** require a
+named error result — it works in any function whose last result's type is
+spelled `error`.
+
+Constraints:
+- Every result before the last must have a **syntactically obvious** zero
+  value: pointer, slice, map, chan, func, interface (including `any` and
+  `error`), or a basic type (`string`, `bool`, the numeric types). A named
+  struct/array/defined type isn't nil-able and can't be zeroed without a
+  type checker, so `throw` there is a compile error: `no default value for
+  <result>`. Use a manual `return` in that case.
+- `throw "literal text"` requires the file to already `import "errors"`
+  (however it's named, or via `.`) — the compiler can't add an import for
+  you after the fact, since `go build` computes a package's dependencies
+  from the literal source text before the compiler ever runs.
+- `throw` is a **contextual** keyword, not a reserved word: `throw(x)`,
+  `throw.field`, `throw = x`, and a bare `throw` used as an identifier
+  (e.g. `runtime.throw`) are unaffected and parse exactly as they did
+  before. Only `throw` immediately followed by a new operand (another
+  name or a literal) is read as the `throw` statement.
+
+**Never hand-write `return nil, errors.New(...)` (or any other
+`return zero..., err`-shaped statement that only exists to fail the
+function out) when the last result is `error`** — that's exactly what
+`throw` replaces. The only time a manual `return ..., err` belongs in a
+forgo codebase is when `err` isn't a *new* error being introduced right
+there (i.e. it's a value already bound to a variable from earlier in the
+function) — that's not what `throw` is for; see Rule 1 for that case
+(`?`), or write the manual `return` if `?` doesn't apply either (e.g. the
+error result isn't named).
 
 ## Rule 2: use `//forgo:comptime` for values that can be computed once, at compile time
 
@@ -162,6 +227,7 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 |----------------------------------------------------------------------|-----------------------------|
 | Bubble up an error from a call unchanged                           | `?`                        |
 | Bubble up an error with added context (`fmt.Errorf("...: %w", err)`) | manual `if err != nil`     |
+| Fail a function outright with a new error                          | `throw`                    |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//forgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//forgo:macro`              |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
