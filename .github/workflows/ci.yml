@@ -130,6 +130,11 @@ jobs:
       # bug that only shows up when actually run) fails CI instead of
       # being discovered by a user. Requires at least one prior release to
       # exist, same as any real user running these scripts would.
+      #
+      # Deliberately uses a trivial inline program, not examples/*, since
+      # the latest *published* release may predate toolchain-only changes
+      # on this branch (e.g. .fgo support) that the examples now rely on —
+      # this step tests the installer, not this branch's newest features.
       - name: Test install script (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -139,7 +144,16 @@ jobs:
           export FORGO_INSTALL_DIR="$RUNNER_TEMP/forgo-install-test"
           bash install/install.sh
           "$FORGO_INSTALL_DIR/bin/forgo" version
-          (cd examples/mini && GOROOT="$FORGO_INSTALL_DIR" GOTOOLCHAIN=local "$FORGO_INSTALL_DIR/bin/forgo" run .)
+          smoke="$RUNNER_TEMP/forgo-install-smoke"
+          mkdir -p "$smoke"
+          cat > "$smoke/main.go" <<'EOF'
+          package main
+
+          import "fmt"
+
+          func main() { fmt.Println("ok") }
+          EOF
+          (cd "$smoke" && GOROOT="$FORGO_INSTALL_DIR" GOTOOLCHAIN=local GO111MODULE=off "$FORGO_INSTALL_DIR/bin/forgo" run .)
 
       - name: Test install script (Windows)
         if: runner.os == 'Windows'
@@ -151,9 +165,19 @@ jobs:
           & .\install\install.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:FORGO_INSTALL_DIR\bin\forgo.exe" version
-          Push-Location examples\mini
+          $smoke = "$env:RUNNER_TEMP\forgo-install-smoke"
+          New-Item -ItemType Directory -Force $smoke | Out-Null
+          @"
+          package main
+
+          import "fmt"
+
+          func main() { fmt.Println("ok") }
+          "@ | Set-Content -Path "$smoke\main.go"
+          Push-Location $smoke
           $env:GOROOT = $env:FORGO_INSTALL_DIR
           $env:GOTOOLCHAIN = "local"
+          $env:GO111MODULE = "off"
           & "$env:FORGO_INSTALL_DIR\bin\forgo.exe" run .
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Pop-Location
