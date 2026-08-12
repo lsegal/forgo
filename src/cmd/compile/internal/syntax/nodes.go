@@ -424,6 +424,16 @@ type (
 		stmt
 	}
 
+	// forgo: STMT if COND
+	// Postfix shorthand for `if COND { STMT }`. Stmt is one of the
+	// one-line statement kinds that don't introduce new bindings into the
+	// surrounding scope (see the parser's maybePostfixIf).
+	PostfixIfStmt struct {
+		Stmt Stmt
+		Cond Expr
+		stmt
+	}
+
 	ForStmt struct {
 		Init SimpleStmt // incl. *RangeClause
 		Cond Expr

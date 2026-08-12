@@ -2,13 +2,15 @@
 
 `forgo` is a fork of Go (currently synced to the 1.26.0 release) that adds
 Nim-style compile-time execution and AST macros, plus Rust-style `?`
-error-propagation and `throw` for failing a function out with a new error.
+error-propagation, `throw` for failing a function out with a new error, and
+a Ruby/Perl-style postfix `if` for one-line guard clauses.
 
 Using a coding agent on a forgo codebase? Point it at [AGENTS.md](AGENTS.md)
-— it tells the agent when to reach for `?`, `throw`, `//forgo:comptime`, and
-`//forgo:macro` instead of plain-Go idioms, including the rule that a
-forgo codebase should never hand-write `return ..., err` just to propagate
-or introduce an error — that's what `?` and `throw` are for.
+— it tells the agent when to reach for `?`, `throw`, postfix `if`,
+`//forgo:comptime`, and `//forgo:macro` instead of plain-Go idioms,
+including the rule that a forgo codebase should never hand-write `return
+..., err` just to propagate or introduce an error — that's what `?` and
+`throw` are for.
 
 ## Installing a prebuilt release
 
@@ -260,6 +262,52 @@ func makeThing(s string) (*Thing, error) {
 See [examples/tryop/chain.fgo](examples/tryop/chain.fgo) for a runnable
 version using both `throw` forms.
 
+### Postfix `if` — one-line guard clauses
+
+`STMT if COND` is shorthand for `if COND { STMT }`, Ruby/Perl-style — useful
+for the kind of one-line guard clause `throw` is often used in:
+
+```go
+func check(s string) (n int, err error) {
+	throw "empty" if s == ""     // same as: if s == "" { throw "empty" }
+	return len(s), nil
+}
+```
+
+It isn't limited to `throw` — it works as a modifier on any statement kind
+that doesn't introduce a new binding into the surrounding scope:
+
+```go
+continue if i%2 == 0
+total += i if want(i)
+return errors.New("bad") if x < 0
+```
+
+- Eligible statement kinds: an expression statement, a channel send, a
+  plain (non-`:=`) assignment (including `++`/`--`), `return`, `throw`, and
+  `break`/`continue`/`goto`.
+- `x := f() if cond` is **not** allowed — wrapping a short variable
+  declaration in an implicit block would silently shrink its scope to just
+  that block, which is exactly the kind of subtle bug postfix `if` should
+  never introduce. Use the ordinary block form (`if cond { x := f() }`)
+  when you need to declare inside the guard.
+- `fallthrough if cond` is not allowed either, since `fallthrough` must
+  remain the last statement of its `switch` case, not the body of a
+  synthesized `if`.
+- Unambiguous by construction: a statement must always be followed by `;`
+  (explicit, or automatically inserted at a newline) before the next
+  statement can begin, so `if` appearing immediately after a just-completed
+  statement on the same line was always a syntax error before — there's no
+  existing program this could misparse.
+- Lowered to a plain `if COND { STMT }` by
+  [`cmd/compile/internal/noder/forgo_postfixif.go`](src/cmd/compile/internal/noder/forgo_postfixif.go),
+  before `throw`/`?` lowering (so those two passes still see the wrapped
+  statement as an ordinary one inside a regular `if`) and before type
+  checking.
+
+See [examples/tryop/postfixif.fgo](examples/tryop/postfixif.fgo) for a
+runnable version.
+
 ## Versioning
 
 forgo has its own version, independent of the golang/go release it's synced
@@ -314,8 +362,8 @@ existing Go source as possible, so those merges stay conflict-free:
 
 - **New files carry the logic.** [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)
   (the comptime/macro interpreter), `cmd/compile/internal/noder/forgo_try.go`,
-  `forgo_throw.go`, `forgo_pragma.go`, `forgo_macro.go`, and
-  `cmd/compile/internal/types2/forgo.go` are all new files upstream will
+  `forgo_throw.go`, `forgo_postfixif.go`, `forgo_pragma.go`, `forgo_macro.go`,
+  and `cmd/compile/internal/types2/forgo.go` are all new files upstream will
   never touch.
 - **Existing files get single-line hooks, not inline logic.** E.g.
   `types2/decl.go`'s `constDecl` gains exactly one `if` calling
@@ -340,9 +388,11 @@ existing Go source as possible, so those merges stay conflict-free:
 The full forgo-specific diff against upstream is genuinely small: the `?`
 token/parsing (`syntax/{tokens,scanner,parser,nodes,printer}.go`), the
 `throw` statement parsing (`syntax/{nodes,parser,positions,printer,walk}.go`),
-the `//forgo:` pragma prefix (`syntax/scanner.go`, `syntax/parser.go`), the
-`ForgoPragma` interface (`syntax/syntax.go`), and the hooks described above.
-Run `git log --oneline` to see exactly which commits these are.
+postfix `if` parsing (same five `syntax/` files, plus `noder/forgo_postfixif.go`
+for lowering), the `//forgo:` pragma prefix (`syntax/scanner.go`,
+`syntax/parser.go`), the `ForgoPragma` interface (`syntax/syntax.go`), and
+the hooks described above. Run `git log --oneline` to see exactly which
+commits these are.
 
 ## Implementation notes / where to look
 
@@ -365,6 +415,10 @@ Run `git log --oneline` to see exactly which commits these are.
   lowers `ThrowStmt` (the `throw` statement) into an ordinary `return`,
   run before `forgo_try.go` (a thrown expression may itself contain `?`)
   and before type-checking.
+- [`src/cmd/compile/internal/noder/forgo_postfixif.go`](src/cmd/compile/internal/noder/forgo_postfixif.go):
+  lowers `PostfixIfStmt` (`STMT if COND`) into an ordinary `if COND { STMT
+  }`, run before `forgo_throw.go`/`forgo_try.go` (the wrapped statement may
+  itself be a `throw` or contain `?`) and before type-checking.
 - [`src/cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo): the
   interpreter shared by comptime evaluation and macro expansion.
 - [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):

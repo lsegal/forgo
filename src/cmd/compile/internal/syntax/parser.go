@@ -2613,6 +2613,65 @@ func (p *parser) stmtOrNil() Stmt {
 		defer p.trace("stmt " + p.tok.String())()
 	}
 
+	return p.maybePostfixIf(p.stmtOrNilBase())
+}
+
+// maybePostfixIf recognizes the forgo postfix-if statement modifier: a
+// subset of one-line statement kinds, immediately followed (with no
+// intervening ";") by "if" and a condition, on a single line:
+//
+//	PostfixIfStmt = SimpleStmtOneLiner "if" Expression .
+//
+// This can never be ambiguous with existing Go syntax: a statement must
+// always be followed by ";" (explicit, or automatically inserted at a
+// newline) before the next statement can begin, so "if" appearing right
+// after a just-completed statement, on the same line, was previously
+// always a syntax error -- there's no existing program this could
+// misparse.
+//
+// Only statement kinds that don't introduce new bindings into the
+// surrounding scope are eligible: wrapping `x := f()` as `if cond { x :=
+// f() }` would silently shrink x's scope to just that block, so a `:=`
+// AssignStmt is excluded (plain `=` is fine, since it doesn't declare
+// anything). `fallthrough` is excluded too, since it must remain the last
+// statement of its switch case, not the body of a synthesized `if`.
+func (p *parser) maybePostfixIf(s Stmt) Stmt {
+	if s == nil || p.tok != _If {
+		return s
+	}
+	switch x := s.(type) {
+	case *ExprStmt, *SendStmt, *ReturnStmt, *ThrowStmt:
+		// always eligible
+	case *AssignStmt:
+		if x.Op == Def {
+			return s
+		}
+	case *BranchStmt:
+		if x.Tok == _Fallthrough {
+			return s
+		}
+	default:
+		return s
+	}
+
+	if trace {
+		defer p.trace("postfixif")()
+	}
+
+	p.next() // consume "if"
+	cond := p.expr()
+
+	ps := new(PostfixIfStmt)
+	ps.pos = s.Pos()
+	ps.Stmt = s
+	ps.Cond = cond
+	return ps
+}
+
+// stmtOrNilBase parses a single statement, without checking for a
+// trailing forgo postfix-if modifier (see maybePostfixIf, applied by the
+// stmtOrNil wrapper above).
+func (p *parser) stmtOrNilBase() Stmt {
 	// Most statements (assignments) start with an identifier;
 	// look for it first before doing anything more expensive.
 	if p.tok == _Name {
