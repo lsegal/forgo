@@ -1,0 +1,51 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+// checkPostfix is the postfix-if version of the guard clause makeThing2
+// (in chain.fgo) writes with a block: `throw EXPR if COND` instead of
+// `if COND { throw EXPR }`.
+func checkPostfix(s string) (n int, err error) {
+	throw "empty" if s == ""
+	n = len(s)
+	return
+}
+
+func classify(x int) string {
+	return "negative" if x < 0
+	return "zero" if x == 0
+	return "positive"
+}
+
+func sumOdds(upto int) int {
+	total := 0
+	for i := 0; i < upto; i++ {
+		continue if i%2 == 0
+		total += i
+	}
+	return total
+}
+
+func firstError(errs []error) error {
+	for _, e := range errs {
+		return e if e != nil
+	}
+	return nil
+}
+
+var errBoom = errors.New("boom")
+
+func runPostfixIfDemo() {
+	n, err := checkPostfix("hi")
+	fmt.Println("checkPostfix(hi):", n, err)
+	_, err = checkPostfix("")
+	fmt.Println("checkPostfix(empty):", err)
+	fmt.Println("classify(-3):", classify(-3))
+	fmt.Println("classify(0):", classify(0))
+	fmt.Println("classify(3):", classify(3))
+	fmt.Println("sumOdds(10):", sumOdds(10))
+	fmt.Println("firstError([nil, boom]):", firstError([]error{nil, errBoom}))
+}

@@ -1460,6 +1460,11 @@ func (p *printer) stmt(stmt ast.Stmt, nextIsRBrace bool) {
 		p.print(&ast.Ident{NamePos: s.Throw, Name: "throw"}, blank)
 		p.expr(s.X)
 
+	case *ast.PostfixIfStmt:
+		p.stmt(s.Stmt, false)
+		p.print(blank, token.IF, blank)
+		p.expr(s.Cond)
+
 	case *ast.BranchStmt:
 		p.print(s.Tok)
 		if s.Label != nil {

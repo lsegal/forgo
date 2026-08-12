@@ -4,15 +4,16 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the 1.26.0 release — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands four extra
+binary (built under `bin/`, `pkg/tool/`) that understands five extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `throw`, `//forgo:comptime`, or `//forgo:macro`. If unsure, check
-for a forgo `GOROOT` (a directory with `src/cmd/compile/internal/forgo`).
+uses `?`, `throw`, postfix `if`, `//forgo:comptime`, or `//forgo:macro`. If
+unsure, check for a forgo `GOROOT` (a directory with
+`src/cmd/compile/internal/forgo`).
 
 ## Rule 1: propagate errors with `?`, not manual `if err != nil` chains
 
@@ -146,6 +147,56 @@ function) — that's not what `throw` is for; see Rule 1 for that case
 (`?`), or write the manual `return` if `?` doesn't apply either (e.g. the
 error result isn't named).
 
+## Rule 1c: collapse a one-statement guard into postfix `if`
+
+**Default to this** when a guard clause's body is a single eligible
+statement — most often `throw`, `return`, or `continue`/`break` — instead
+of writing out the block form.
+
+```go
+// Write this:
+func check(s string) (n int, err error) {
+	throw "empty" if s == ""
+	n = len(s)
+	return
+}
+
+// Not this:
+func check(s string) (n int, err error) {
+	if s == "" {
+		throw "empty"
+	}
+	n = len(s)
+	return
+}
+```
+
+`STMT if COND` is exactly equivalent to `if COND { STMT }` — it's parsed
+and lowered to that form before type-checking, so there's no behavioral
+difference, only a more compact guard clause.
+
+Eligible statement kinds: an expression statement, a channel send, a plain
+(non-`:=`) assignment (including `++`/`--`), `return`, `throw`, and
+`break`/`continue`/`goto`.
+
+Constraints:
+- **Never** use it for a short variable declaration (`x := f() if cond`) —
+  that's a compile error, and intentionally so: wrapping `:=` in an
+  implicit block would silently shrink the new variable's scope to just
+  that block. Use the block form (`if cond { x := f() }`) instead, or, if
+  the variable needs to outlive the guard, declare it above the guard and
+  assign inside it (`var x T; x = f() if cond`).
+- **Never** use it for `fallthrough` — it must remain the literal last
+  statement of its `switch` case, not the body of a synthesized `if`.
+- Only reach for it when the guard body really is one statement. Don't
+  contort two-or-more-statement bodies to fit — use the ordinary block
+  form there; postfix `if` is a compaction, not a control-flow rewrite you
+  should chase for its own sake.
+- It composes with `throw` and `?`: `throw "empty" if s == ""` and
+  `x := f()? if cond` (the `?` inside the guarded statement) both lower
+  correctly, in that order (postfix `if` unwraps first, so `throw`/`?`
+  lowering see an ordinary statement inside a regular `if` afterward).
+
 ## Rule 2: use `//forgo:comptime` for values that can be computed once, at compile time
 
 If you're computing a `const` from a pure function of literal/constant
@@ -228,6 +279,7 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 | Bubble up an error from a call unchanged                           | `?`                        |
 | Bubble up an error with added context (`fmt.Errorf("...: %w", err)`) | manual `if err != nil`     |
 | Fail a function outright with a new error                          | `throw`                    |
+| Guard clause whose body is one statement (`throw`, `return`, `continue`, ...) | postfix `if` (`STMT if COND`) |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//forgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//forgo:macro`              |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
@@ -279,6 +331,9 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/forgo/` — the comptime/macro interpreter.
 - `src/cmd/compile/internal/noder/forgo_try.go` — lowers `?` to plain
   `:=`/`if`/`return` statements.
+- `src/cmd/compile/internal/noder/forgo_postfixif.go` — lowers postfix
+  `if` (`STMT if COND`) to a plain `if COND { STMT }`; runs before
+  `forgo_throw.go`/`forgo_try.go`.
 - `src/cmd/compile/internal/noder/forgo_pragma.go` — parses
   `//forgo:comptime`/`//forgo:macro`.
 - `src/cmd/compile/internal/noder/forgo_macro.go` — macro expansion pass.

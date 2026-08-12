@@ -742,6 +742,16 @@ type (
 		Else Stmt // else branch; or nil
 	}
 
+	// A PostfixIfStmt node represents a forgo "STMT if COND" statement:
+	// postfix shorthand for `if COND { STMT }`. Stmt is one of the
+	// one-line statement kinds that don't introduce new bindings into the
+	// surrounding scope (see the parser's maybePostfixIf).
+	PostfixIfStmt struct {
+		Stmt Stmt
+		If   token.Pos // position of "if" keyword
+		Cond Expr
+	}
+
 	// A CaseClause represents a case of an expression or type switch statement.
 	CaseClause struct {
 		Case  token.Pos // position of "case" or "default" keyword
@@ -848,8 +858,10 @@ func (s *ReturnStmt) End() token.Pos {
 	}
 	return s.Return + 6 // len("return")
 }
-func (s *ThrowStmt) Pos() token.Pos { return s.Throw }
-func (s *ThrowStmt) End() token.Pos { return s.X.End() }
+func (s *ThrowStmt) Pos() token.Pos     { return s.Throw }
+func (s *ThrowStmt) End() token.Pos     { return s.X.End() }
+func (s *PostfixIfStmt) Pos() token.Pos { return s.Stmt.Pos() }
+func (s *PostfixIfStmt) End() token.Pos { return s.Cond.End() }
 func (s *BranchStmt) End() token.Pos {
 	if s.Label != nil {
 		return s.Label.End()
@@ -903,6 +915,7 @@ func (*GoStmt) stmtNode()         {}
 func (*DeferStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()     {}
 func (*ThrowStmt) stmtNode()      {}
+func (*PostfixIfStmt) stmtNode()  {}
 func (*BranchStmt) stmtNode()     {}
 func (*BlockStmt) stmtNode()      {}
 func (*IfStmt) stmtNode()         {}

@@ -2066,6 +2066,10 @@ func (p *parser) parseDeferStmt() ast.Stmt {
 	return &ast.DeferStmt{Defer: pos, Call: call}
 }
 
+// parseReturnStmt parses a "return" statement, up to but not including its
+// terminating ";" -- forgo: the caller must apply maybePostfixIf and then
+// call expectSemi itself, since a postfix "if" modifier (if present) has
+// to be consumed before the semicolon check.
 func (p *parser) parseReturnStmt() *ast.ReturnStmt {
 	if p.trace {
 		defer un(trace(p, "ReturnStmt"))
@@ -2077,11 +2081,13 @@ func (p *parser) parseReturnStmt() *ast.ReturnStmt {
 	if p.tok != token.SEMICOLON && p.tok != token.RBRACE {
 		x = p.parseList(true)
 	}
-	p.expectSemi()
 
 	return &ast.ReturnStmt{Return: pos, Results: x}
 }
 
+// parseBranchStmt parses a break/continue/goto/fallthrough statement, up
+// to but not including its terminating ";" -- see parseReturnStmt's forgo
+// comment above for why.
 func (p *parser) parseBranchStmt(tok token.Token) *ast.BranchStmt {
 	if p.trace {
 		defer un(trace(p, "BranchStmt"))
@@ -2092,9 +2098,54 @@ func (p *parser) parseBranchStmt(tok token.Token) *ast.BranchStmt {
 	if tok == token.GOTO || ((tok == token.CONTINUE || tok == token.BREAK) && p.tok == token.IDENT) {
 		label = p.parseIdent()
 	}
-	p.expectSemi()
 
 	return &ast.BranchStmt{TokPos: pos, Tok: tok, Label: label}
+}
+
+// maybePostfixIf recognizes the forgo postfix-if statement modifier: a
+// subset of one-line statement kinds, immediately followed (with no
+// intervening ";") by "if" and a condition, on a single line:
+//
+//	PostfixIfStmt = SimpleStmtOneLiner "if" Expression .
+//
+// This can never be ambiguous with existing Go syntax: a statement must
+// always be followed by ";" (explicit, or automatically inserted at a
+// newline) before the next statement can begin, so "if" appearing right
+// after a just-completed statement, on the same line, was previously
+// always a syntax error -- there's no existing program this could
+// misparse. Must stay in sync with the analogous check in
+// cmd/compile/internal/syntax/parser.go.
+//
+// Only statement kinds that don't introduce new bindings into the
+// surrounding scope are eligible: wrapping `x := f()` as `if cond { x :=
+// f() }` would silently shrink x's scope to just that block, so a `:=`
+// AssignStmt is excluded (plain `=`/compound assignment is fine, since it
+// doesn't declare anything). `fallthrough` is excluded too, since it must
+// remain the last statement of its switch case, not the body of a
+// synthesized `if`.
+func (p *parser) maybePostfixIf(s ast.Stmt) ast.Stmt {
+	if s == nil || p.tok != token.IF {
+		return s
+	}
+	switch x := s.(type) {
+	case *ast.ExprStmt, *ast.SendStmt, *ast.IncDecStmt, *ast.ReturnStmt, *ast.ThrowStmt:
+		// always eligible
+	case *ast.AssignStmt:
+		if x.Tok == token.DEFINE {
+			return s
+		}
+	case *ast.BranchStmt:
+		if x.Tok == token.FALLTHROUGH {
+			return s
+		}
+	default:
+		return s
+	}
+
+	pos := p.pos
+	p.next() // consume "if"
+	cond := p.parseRhs()
+	return &ast.PostfixIfStmt{Stmt: s, If: pos, Cond: cond}
 }
 
 func (p *parser) makeExpr(s ast.Stmt, want string) ast.Expr {
@@ -2479,6 +2530,7 @@ func (p *parser) parseStmt() (s ast.Stmt) {
 		// parsed by parseSimpleStmt - don't expect a semicolon after
 		// them
 		if _, isLabeledStmt := s.(*ast.LabeledStmt); !isLabeledStmt {
+			s = p.maybePostfixIf(s)
 			p.expectSemi()
 		}
 	case token.GO:
@@ -2486,9 +2538,11 @@ func (p *parser) parseStmt() (s ast.Stmt) {
 	case token.DEFER:
 		s = p.parseDeferStmt()
 	case token.RETURN:
-		s = p.parseReturnStmt()
+		s = p.maybePostfixIf(p.parseReturnStmt())
+		p.expectSemi()
 	case token.BREAK, token.CONTINUE, token.GOTO, token.FALLTHROUGH:
-		s = p.parseBranchStmt(p.tok)
+		s = p.maybePostfixIf(p.parseBranchStmt(p.tok))
+		p.expectSemi()
 	case token.LBRACE:
 		s = p.parseBlockStmt()
 		p.expectSemi()

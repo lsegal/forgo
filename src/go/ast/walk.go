@@ -208,6 +208,10 @@ func Walk(v Visitor, node Node) {
 	case *ThrowStmt:
 		Walk(v, n.X)
 
+	case *PostfixIfStmt:
+		Walk(v, n.Stmt)
+		Walk(v, n.Cond)
+
 	case *BranchStmt:
 		if n.Label != nil {
 			Walk(v, n.Label)
