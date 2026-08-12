@@ -54,6 +54,15 @@ func ValidTypeForConst(t *types.Type, v constant.Value) bool {
 		return t.IsFloat()
 	case constant.Complex:
 		return t.IsComplex()
+	case constant.Composite:
+		// A forgo composite constant (struct/map/slice/array), folded by
+		// the comptime interpreter -- see go/constant's Composite kind and
+		// cmd/compile/internal/types2's forgoEvalConstCall.
+		switch t.Kind() {
+		case types.TSTRUCT, types.TARRAY, types.TSLICE, types.TMAP:
+			return true
+		}
+		return false
 	}
 
 	base.Fatalf("unexpected constant kind: %v", v)

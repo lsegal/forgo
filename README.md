@@ -366,24 +366,20 @@ type Schema struct {
 }
 
 const cfgJSON = json.Marshal(Schema{Name: "svc", Port: 8080})
-const name = json.Unmarshal[Schema](embed.ReadFile("schema.json")).Name
-const port = json.Unmarshal[Schema](embed.ReadFile("schema.json")).Port
+const schema = json.Unmarshal[Schema](embed.ReadFile("schema.json"))
+
+// schema is a real compile-time constant of type Schema -- see "Non-scalar
+// (struct/slice/map) consts" below -- so schema.Name, schema.Port, etc.
+// are themselves constants, usable anywhere Go requires one.
+const port = schema.Port
 ```
 
-A Go `const` can only ever hold a scalar (bool/number/string) — never a
-struct, slice, or map — so `Unmarshal[T](s)` itself can't be a `const`
-initializer on its own; chaining a field selector or index on top of it
-(`.Name`, `.Port`, `[0]`, `["key"]`, or several in a row) down to a scalar
-is what the compiler can fold. `Marshal`, by contrast, always produces a
-`string`, so it folds directly.
-
-This is the one place the comptime interpreter goes beyond scalars: to
-evaluate a struct/map/slice composite literal (for `Marshal`) or walk a
-field/index chain off of an `Unmarshal` result, it represents structs and
+To evaluate a struct/map/slice composite literal (for `Marshal`) or build
+the result of `Unmarshal`, the comptime interpreter represents structs and
 maps as an ordered `field name -> value` mapping and slices/arrays as an
-element list, entirely within the single expression tree rooted at the
-`const` initializer — it still doesn't support these as general local
-variables inside a `//fgo:comptime` function body (no closures,
+element list — see "Non-scalar (struct/slice/map) consts" below for how
+that folds into a real `const`. This still isn't available as general
+local variables inside a `//fgo:comptime` function body (no closures,
 generics, or method calls there either). `Unmarshal` is generic
 (`Unmarshal[T any](s string) T`) purely so real Go type-checking accepts
 `.Field` on its result with a concrete field to point at; the interpreter
@@ -397,6 +393,58 @@ exported fields).
 See [examples/schemajson](examples/schemajson/main.fgo) for a runnable
 version that loads and unmarshals a `schema.json` file entirely at compile
 time.
+
+### Non-scalar (struct/slice/map) consts
+
+Ordinary Go restricts `const` to bool/numeric/string values — a struct,
+slice, or map can never be a constant, in any Go compiler, because
+`go/constant.Value` (the type every constant is represented as, all the
+way through IR generation and export data) has no case for one. forgo
+changes that: `go/constant` gets a new `Composite` kind alongside
+Bool/String/Int/Float/Complex, representing a struct/map (an ordered field
+name → value mapping) or a slice/array (an ordered element list), and the
+compiler's own constant machinery — type-checking, export data encoding,
+and static-data code generation — has been taught to carry it through. In
+practice, this is what lets `comptime/json`'s `Unmarshal[T]` fold into a
+real, named constant instead of only a one-shot expression:
+
+```go
+type Schema struct {
+	Name string
+	Port int
+	Tags []string
+}
+
+const schema = json.Unmarshal[Schema](embed.ReadFile("schema.json"))
+
+// schema is a genuine compile-time constant, referenceable anywhere in the
+// package, not just inside the expression that produced it.
+const name = schema.Name
+var proof [schema.Port % 16]byte // usable as an array length, like any const
+```
+
+`schema.Field` and `schema.Tags[0]` are themselves constants — the field
+name/index access is folded by the type checker the moment it sees a
+selector or index applied to a Composite-kind constant, before the result
+ever reaches IR — so they compose with everything an ordinary scalar
+`const` already does: sizing an array, seeding another `const`, a `case`
+label, and so on.
+
+**Current limits**, both bounded and enforced with a real compiler
+diagnostic rather than a crash:
+
+- A struct-shaped composite const (no slice/map fields) can also be used
+  directly as an ordinary runtime value (`fmt.Println(schema)`, passed to
+  a function, etc.) — the compiler lowers it to static data at each
+  reference, field by field.
+- A composite const with a slice or map field can't (yet) be used bare
+  this way — only through field/index access down to a scalar or a
+  further struct, as in `schema.Tags[0]` or `const name = schema.Name`
+  above. A slice needs a separately allocated backing array, and Go
+  doesn't statically lay out map data at all, so materializing either as
+  a plain value at an arbitrary reference site is unfinished; using one
+  where it isn't supported reports a specific compile error rather than
+  crashing.
 
 ## Versioning
 
@@ -514,15 +562,39 @@ commits these are.
   the native dispatch table (`nativeCall`) for `fmt.Sprintf`,
   `strconv.Itoa`, and the `comptime/embed`/`comptime/json` helpers — real
   functions special-cased by name rather than interpreted from source —
-  and the `objectVal`/`arrayVal` composite-value representation used to
-  evaluate a struct/map/slice literal or walk a field/index chain off a
-  `json.Unmarshal` result.
+  the `objectVal`/`arrayVal` composite-value representation used to
+  evaluate a struct/map/slice literal or a `json.Unmarshal` result, and
+  `ToConstant`, which converts one into a real `go/constant.Value`.
+- [`src/go/constant/value.go`](src/go/constant/value.go): the `Composite`
+  `Kind` and `compositeVal` type themselves — a struct/map (an ordered
+  field name → value mapping) or slice/array (an ordered element list)
+  represented as a real constant, alongside the ordinary
+  Bool/String/Int/Float/Complex kinds. See "Non-scalar (struct/slice/map)
+  consts" above.
+- [`src/internal/pkgbits/encoder.go`](src/internal/pkgbits/encoder.go) and
+  [`decoder.go`](src/internal/pkgbits/decoder.go): read/write a
+  `Composite` constant into the compiler's unified-IR bitstream (used even
+  for a single, non-cross-package build), recursively encoding each
+  field/element as its own `Value`.
 - [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):
   folds a `const` initializer that's a call (bare, package-qualified like
   `embed.ReadFile(...)`, or generic-instantiated like
   `json.Unmarshal[Config](...)`) or a field/index chain on top of one
   (`json.Unmarshal[Config](...).Name`), called from one line in `decl.go`'s
-  `constDecl`.
+  `constDecl`; `assignments.go`/`recording.go` accept a Composite-kind
+  constant where the type checker otherwise requires an ordinary
+  const-eligible (basic) type.
+- [`src/cmd/compile/internal/types2/call.go`](src/cmd/compile/internal/types2/call.go)
+  (`selector`) and [`index.go`](src/cmd/compile/internal/types2/index.go)
+  (`indexExpr`): fold `x.Field`/`x[i]` into a further constant when `x` is
+  a Composite-kind constant operand — this is what makes `schema.Port`
+  usable anywhere a constant is required, not just inside the expression
+  that produced `schema`.
+- [`src/cmd/compile/internal/staticdata/data.go`](src/cmd/compile/internal/staticdata/data.go)
+  (`InitConst`): writes a struct- or array-shaped Composite constant into
+  static memory field-by-field/element-by-element, so a struct-shaped
+  composite const (no slice/map fields) can be used directly as an
+  ordinary runtime value, not just folded further.
 - [`src/comptime/embed`](src/comptime/embed/embed.go): the `comptime/embed`
   package itself — `ReadFile`, `ReadDir`, `Exists`, etc.
 - [`src/comptime/json`](src/comptime/json/json.go): the `comptime/json`
@@ -540,10 +612,11 @@ commits these are.
   you need that.
 - A `//fgo:comptime` function body supports a deliberately small subset
   of Go (see above); no closures, generics, maps/slices, or method calls.
-  Struct/map/slice values (needed for `comptime/json`) only exist within a
-  single `const` initializer's expression tree — building a composite
-  literal or indexing into one inside an ordinary comptime function body
-  isn't supported.
+  Building a composite literal, or indexing into one, isn't supported
+  inside an ordinary comptime function body — only directly within a
+  `const` initializer's expression tree (see "Non-scalar
+  (struct/slice/map) consts" above for what that constant can then be
+  used for elsewhere).
 - `comptime/embed` and `comptime/json`'s helpers sidestep the small-subset
   limitation above by being executed natively rather than interpreted (see
   above), which is also why they're a fixed, hardcoded set rather than

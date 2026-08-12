@@ -886,6 +886,43 @@ func scalarInt(v Value, ctx string) int64 {
 	return n
 }
 
+// ToConstant converts v (whatever EvalExprValue produced: a scalar, or an
+// objectVal/arrayVal built by a composite literal or a call like
+// json.Unmarshal) into a real go/constant.Value, recursively, using
+// go/constant's Composite kind for objectVal/arrayVal. It's used by
+// types2's forgoEvalConstCall to fold a const initializer that evaluates
+// to a struct/map/slice, not just a scalar. It reports false if v is
+// something ToConstant doesn't know how to represent (in practice, this
+// shouldn't happen: every Value EvalExprValue can produce is one of the
+// cases below).
+func ToConstant(v Value) (constant.Value, bool) {
+	switch x := v.(type) {
+	case constant.Value:
+		return x, true
+	case objectVal:
+		fields := make(map[string]constant.Value, len(x.fields))
+		for k, fv := range x.fields {
+			cv, ok := ToConstant(fv)
+			if !ok {
+				return nil, false
+			}
+			fields[k] = cv
+		}
+		return constant.MakeCompositeStruct(x.keys, fields), true
+	case arrayVal:
+		elems := make([]constant.Value, len(x.elems))
+		for i, ev := range x.elems {
+			cv, ok := ToConstant(ev)
+			if !ok {
+				return nil, false
+			}
+			elems[i] = cv
+		}
+		return constant.MakeCompositeArray(elems), true
+	}
+	return nil, false
+}
+
 func nativeValue(v constant.Value) any {
 	switch v.Kind() {
 	case constant.Bool:

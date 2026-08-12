@@ -1,0 +1,35 @@
+package main
+
+import (
+	"comptime/embed"
+	"comptime/json"
+	"fmt"
+)
+
+// Schema mirrors schema.json's shape. comptime/json's Unmarshal matches
+// JSON keys against field names verbatim at compile time, so keep them
+// spelled the same as the JSON file's keys (see comptime/json's doc
+// comment) -- Go's usual exported-field convention already does that here.
+type Schema struct {
+	Name    string
+	Version string
+	Port    int
+	Tags    []string
+}
+
+// Every constant below reads schema.json (next to this source file) and
+// parses it with comptime/json, entirely at compile time: the JSON file
+// is never opened, and never parsed, at runtime.
+const schema = json.Unmarshal[Schema](embed.ReadFile("schema.json"))
+
+// port is a genuine compile-time constant: it can size an array, which
+// only accepts constant expressions.
+var proof [schema.Port % 16]byte
+
+func main() {
+	fmt.Println("name:", schema.Name)
+	fmt.Println("version:", schema.Version)
+	fmt.Println("port:", schema.Port)
+	fmt.Println("firstTag:", schema.Tags[0])
+	fmt.Println("array sized by port%16:", len(proof))
+}

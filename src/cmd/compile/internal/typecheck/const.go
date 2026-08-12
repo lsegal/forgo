@@ -226,6 +226,12 @@ func operandType(op ir.Op, t *types.Type) *types.Type {
 // also allowed.
 func ConvertVal(v constant.Value, t *types.Type, explicit bool) constant.Value {
 	switch ct := v.Kind(); ct {
+	case constant.Composite:
+		// A forgo composite constant (struct/map/slice/array) is never
+		// converted -- it's produced already shaped for its declared type
+		// by the comptime interpreter (see cmd/compile/internal/forgo).
+		return v
+
 	case constant.Bool:
 		if t.IsBoolean() {
 			return v

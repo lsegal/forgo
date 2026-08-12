@@ -40,6 +40,11 @@ const (
 	Int
 	Float
 	Complex
+
+	// composite values (forgo extension: a struct/map or slice/array
+	// value, e.g. produced by a //forgo:comptime function or one of
+	// comptime/json's helpers evaluated at compile time)
+	Composite
 )
 
 // A Value represents the value of a Go constant.
@@ -269,6 +274,108 @@ func (ratVal) implementsValue()     {}
 func (intVal) implementsValue()     {}
 func (floatVal) implementsValue()   {}
 func (complexVal) implementsValue() {}
+
+// ----------------------------------------------------------------------------
+// Composite values (forgo extension)
+//
+// A compositeVal represents a struct/map-shaped or slice/array-shaped
+// constant: something a //forgo:comptime function (or one of
+// comptime/json's helpers) can produce and fold into a real `const`
+// declaration, alongside the ordinary scalar kinds above. It's either
+// array-shaped (elems set, keys/fields nil) or object-shaped (keys/fields
+// set, elems nil); never both.
+type compositeVal struct {
+	isArray bool
+	keys    []string // object-shaped: field/key names, in literal/decode order
+	fields  map[string]Value
+	elems   []Value // array-shaped: elements, in order
+}
+
+func (*compositeVal) Kind() Kind { return Composite }
+
+func (x *compositeVal) String() string { return x.ExactString() }
+
+func (x *compositeVal) ExactString() string {
+	var b strings.Builder
+	if x.isArray {
+		b.WriteByte('[')
+		for i, e := range x.elems {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(e.ExactString())
+		}
+		b.WriteByte(']')
+		return b.String()
+	}
+	b.WriteByte('{')
+	for i, k := range x.keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(k)
+		b.WriteByte(':')
+		b.WriteString(x.fields[k].ExactString())
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
+func (*compositeVal) implementsValue() {}
+
+// MakeCompositeStruct returns a Value of Kind Composite representing a
+// struct- or map-shaped constant, with the given fields in the given
+// (iteration/display) order. keys and fields must describe the same set
+// of names.
+func MakeCompositeStruct(keys []string, fields map[string]Value) Value {
+	return &compositeVal{keys: append([]string(nil), keys...), fields: fields}
+}
+
+// MakeCompositeArray returns a Value of Kind Composite representing a
+// slice- or array-shaped constant with the given elements, in order.
+func MakeCompositeArray(elems []Value) Value {
+	return &compositeVal{isArray: true, elems: append([]Value(nil), elems...)}
+}
+
+// CompositeIsArray reports whether v (which must be of Kind Composite) is
+// slice/array-shaped (true) or struct/map-shaped (false).
+func CompositeIsArray(v Value) bool {
+	x, ok := v.(*compositeVal)
+	return ok && x.isArray
+}
+
+// CompositeKeys returns the field/key names of v (which must be of Kind
+// Composite and struct/map-shaped), in order. It returns nil for an
+// array-shaped composite.
+func CompositeKeys(v Value) []string {
+	x, ok := v.(*compositeVal)
+	if !ok || x.isArray {
+		return nil
+	}
+	return x.keys
+}
+
+// CompositeField returns the value of key in v (which must be of Kind
+// Composite and struct/map-shaped), and whether key was present.
+func CompositeField(v Value, key string) (Value, bool) {
+	x, ok := v.(*compositeVal)
+	if !ok || x.isArray {
+		return nil, false
+	}
+	f, ok := x.fields[key]
+	return f, ok
+}
+
+// CompositeElems returns the elements of v (which must be of Kind
+// Composite and slice/array-shaped), in order. It returns nil for a
+// struct/map-shaped composite.
+func CompositeElems(v Value) []Value {
+	x, ok := v.(*compositeVal)
+	if !ok || !x.isArray {
+		return nil
+	}
+	return x.elems
+}
 
 func newInt() *big.Int     { return new(big.Int) }
 func newRat() *big.Rat     { return new(big.Rat) }

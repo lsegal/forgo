@@ -427,12 +427,36 @@ func (r *Decoder) Strings() []string {
 // bitstream.
 func (r *Decoder) Value() constant.Value {
 	r.Sync(SyncValue)
+	if r.Bool() {
+		return r.compositeValue()
+	}
 	isComplex := r.Bool()
 	val := r.scalar()
 	if isComplex {
 		val = constant.BinaryOp(val, token.ADD, constant.MakeImag(r.scalar()))
 	}
 	return val
+}
+
+// compositeValue decodes and returns a Kind-Composite constant.Value (see
+// Encoder.compositeValue).
+func (r *Decoder) compositeValue() constant.Value {
+	if r.Bool() {
+		n := r.Len()
+		elems := make([]constant.Value, n)
+		for i := range elems {
+			elems[i] = r.Value()
+		}
+		return constant.MakeCompositeArray(elems)
+	}
+	n := r.Len()
+	keys := make([]string, n)
+	fields := make(map[string]constant.Value, n)
+	for i := range keys {
+		keys[i] = r.String()
+		fields[keys[i]] = r.Value()
+	}
+	return constant.MakeCompositeStruct(keys, fields)
 }
 
 func (r *Decoder) scalar() constant.Value {

@@ -344,7 +344,64 @@ func InitConst(n *ir.Name, noff int64, c ir.Node, wid int) {
 		s.WriteAddr(base.Ctxt, noff, types.PtrSize, symdata, 0)
 		s.WriteInt(base.Ctxt, noff+int64(types.PtrSize), types.PtrSize, int64(len(i)))
 
+	case constant.Composite:
+		initConstComposite(n, noff, c)
+
 	default:
 		base.Fatalf("InitConst unhandled OLITERAL %v", c)
 	}
+}
+
+// initConstComposite writes a forgo composite constant (a struct or
+// [N]T array value folded by the comptime interpreter, see go/constant's
+// Composite kind) into static memory, recursing field-by-field/
+// element-by-element. Slice- and map-typed composite constants aren't
+// materializable this way (a slice needs a separately allocated backing
+// array; Go doesn't statically lay out map data at all) -- using one
+// directly as a value (rather than only folding a field/index access off
+// of it, which types2 already resolves to a plain scalar constant before
+// this ever runs) isn't supported yet.
+func initConstComposite(n *ir.Name, noff int64, c ir.Node) {
+	val := c.Val()
+	typ := c.Type()
+	switch {
+	case typ.IsStruct():
+		if constant.CompositeIsArray(val) {
+			base.Fatalf("InitConst: composite constant shape mismatch for struct %v", typ)
+		}
+		for i := 0; i < typ.NumFields(); i++ {
+			f := typ.Field(i)
+			fv, ok := constant.CompositeField(val, f.Sym.Name)
+			if !ok {
+				continue // zero value: static memory is already zeroed
+			}
+			writeConstField(n, noff+f.Offset, fv, f.Type)
+		}
+
+	case typ.IsArray():
+		if !constant.CompositeIsArray(val) {
+			base.Fatalf("InitConst: composite constant shape mismatch for array %v", typ)
+		}
+		elems := constant.CompositeElems(val)
+		elemType := typ.Elem()
+		width := elemType.Size()
+		for i, ev := range elems {
+			writeConstField(n, noff+int64(i)*width, ev, elemType)
+		}
+
+	default:
+		base.Fatalf("forgo: %v (a compile-time struct/map/slice/array constant) can't be used directly as a value here -- only field/index access on it (e.g. %v.Field, %v[i]) is supported", n, n, n)
+	}
+}
+
+// writeConstField writes a single field/element value (itself possibly a
+// nested composite) at the given offset, dispatching back through
+// InitConst-shaped logic for scalars.
+func writeConstField(n *ir.Name, off int64, v constant.Value, typ *types.Type) {
+	if v.Kind() == constant.Composite {
+		initConstComposite(n, off, ir.NewBasicLit(n.Pos(), typ, v))
+		return
+	}
+	lit := ir.NewBasicLit(n.Pos(), typ, v)
+	InitConst(n, off, lit, int(typ.Size()))
 }

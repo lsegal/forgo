@@ -795,6 +795,10 @@ func IsZero(n Node) bool {
 			return constant.StringVal(u) == ""
 		case constant.Bool:
 			return !constant.BoolVal(u)
+		case constant.Composite:
+			// A forgo composite constant (struct/map/slice/array) is
+			// never the kind of "zero" this is asking about.
+			return false
 		default:
 			return constant.Sign(u) == 0
 		}

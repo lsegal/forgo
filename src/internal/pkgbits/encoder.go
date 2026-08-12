@@ -346,11 +346,36 @@ func (w *Encoder) Strings(ss []string) {
 // bitstream.
 func (w *Encoder) Value(val constant.Value) {
 	w.Sync(SyncValue)
+	if w.Bool(val.Kind() == constant.Composite) {
+		w.compositeValue(val)
+		return
+	}
 	if w.Bool(val.Kind() == constant.Complex) {
 		w.scalar(constant.Real(val))
 		w.scalar(constant.Imag(val))
 	} else {
 		w.scalar(val)
+	}
+}
+
+// compositeValue encodes and writes a Kind-Composite constant.Value (a
+// forgo struct/map- or slice/array-shaped constant) into the element
+// bitstream, recursively encoding each field/element as its own Value.
+func (w *Encoder) compositeValue(val constant.Value) {
+	if w.Bool(constant.CompositeIsArray(val)) {
+		elems := constant.CompositeElems(val)
+		w.Len(len(elems))
+		for _, e := range elems {
+			w.Value(e)
+		}
+		return
+	}
+	keys := constant.CompositeKeys(val)
+	w.Len(len(keys))
+	for _, k := range keys {
+		w.String(k)
+		fv, _ := constant.CompositeField(val, k)
+		w.Value(fv)
 	}
 }
 

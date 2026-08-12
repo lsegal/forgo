@@ -1,0 +1,6 @@
+{
+  "Name": "widget-service",
+  "Version": "1.4.0",
+  "Port": 8080,
+  "Tags": ["api", "internal"]
+}
