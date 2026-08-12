@@ -117,7 +117,9 @@ declarations, etc.).
 Supported inside a comptime function body: `int`/`float`/`string`/`bool`
 locals and arithmetic, `if`, 3-clause `for` loops, `+=`/`-=`/... compound
 assignment, `++`/`--`, calls to other `//forgo:comptime` functions, and a
-small allow-list of real stdlib calls (`fmt.Sprintf`, `strconv.Itoa`).
+small allow-list of real stdlib calls (`fmt.Sprintf`, `strconv.Itoa`, and
+the [`comptime/embed`](#comptimeembed--compile-time-file-reads) helpers
+below).
 Anything else (closures, goroutines, maps, slices, method calls, `range`
 loops, ...) is not supported in v1 and reports a compile error if reached.
 
@@ -308,6 +310,43 @@ return errors.New("bad") if x < 0
 See [examples/tryop/postfixif.fgo](examples/tryop/postfixif.fgo) for a
 runnable version.
 
+### `comptime/embed` — compile-time file reads
+
+`comptime/embed` is a small stdlib package for reading files and inspecting
+the filesystem at compile time, so a file's contents (or a directory
+listing, or an existence check) can be folded into a `const` the same way a
+`//forgo:comptime` function's result can:
+
+```go
+import "comptime/embed"
+
+const banner = embed.ReadFile("banner.txt")   // read entirely by the compiler
+const hasConfig = embed.Exists("config.json")
+const assetNames = embed.ReadDir("assets")    // newline-joined entry names
+```
+
+It provides `ReadFile`, `ReadFileRange(path, offset, length)` (a "seek" for
+pulling a slice out of a file without reading the whole thing), `Exists`,
+`IsDir`, `ReadDir`, and `Getwd`. A relative path is resolved against the
+directory of the source file containing the call (like Zig's
+`@embedFile`), not the compiler's working directory. Every function panics
+on error rather than returning one, since a `(string, error)` result can't
+be folded into a single compile-time constant — a `comptime.ReadFile` on a
+missing file surfaces as a compile error pointing at the `const` line, not
+a runtime panic.
+
+Unlike an ordinary `//forgo:comptime` function, these aren't interpreted by
+walking their Go source (real file I/O, `os.Stat`, slices, and `panic` are
+all outside what [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)'s
+tree-walking interpreter can run) — the compiler recognizes calls to
+`comptime/embed` by name and executes them natively, the same way it
+special-cases `fmt.Sprintf`/`strconv.Itoa` calls inside comptime function
+bodies. The package's Go source is still real, working code that also runs
+normally outside of a `const` initializer.
+
+See [examples/embedfile](examples/embedfile/main.fgo) for a runnable
+version.
+
 ## Versioning
 
 forgo has its own version, independent of the golang/go release it's synced
@@ -420,10 +459,16 @@ commits these are.
   }`, run before `forgo_throw.go`/`forgo_try.go` (the wrapped statement may
   itself be a `throw` or contain `?`) and before type-checking.
 - [`src/cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo): the
-  interpreter shared by comptime evaluation and macro expansion.
+  interpreter shared by comptime evaluation and macro expansion. Also hosts
+  the native dispatch table (`nativeCall`) for `fmt.Sprintf`,
+  `strconv.Itoa`, and the `comptime/embed` helpers — real functions
+  special-cased by name rather than interpreted from source.
 - [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):
-  folds `//forgo:comptime` calls in `const` initializers, called from one
-  line in `decl.go`'s `constDecl`.
+  folds `//forgo:comptime` calls (bare or package-qualified, e.g.
+  `embed.ReadFile(...)`) in `const` initializers, called from one line in
+  `decl.go`'s `constDecl`.
+- [`src/comptime/embed`](src/comptime/embed/embed.go): the `comptime/embed`
+  package itself — `ReadFile`, `ReadDir`, `Exists`, etc.
 - [`src/cmd/compile/internal/syntax/nodes.go`](src/cmd/compile/internal/syntax/nodes.go),
   [`tokens.go`](src/cmd/compile/internal/syntax/tokens.go): the `?` token
   and `*syntax.TryExpr` node, parsed as a postfix operator alongside
@@ -436,7 +481,12 @@ commits these are.
   `case` labels of a call, etc.) — go through an intermediate `const` if
   you need that.
 - The comptime interpreter supports a deliberately small subset of Go
-  (see above); no closures, generics, maps/slices, or method calls.
+  (see above); no closures, generics, maps/slices, or method calls. The
+  `comptime/embed` helpers sidestep this by being executed natively rather
+  than interpreted (see above), which is also why they're a fixed,
+  hardcoded set rather than something you can add to yourself by tagging
+  an arbitrary function `//forgo:comptime` in another package — cross-package
+  comptime calls aren't supported in v1.
 - Macros have no hygiene/renaming and only cover the AST node kinds needed
   for straightforward expression/statement templates.
 - Macro compile errors are reported without a precise source position.

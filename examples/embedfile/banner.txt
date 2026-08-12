@@ -1,0 +1,1 @@
+forgo reads this file at compile time

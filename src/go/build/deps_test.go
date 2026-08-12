@@ -203,6 +203,9 @@ var depsRules = `
 	< os
 	< os/signal;
 
+	os, strings
+	< comptime/embed;
+
 	io/fs
 	< embed;
 
