@@ -556,6 +556,36 @@ func nameExt(name string) string {
 	return name[i:]
 }
 
+// goExts are the file extensions recognized as Go (or forgo) source: plain
+// Go's ".go", plus forgo's ".fgo" for files that use forgo-specific syntax
+// (?, //forgo:comptime, //forgo:macro). The two are otherwise equivalent
+// everywhere a *.go file is otherwise accepted.
+var goExts = []string{".go", ".fgo"}
+
+func isGoExt(ext string) bool {
+	for _, e := range goExts {
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoExt(name string) bool {
+	return isGoExt(nameExt(name))
+}
+
+// isTestFileName reports whether name is a Go/forgo test file, i.e. one
+// ending in "_test.go" or "_test.fgo".
+func isTestFileName(name string) bool {
+	for _, e := range goExts {
+		if strings.HasSuffix(name, "_test"+e) {
+			return true
+		}
+	}
+	return false
+}
+
 var installgoroot = godebug.New("installgoroot")
 
 // Import returns details about the Go package named by the import path,
@@ -898,14 +928,14 @@ Found:
 		ext := nameExt(name)
 
 		info, err := ctxt.matchFile(p.Dir, name, allTags, &p.BinaryOnly, fset)
-		if err != nil && strings.HasSuffix(name, ".go") {
+		if err != nil && hasGoExt(name) {
 			badGoFile(name, err)
 			continue
 		}
 		if info == nil {
 			if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 				// not due to build constraints - don't report
-			} else if ext == ".go" {
+			} else if isGoExt(ext) {
 				p.IgnoredGoFiles = append(p.IgnoredGoFiles, name)
 			} else if fileListForExt(p, ext) != nil {
 				p.IgnoredOtherFiles = append(p.IgnoredOtherFiles, name)
@@ -914,10 +944,10 @@ Found:
 		}
 
 		// Going to save the file. For non-Go files, can stop here.
-		switch ext {
-		case ".go":
+		switch {
+		case isGoExt(ext):
 			// keep going
-		case ".S", ".sx":
+		case ext == ".S" || ext == ".sx":
 			// special case for cgo, handled at end
 			Sfiles = append(Sfiles, name)
 			continue
@@ -945,7 +975,7 @@ Found:
 			}
 		}
 
-		isTest := strings.HasSuffix(name, "_test.go")
+		isTest := isTestFileName(name)
 		isXTest := false
 		if isTest && strings.HasSuffix(pkg, "_test") && p.Name != pkg {
 			isXTest = true
@@ -1279,14 +1309,14 @@ func (ctxt *Context) importGo(p *Package, path, srcDir string, mode ImportMode) 
 	return nil
 }
 
-// hasGoFiles reports whether dir contains any files with names ending in .go.
-// For a vendor check we must exclude directories that contain no .go files.
-// Otherwise it is not possible to vendor just a/b/c and still import the
-// non-vendored a/b. See golang.org/issue/13832.
+// hasGoFiles reports whether dir contains any files with names ending in .go
+// or .fgo. For a vendor check we must exclude directories that contain no Go
+// files. Otherwise it is not possible to vendor just a/b/c and still import
+// the non-vendored a/b. See golang.org/issue/13832.
 func hasGoFiles(ctxt *Context, dir string) bool {
 	ents, _ := ctxt.readDir(dir)
 	for _, ent := range ents {
-		if !ent.IsDir() && strings.HasSuffix(ent.Name(), ".go") {
+		if !ent.IsDir() && hasGoExt(ent.Name()) {
 			return true
 		}
 	}
@@ -1459,7 +1489,7 @@ func (ctxt *Context) matchFile(dir, name string, allTags map[string]bool, binary
 	}
 	ext := name[i:]
 
-	if ext != ".go" && fileListForExt(&dummyPkg, ext) == nil {
+	if !isGoExt(ext) && fileListForExt(&dummyPkg, ext) == nil {
 		// skip
 		return nil, nil
 	}
@@ -1479,10 +1509,10 @@ func (ctxt *Context) matchFile(dir, name string, allTags map[string]bool, binary
 		return nil, err
 	}
 
-	if strings.HasSuffix(name, ".go") {
+	if hasGoExt(name) {
 		err = readGoInfo(f, info)
-		if strings.HasSuffix(name, "_test.go") {
-			binaryOnly = nil // ignore //go:binary-only-package comments in _test.go files
+		if isTestFileName(name) {
+			binaryOnly = nil // ignore //go:binary-only-package comments in _test files
 		}
 	} else {
 		binaryOnly = nil // ignore //go:binary-only-package comments in non-Go sources

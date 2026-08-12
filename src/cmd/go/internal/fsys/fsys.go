@@ -599,7 +599,7 @@ func IsGoDir(name string) (bool, error) {
 
 	var firstErr error
 	for _, d := range fis {
-		if d.IsDir() || !strings.HasSuffix(d.Name(), ".go") {
+		if d.IsDir() || !(strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), ".fgo")) {
 			continue
 		}
 		if d.Type().IsRegular() {

@@ -160,8 +160,37 @@ jobs:
           path: dist/*.${{ matrix.ext }}
           if-no-files-found: error
 
+  vscode-extension:
+    needs: bump-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.bump-version.outputs.version }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Package VS Code extension
+        working-directory: editors/vscode
+        run: |
+          set -euo pipefail
+          npm pkg set version="${{ needs.bump-version.outputs.version }}"
+          npm install
+          npx @vscode/vsce package --out "../../dist/forgo-${{ needs.bump-version.outputs.version }}.vsix"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgo-vscode-extension
+          path: dist/*.vsix
+          if-no-files-found: error
+
   release:
-    needs: [bump-version, build]
+    needs: [bump-version, build, vscode-extension]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -181,6 +210,6 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "${{ needs.bump-version.outputs.tag }}" \
-            dist/*.tar.gz dist/*.zip \
+            dist/*.tar.gz dist/*.zip dist/*.vsix \
             --title "forgo ${{ needs.bump-version.outputs.tag }}" \
             --generate-notes

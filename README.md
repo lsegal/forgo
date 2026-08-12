@@ -8,6 +8,43 @@ Using a coding agent on a forgo codebase? Point it at [AGENTS.md](AGENTS.md)
 — it tells the agent when to reach for `?`, `//forgo:comptime`, and
 `//forgo:macro` instead of plain-Go idioms.
 
+## Installing a prebuilt release
+
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
+```
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex
+```
+
+Both scripts install the latest [GitHub release](https://github.com/lsegal/forgo/releases)
+to `~/.forgo` by default. Pass a specific version (`sh install.sh v0.2.0`, or
+`-Version v0.2.0` on Windows) to install that release instead of latest; set
+`FORGO_INSTALL_DIR`/`FORGO_REPO` env vars to change the install location or
+fork. After installing, point `GOROOT` at the install directory and add its
+`bin/` to `PATH` (the script prints the exact commands), then run `forgo`
+(e.g. `forgo build`, `forgo run`).
+
+### VS Code extension
+
+Forgo source lives in `.fgo` files (alongside plain `.go` files, which still
+compile as before). The [Forgo VS Code extension](editors/vscode) adds `.fgo`
+syntax highlighting for `?`, `//forgo:comptime`, and `//forgo:macro`, plus an
+optional `gopls`-backed language client. Download the `.vsix` from the
+[latest release](https://github.com/lsegal/forgo/releases) and install it
+with:
+
+```bash
+code --install-extension forgo-<version>.vsix
+```
+
+or in VS Code: Extensions view → `...` menu → **Install from VSIX...**. See
+[editors/vscode/README.md](editors/vscode/README.md) for settings and
+building from source.
+
 ```go
 //forgo:comptime
 func calculateFactorial(n int) int {
@@ -28,8 +65,13 @@ const factFive = calculateFactorial(5)
 const msg = factorialMessage(5)
 ```
 
-See [examples/factorial](examples/factorial/main.go) for a runnable version,
+See [examples/factorial](examples/factorial/main.fgo) for a runnable version,
 including proof that `factFive` is a real constant (it sizes an array).
+
+Files using forgo-specific syntax use the `.fgo` extension instead of `.go`
+— the toolchain treats the two identically everywhere (`forgo build`,
+`forgo run`, `forgo test`, module resolution), so a package can freely mix
+both. Files that are plain Go keep the `.go` extension.
 
 ## This is a real fork, not a copy
 
@@ -143,30 +185,10 @@ func loadConfig(path string) (name string, err error) {
   parser's own branch resolution (`syntax.BranchStmt.Target`) so nested
   loops are unaffected.
 
-See [examples/tryop](examples/tryop/main.go) for a runnable version,
+See [examples/tryop](examples/tryop/main.fgo) for a runnable version,
 including the literal `foo()?.bar()?` chained form, and
-[examples/tryop/loops.go](examples/tryop/loops.go) for `?` in loop headers,
+[examples/tryop/loops.fgo](examples/tryop/loops.fgo) for `?` in loop headers,
 `continue`/`break`, and labeled loops.
-
-## Installing a prebuilt release
-
-```bash
-# Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
-```
-
-```powershell
-# Windows
-irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex
-```
-
-Both scripts install the latest [GitHub release](https://github.com/lsegal/forgo/releases)
-to `~/.forgo` by default. Pass a specific version (`sh install.sh v0.2.0`, or
-`-Version v0.2.0` on Windows) to install that release instead of latest; set
-`FORGO_INSTALL_DIR`/`FORGO_REPO` env vars to change the install location or
-fork. After installing, point `GOROOT` at the install directory and add its
-`bin/` to `PATH` (the script prints the exact commands), then run `forgo`
-(e.g. `forgo build`, `forgo run`).
 
 ## Versioning
 
