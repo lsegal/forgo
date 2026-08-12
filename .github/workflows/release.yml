@@ -209,6 +209,7 @@ jobs:
           set -euo pipefail
           npm pkg set version="${{ needs.bump-version.outputs.version }}"
           npm install
+          mkdir -p ../../dist
           npx @vscode/vsce package --out "../../dist/forgo-${{ needs.bump-version.outputs.version }}.vsix"
 
       - name: Upload artifact
