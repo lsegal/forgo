@@ -4,7 +4,7 @@ import "fmt"
 
 // Example of compile-time math evaluation, forgo-style.
 //
-//forgo:comptime
+//fgo:comptime
 func calculateFactorial(n int) int {
 	result := 1
 	for i := 1; i <= n; i++ {
@@ -15,7 +15,7 @@ func calculateFactorial(n int) int {
 
 // String interpolation evaluated at compile time.
 //
-//forgo:comptime
+//fgo:comptime
 func factorialMessage(n int) string {
 	return fmt.Sprintf("Factorial of %d is %d", n, calculateFactorial(n))
 }
@@ -27,7 +27,7 @@ const msg = factorialMessage(5)
 
 // A tiny AST macro: expands to its argument's expression, duplicated.
 //
-//forgo:macro
+//fgo:macro
 func double(x Node) Node {
 	return Quote(func() {
 		Splice(x) + Splice(x)

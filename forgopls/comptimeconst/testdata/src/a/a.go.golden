@@ -1,7 +1,7 @@
 package a
 
 // crc is a pure function of a constant string: eligible for comptime.
-//forgo:comptime
+//fgo:comptime
 func crc(s string) uint32 {
 	var c uint32 = 0xFFFFFFFF
 	for i := 0; i < len(s); i++ {
@@ -34,12 +34,12 @@ func dynamicArg() string { return "runtime" }
 
 var runtimeInput = crc(dynamicArg()) // must NOT fire: argument isn't constant
 
-//forgo:comptime
+//fgo:comptime
 func alreadyMarked(n int) int { return n * 2 }
 
 var already = alreadyMarked(3) // must NOT fire: already has the pragma
 
-//forgo:comptime
+//fgo:comptime
 func hash2(s string) uint32 {
 	return crc(s) ^ 0xFF
 }

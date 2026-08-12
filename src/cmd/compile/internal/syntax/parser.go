@@ -73,8 +73,8 @@ func (p *parser) init(file *PosBase, r io.Reader, errh ErrorHandler, pragh Pragm
 				return
 			}
 
-			// go: or forgo: directive (but be conservative and test)
-			if strings.HasPrefix(text, "go:") || strings.HasPrefix(text, "forgo:") {
+			// go: or fgo: directive (but be conservative and test)
+			if strings.HasPrefix(text, "go:") || strings.HasPrefix(text, "fgo:") {
 				if p.top && strings.HasPrefix(msg, "//go:build") {
 					if x, err := constraint.Parse(msg); err == nil {
 						p.goVersion = constraint.GoVersion(x)

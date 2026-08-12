@@ -6,13 +6,13 @@
 // forgo toolchain, so it links against this repo's patched go/parser,
 // go/ast, and go/types (see go/types/expr.go) instead of vanilla Go's,
 // which teaches it to parse and type-check ? without forking gopls's own
-// source. It still doesn't understand //forgo:comptime or //forgo:macro
+// source. It still doesn't understand //fgo:comptime or //fgo:macro
 // (those are compiler-only), so expect false-positive diagnostics there.
 //
 // forgopls ships in the toolchain release tarball (see release.yml); if
 // it's not found, this falls back to a plain "gopls" on PATH, which will
 // also be wrong about ? (no forgo-aware go/parser/go/types), not just
-// //forgo:comptime/macro.
+// //fgo:comptime/macro.
 const vscode = require("vscode");
 const cp = require("child_process");
 const { LanguageClient } = require("vscode-languageclient/node");

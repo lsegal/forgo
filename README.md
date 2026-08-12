@@ -7,7 +7,7 @@ a Ruby/Perl-style postfix `if` for one-line guard clauses.
 
 Using a coding agent on a forgo codebase? Point it at [AGENTS.md](AGENTS.md)
 — it tells the agent when to reach for `?`, `throw`, postfix `if`,
-`//forgo:comptime`, and `//forgo:macro` instead of plain-Go idioms,
+`//fgo:comptime`, and `//fgo:macro` instead of plain-Go idioms,
 including the rule that a forgo codebase should never hand-write `return
 ..., err` just to propagate or introduce an error — that's what `?` and
 `throw` are for.
@@ -37,12 +37,12 @@ fork. After installing, point `GOROOT` at the install directory and add its
 
 Forgo source lives in `.fgo` files (alongside plain `.go` files, which still
 compile as before). The [Forgo VS Code extension](editors/vscode) adds `.fgo`
-syntax highlighting for `?`, `//forgo:comptime`, and `//forgo:macro`, plus a
+syntax highlighting for `?`, `//fgo:comptime`, and `//fgo:macro`, plus a
 language client backed by **forgopls** — [gopls](https://pkg.go.dev/golang.org/x/tools/gopls)
 built with the forgo toolchain (see [release.yml](.github/workflows/release.yml)),
 so it links against this repo's patched `go/parser`/`go/ast`/`go/types`
 (see [go/types/expr.go](src/go/types/expr.go)) instead of vanilla Go's —
-enough to type-check `?` correctly. `//forgo:comptime` and `//forgo:macro`
+enough to type-check `?` correctly. `//fgo:comptime` and `//fgo:macro`
 are still compiler-only and will show as false-positive diagnostics.
 `forgopls` ships in the toolchain install above; download the extension's
 `.vsix` from the [latest release](https://github.com/lsegal/forgo/releases)
@@ -57,7 +57,7 @@ or in VS Code: Extensions view → `...` menu → **Install from VSIX...**. See
 building from source.
 
 ```go
-//forgo:comptime
+//fgo:comptime
 func calculateFactorial(n int) int {
 	result := 1
 	for i := 1; i <= n; i++ {
@@ -66,7 +66,7 @@ func calculateFactorial(n int) int {
 	return result
 }
 
-//forgo:comptime
+//fgo:comptime
 func factorialMessage(n int) string {
 	return fmt.Sprintf("Factorial of %d is %d", n, calculateFactorial(n))
 }
@@ -101,9 +101,9 @@ invasive by design" below.
 
 ## What's new
 
-### `//forgo:comptime` functions
+### `//fgo:comptime` functions
 
-A function marked `//forgo:comptime` is ordinary Go — it type-checks and
+A function marked `//fgo:comptime` is ordinary Go — it type-checks and
 compiles normally, and can be called at runtime like any other function.
 Additionally, when it (or a chain of comptime functions calling each other)
 is invoked directly as the initializer of a `const` declaration with
@@ -116,23 +116,23 @@ declarations, etc.).
 
 Supported inside a comptime function body: `int`/`float`/`string`/`bool`
 locals and arithmetic, `if`, 3-clause `for` loops, `+=`/`-=`/... compound
-assignment, `++`/`--`, calls to other `//forgo:comptime` functions, and a
+assignment, `++`/`--`, calls to other `//fgo:comptime` functions, and a
 small allow-list of real stdlib calls (`fmt.Sprintf`, `strconv.Itoa`, and
 the [`comptime/embed`](#comptimeembed--compile-time-file-reads) helpers
 below).
 Anything else (closures, goroutines, maps, slices, method calls, `range`
 loops, ...) is not supported in v1 and reports a compile error if reached.
 
-### `//forgo:macro` functions — AST macros
+### `//fgo:macro` functions — AST macros
 
-A function marked `//forgo:macro` receives the *unevaluated* syntax tree of
+A function marked `//fgo:macro` receives the *unevaluated* syntax tree of
 each of its call-site arguments and returns a syntax tree that is spliced
 into the caller's code in place of the macro call — before type checking
 runs. Macro functions are never type-checked or compiled themselves; they
 exist purely at compile time and are removed from the AST once expanded.
 
 ```go
-//forgo:macro
+//fgo:macro
 func double(x Node) Node {
 	return Quote(func() {
 		Splice(x) + Splice(x)
@@ -315,7 +315,7 @@ runnable version.
 `comptime/embed` is a small stdlib package for reading files and inspecting
 the filesystem at compile time, so a file's contents (or a directory
 listing, or an existence check) can be folded into a `const` the same way a
-`//forgo:comptime` function's result can:
+`//fgo:comptime` function's result can:
 
 ```go
 import "comptime/embed"
@@ -335,7 +335,7 @@ be folded into a single compile-time constant — a `comptime.ReadFile` on a
 missing file surfaces as a compile error pointing at the `const` line, not
 a runtime panic.
 
-Unlike an ordinary `//forgo:comptime` function, these aren't interpreted by
+Unlike an ordinary `//fgo:comptime` function, these aren't interpreted by
 walking their Go source (real file I/O, `os.Stat`, slices, and `panic` are
 all outside what [`cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo)'s
 tree-walking interpreter can run) — the compiler recognizes calls to
@@ -346,6 +346,57 @@ normally outside of a `const` initializer.
 
 See [examples/embedfile](examples/embedfile/main.fgo) for a runnable
 version.
+
+### `comptime/json` — compile-time JSON marshal/unmarshal
+
+`comptime/json` marshals and unmarshals JSON at compile time, so a value
+built from a struct/slice/map composite literal can be folded into a
+`const` string, and (combined with `comptime/embed`) a JSON file's fields
+can be folded into `const`s of their own:
+
+```go
+import (
+	"comptime/embed"
+	"comptime/json"
+)
+
+type Schema struct {
+	Name string
+	Port int
+}
+
+const cfgJSON = json.Marshal(Schema{Name: "svc", Port: 8080})
+const name = json.Unmarshal[Schema](embed.ReadFile("schema.json")).Name
+const port = json.Unmarshal[Schema](embed.ReadFile("schema.json")).Port
+```
+
+A Go `const` can only ever hold a scalar (bool/number/string) — never a
+struct, slice, or map — so `Unmarshal[T](s)` itself can't be a `const`
+initializer on its own; chaining a field selector or index on top of it
+(`.Name`, `.Port`, `[0]`, `["key"]`, or several in a row) down to a scalar
+is what the compiler can fold. `Marshal`, by contrast, always produces a
+`string`, so it folds directly.
+
+This is the one place the comptime interpreter goes beyond scalars: to
+evaluate a struct/map/slice composite literal (for `Marshal`) or walk a
+field/index chain off of an `Unmarshal` result, it represents structs and
+maps as an ordered `field name -> value` mapping and slices/arrays as an
+element list, entirely within the single expression tree rooted at the
+`const` initializer — it still doesn't support these as general local
+variables inside a `//fgo:comptime` function body (no closures,
+generics, or method calls there either). `Unmarshal` is generic
+(`Unmarshal[T any](s string) T`) purely so real Go type-checking accepts
+`.Field` on its result with a concrete field to point at; the interpreter
+itself ignores the type argument and matches JSON object keys against
+field names verbatim, without applying Go's export-name capitalization or
+`json:"..."` struct tags — keep a struct's field names identical to the
+JSON keys you read them by (as `Schema` above already does, since it's
+also what the real `encoding/json` used at runtime expects for unadorned
+exported fields).
+
+See [examples/schemajson](examples/schemajson/main.fgo) for a runnable
+version that loads and unmarshals a `schema.json` file entirely at compile
+time.
 
 ## Versioning
 
@@ -408,7 +459,7 @@ existing Go source as possible, so those merges stay conflict-free:
   `types2/decl.go`'s `constDecl` gains exactly one `if` calling
   `forgoEvalConstCall` (defined in `forgo.go`); `noder.go`'s pragma switch
   gains one `if forgoPragma(...) { return pragma }` before it, with the
-  actual `//forgo:comptime`/`//forgo:macro` handling living in
+  actual `//fgo:comptime`/`//fgo:macro` handling living in
   `forgo_pragma.go`.
 - **No new fields on hot structs.** `types2.Checker` (a large, frequently
   touched struct) carries zero forgo-specific fields — the comptime
@@ -428,7 +479,7 @@ The full forgo-specific diff against upstream is genuinely small: the `?`
 token/parsing (`syntax/{tokens,scanner,parser,nodes,printer}.go`), the
 `throw` statement parsing (`syntax/{nodes,parser,positions,printer,walk}.go`),
 postfix `if` parsing (same five `syntax/` files, plus `noder/forgo_postfixif.go`
-for lowering), the `//forgo:` pragma prefix (`syntax/scanner.go`,
+for lowering), the `//fgo:` pragma prefix (`syntax/scanner.go`,
 `syntax/parser.go`), the `ForgoPragma` interface (`syntax/syntax.go`), and
 the hooks described above. Run `git log --oneline` to see exactly which
 commits these are.
@@ -437,13 +488,13 @@ commits these are.
 
 - [`src/cmd/compile/internal/syntax/scanner.go`](src/cmd/compile/internal/syntax/scanner.go)
   and [`parser.go`](src/cmd/compile/internal/syntax/parser.go): recognize
-  `//forgo:` directive comments (previously only `//go:` and `//line` were
+  `//fgo:` directive comments (previously only `//go:` and `//line` were
   allowed through as compiler directives), and the `?` token.
 - [`src/cmd/compile/internal/syntax/syntax.go`](src/cmd/compile/internal/syntax/syntax.go):
   the `ForgoPragma` interface, letting `types2` (which can't import `noder`)
   recognize forgo pragmas on a `FuncDecl` without a shared concrete type.
 - [`src/cmd/compile/internal/noder/forgo_pragma.go`](src/cmd/compile/internal/noder/forgo_pragma.go):
-  parses `//forgo:comptime` / `//forgo:macro`, called from one line in
+  parses `//fgo:comptime` / `//fgo:macro`, called from one line in
   `noder.go`.
 - [`src/cmd/compile/internal/noder/forgo_macro.go`](src/cmd/compile/internal/noder/forgo_macro.go):
   the macro expansion pass, run after parsing and before type-checking.
@@ -461,14 +512,21 @@ commits these are.
 - [`src/cmd/compile/internal/forgo`](src/cmd/compile/internal/forgo): the
   interpreter shared by comptime evaluation and macro expansion. Also hosts
   the native dispatch table (`nativeCall`) for `fmt.Sprintf`,
-  `strconv.Itoa`, and the `comptime/embed` helpers — real functions
-  special-cased by name rather than interpreted from source.
+  `strconv.Itoa`, and the `comptime/embed`/`comptime/json` helpers — real
+  functions special-cased by name rather than interpreted from source —
+  and the `objectVal`/`arrayVal` composite-value representation used to
+  evaluate a struct/map/slice literal or walk a field/index chain off a
+  `json.Unmarshal` result.
 - [`src/cmd/compile/internal/types2/forgo.go`](src/cmd/compile/internal/types2/forgo.go):
-  folds `//forgo:comptime` calls (bare or package-qualified, e.g.
-  `embed.ReadFile(...)`) in `const` initializers, called from one line in
-  `decl.go`'s `constDecl`.
+  folds a `const` initializer that's a call (bare, package-qualified like
+  `embed.ReadFile(...)`, or generic-instantiated like
+  `json.Unmarshal[Config](...)`) or a field/index chain on top of one
+  (`json.Unmarshal[Config](...).Name`), called from one line in `decl.go`'s
+  `constDecl`.
 - [`src/comptime/embed`](src/comptime/embed/embed.go): the `comptime/embed`
   package itself — `ReadFile`, `ReadDir`, `Exists`, etc.
+- [`src/comptime/json`](src/comptime/json/json.go): the `comptime/json`
+  package itself — `Marshal` and generic `Unmarshal[T]`.
 - [`src/cmd/compile/internal/syntax/nodes.go`](src/cmd/compile/internal/syntax/nodes.go),
   [`tokens.go`](src/cmd/compile/internal/syntax/tokens.go): the `?` token
   and `*syntax.TryExpr` node, parsed as a postfix operator alongside
@@ -480,13 +538,23 @@ commits these are.
   constant-expression contexts (array lengths written directly as a call,
   `case` labels of a call, etc.) — go through an intermediate `const` if
   you need that.
-- The comptime interpreter supports a deliberately small subset of Go
-  (see above); no closures, generics, maps/slices, or method calls. The
-  `comptime/embed` helpers sidestep this by being executed natively rather
-  than interpreted (see above), which is also why they're a fixed,
-  hardcoded set rather than something you can add to yourself by tagging
-  an arbitrary function `//forgo:comptime` in another package — cross-package
-  comptime calls aren't supported in v1.
+- A `//fgo:comptime` function body supports a deliberately small subset
+  of Go (see above); no closures, generics, maps/slices, or method calls.
+  Struct/map/slice values (needed for `comptime/json`) only exist within a
+  single `const` initializer's expression tree — building a composite
+  literal or indexing into one inside an ordinary comptime function body
+  isn't supported.
+- `comptime/embed` and `comptime/json`'s helpers sidestep the small-subset
+  limitation above by being executed natively rather than interpreted (see
+  above), which is also why they're a fixed, hardcoded set rather than
+  something you can add to yourself by tagging an arbitrary function
+  `//fgo:comptime` in another package — cross-package comptime calls
+  aren't supported in v1.
+- A struct literal's keys and a map literal's keys are told apart by a
+  heuristic (an unbound identifier is a field name, anything else is
+  evaluated as an expression), since the interpreter has no real type
+  information — see `compositeLitKey` in
+  [`interp.go`](src/cmd/compile/internal/forgo/interp.go).
 - Macros have no hygiene/renaming and only cover the AST node kinds needed
   for straightforward expression/statement templates.
 - Macro compile errors are reported without a precise source position.

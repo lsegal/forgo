@@ -558,7 +558,7 @@ func nameExt(name string) string {
 
 // goExts are the file extensions recognized as Go (or forgo) source: plain
 // Go's ".go", plus forgo's ".fgo" for files that use forgo-specific syntax
-// (?, //forgo:comptime, //forgo:macro). The two are otherwise equivalent
+// (?, //fgo:comptime, //fgo:macro). The two are otherwise equivalent
 // everywhere a *.go file is otherwise accepted.
 var goExts = []string{".go", ".fgo"}
 

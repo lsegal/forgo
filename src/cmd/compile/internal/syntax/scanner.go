@@ -758,12 +758,12 @@ func (s *scanner) lineComment() {
 		return
 	}
 
-	// recognize go:, line, or forgo: directives
+	// recognize go:, line, or fgo: directives
 	prefix := "go:"
 	if s.ch == 'l' {
 		prefix = "line "
 	} else if s.ch == 'f' {
-		prefix = "forgo:"
+		prefix = "fgo:"
 	}
 	for _, m := range prefix {
 		if s.ch != m {

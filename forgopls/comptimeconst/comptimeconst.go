@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package comptimeconst defines an analyzer that suggests marking a
-// package-level function as "//forgo:comptime" and promoting a "var"
+// package-level function as "//fgo:comptime" and promoting a "var"
 // computed purely from its call (with constant arguments) to a "const",
 // per AGENTS.md rule 2. It recognizes two shapes: a direct initializer
 // ("var x = f(...)") and the common package-initialization idiom of
@@ -24,7 +24,7 @@ import (
 
 var Analyzer = &analysis.Analyzer{
 	Name: "comptimeconst",
-	Doc:  `suggests "//forgo:comptime" for a function used to compute a const from constant arguments`,
+	Doc:  `suggests "//fgo:comptime" for a function used to compute a const from constant arguments`,
 	URL:  "https://pkg.go.dev/forgopls/comptimeconst",
 	Run:  run,
 }
@@ -159,7 +159,7 @@ func hasComptimePragma(fd *ast.FuncDecl) bool {
 		return false
 	}
 	for _, c := range fd.Doc.List {
-		if strings.TrimSpace(strings.TrimPrefix(c.Text, "//")) == "forgo:comptime" {
+		if strings.TrimSpace(strings.TrimPrefix(c.Text, "//")) == "fgo:comptime" {
 			return true
 		}
 	}
@@ -390,14 +390,14 @@ func reportComptimeFix(pass *analysis.Pass, gd *ast.GenDecl, vs *ast.ValueSpec, 
 	pass.Report(analysis.Diagnostic{
 		Pos:     gd.Pos(),
 		End:     vs.End(),
-		Message: fmt.Sprintf("%s is computed from constant arguments to %s; consider //forgo:comptime", vs.Names[0].Name, fnDecl.Name.Name),
+		Message: fmt.Sprintf("%s is computed from constant arguments to %s; consider //fgo:comptime", vs.Names[0].Name, fnDecl.Name.Name),
 		SuggestedFixes: []analysis.SuggestedFix{{
-			Message: fmt.Sprintf("Mark %s as //forgo:comptime and %s as const", fnDecl.Name.Name, vs.Names[0].Name),
+			Message: fmt.Sprintf("Mark %s as //fgo:comptime and %s as const", fnDecl.Name.Name, vs.Names[0].Name),
 			TextEdits: []analysis.TextEdit{
 				{
 					Pos:     fnDecl.Pos(),
 					End:     fnDecl.Pos(),
-					NewText: []byte("//forgo:comptime\n"),
+					NewText: []byte("//fgo:comptime\n"),
 				},
 				{
 					Pos:     gd.TokPos,
@@ -438,14 +438,14 @@ func reportComptimeInitFix(pass *analysis.Pass, gd *ast.GenDecl, vs *ast.ValueSp
 	pass.Report(analysis.Diagnostic{
 		Pos:     gd.Pos(),
 		End:     initDecl.End(),
-		Message: fmt.Sprintf("%s is computed once in init from constant arguments to %s; consider //forgo:comptime", vs.Names[0].Name, fnDecl.Name.Name),
+		Message: fmt.Sprintf("%s is computed once in init from constant arguments to %s; consider //fgo:comptime", vs.Names[0].Name, fnDecl.Name.Name),
 		SuggestedFixes: []analysis.SuggestedFix{{
-			Message: fmt.Sprintf("Mark %s as //forgo:comptime, %s as const, and remove init", fnDecl.Name.Name, vs.Names[0].Name),
+			Message: fmt.Sprintf("Mark %s as //fgo:comptime, %s as const, and remove init", fnDecl.Name.Name, vs.Names[0].Name),
 			TextEdits: []analysis.TextEdit{
 				{
 					Pos:     fnDecl.Pos(),
 					End:     fnDecl.Pos(),
-					NewText: []byte("//forgo:comptime\n"),
+					NewText: []byte("//fgo:comptime\n"),
 				},
 				{
 					Pos:     gd.Pos(),

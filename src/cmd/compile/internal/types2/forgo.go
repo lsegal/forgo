@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// This file implements forgo's //forgo:comptime const folding. It is called
+// This file implements forgo's //fgo:comptime const folding. It is called
 // from exactly one place in decl.go (constDecl) and otherwise stays out of
 // the way of the rest of the type checker: no Checker struct field is used
 // (a side table keyed by *Checker holds the interpreter instead), so this
@@ -19,7 +19,7 @@ import (
 var forgoInterpByChecker = map[*Checker]*forgo.Interp{}
 
 // forgoInterpreter returns the (lazily built) interpreter used to evaluate
-// //forgo:comptime function calls appearing in constant declarations.
+// //fgo:comptime function calls appearing in constant declarations.
 func forgoInterpreter(check *Checker) *forgo.Interp {
 	if in, ok := forgoInterpByChecker[check]; ok {
 		return in
@@ -40,73 +40,75 @@ func forgoInterpreter(check *Checker) *forgo.Interp {
 	return in
 }
 
-// forgoEvalConstCall tries to evaluate init as a call to a //forgo:comptime
-// function (declared in this package, e.g. `f(...)`) or to one of forgo's
-// native compile-time helpers (a package-qualified call, e.g.
-// `embed.ReadFile(...)`) with constant-foldable arguments. It reports
-// whether it handled init at all; x is only updated to a constant operand
-// on success.
+// forgoEvalConstCall tries to evaluate init as a compile-time expression:
+// a call to a //fgo:comptime function declared in this package (e.g.
+// `f(...)`), a call to one of forgo's native compile-time helpers (a
+// package-qualified call, e.g. `embed.ReadFile(...)`, optionally
+// generic-instantiated like `json.Unmarshal[Config](...)`), or a chain of
+// field selection/indexing on top of one of those (e.g.
+// `json.Unmarshal[Config](s).Name`). It reports whether it handled init at
+// all; x is only updated to a constant operand on success.
 func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
-	call, ok := init.(*syntax.CallExpr)
-	if !ok {
+	call := forgoRootCall(init)
+	if call == nil {
 		return false
 	}
 	in := forgoInterpreter(check)
 
-	switch fun := call.Fun.(type) {
-	case *syntax.Name:
-		fdecl, ok := in.Funcs[fun.Value]
-		if !ok {
-			return false
-		}
-		args, ok := forgoEvalConstArgs(in, call)
-		if !ok {
-			return false
-		}
-		result, err := in.EvalComptime(fdecl, args)
-		if err != nil {
-			check.errorf(init, InvalidConstInit, "compile-time evaluation of %s failed: %s", fun.Value, err)
-			x.mode = invalid
-			return true
-		}
-		x.mode = constant_
-		x.val = result
-		return true
+	fun := call.Fun
+	if ix, ok := fun.(*syntax.IndexExpr); ok {
+		fun = ix.X // generic instantiation, e.g. json.Unmarshal[Config]
+	}
 
+	switch f := fun.(type) {
+	case *syntax.Name:
+		if _, ok := in.Funcs[f.Value]; !ok {
+			return false
+		}
 	case *syntax.SelectorExpr:
-		pkg, ok := fun.X.(*syntax.Name)
-		if !ok || !in.HasNative(pkg.Value, fun.Sel.Value) {
+		pkg, ok := f.X.(*syntax.Name)
+		if !ok || !in.HasNative(pkg.Value, f.Sel.Value) {
 			return false
 		}
-		args, ok := forgoEvalConstArgs(in, call)
-		if !ok {
-			return false
-		}
-		result, err := in.EvalNativeConst(call.Pos(), pkg.Value, fun.Sel.Value, args)
-		if err != nil {
-			check.errorf(init, InvalidConstInit, "compile-time evaluation of %s.%s failed: %s", pkg.Value, fun.Sel.Value, err)
-			x.mode = invalid
-			return true
-		}
-		x.mode = constant_
-		x.val = result
+	default:
+		return false
+	}
+
+	v, err := in.EvalExprValue(init)
+	if err != nil {
+		check.errorf(init, InvalidConstInit, "compile-time evaluation failed: %s", err)
+		x.mode = invalid
 		return true
 	}
-	return false
+	cv, ok := v.(constant.Value)
+	if !ok {
+		check.error(init, InvalidConstInit, "compile-time evaluation did not produce a constant value (got a struct/slice/map result; select a scalar field or element first)")
+		x.mode = invalid
+		return true
+	}
+
+	x.mode = constant_
+	x.val = cv
+	return true
 }
 
-// forgoEvalConstArgs constant-folds a call's argument list via the forgo
-// interpreter. It reports false if any argument isn't constant-foldable by
-// forgo, in which case the caller should let normal type-checking report
-// whatever error is appropriate.
-func forgoEvalConstArgs(in *forgo.Interp, call *syntax.CallExpr) ([]constant.Value, bool) {
-	args := make([]constant.Value, len(call.ArgList))
-	for i, a := range call.ArgList {
-		v, err := in.EvalConstExpr(a)
-		if err != nil {
-			return nil, false
+// forgoRootCall walks down through chained field selection (.Field) and
+// indexing ([i] / ["key"]) to find the call expression underneath, e.g.
+// returning the CallExpr for `f(...).Field[0]`. It returns nil if init
+// isn't (a chain rooted at) a call at all, so forgoEvalConstCall can
+// quickly decline anything that couldn't possibly be a forgo comptime
+// expression and let normal type-checking report its own error.
+func forgoRootCall(e syntax.Expr) *syntax.CallExpr {
+	for {
+		switch x := e.(type) {
+		case *syntax.CallExpr:
+			return x
+		case *syntax.SelectorExpr:
+			e = x.X
+		case *syntax.IndexExpr:
+			e = x.X
+		default:
+			return nil
 		}
-		args[i] = v
 	}
-	return args, true
 }
