@@ -1752,6 +1752,12 @@ func (p *parser) parsePrimaryExpr(x ast.Expr) ast.Expr {
 			x = p.parseIndexOrSliceOrInstance(x)
 		case token.LPAREN:
 			x = p.parseCallOrConversion(x)
+		case token.QUESTION:
+			// forgo: x? propagates an error result of x from the
+			// enclosing function, like Rust's postfix ? operator.
+			pos := p.pos
+			p.next()
+			x = &ast.TryExpr{X: x, Question: pos}
 		case token.LBRACE:
 			// operand may have returned a parenthesized complit
 			// type; accept it but complain if we have a complit

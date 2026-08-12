@@ -1007,6 +1007,11 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 			p.print(unindent)
 		}
 
+	case *ast.TryExpr:
+		p.expr1(x.X, token.HighestPrec, depth)
+		p.setPos(x.Question)
+		p.print(token.QUESTION)
+
 	case *ast.CompositeLit:
 		// composite literal elements that are composite literals themselves may have the type omitted
 		if x.Type != nil {
