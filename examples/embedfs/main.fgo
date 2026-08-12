@@ -1,0 +1,49 @@
+package main
+
+import (
+	"comptime/embed"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+// content embeds three trees/files entirely at compile time: every file
+// under image/ and template/ (recursively, skipping dot/underscore-prefixed
+// names), plus the single file html/index.html. The compiler walks the
+// filesystem while it's compiling and folds the result into a real
+// embed.FS value -- no directive, no separate embedcfg step.
+const content = embed.Load("image", "template", "html/index.html")
+
+// run does the real work, bubbling up errors from content.ReadFile,
+// content.ReadDir, and http.Get with ? instead of hand-written
+// `if err != nil` chains. main() can't do this directly -- it has no
+// result to propagate through -- so it just handles run's error itself.
+func run() (err error) {
+	data := content.ReadFile("image/hello.jpg")?
+	fmt.Printf("image/hello.jpg: %q\n", data)
+
+	entries := content.ReadDir("template")?
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	fmt.Println("template/:", names)
+
+	// content implements io/fs.FS (plus ReadFileFS/ReadDirFS), so it
+	// plugs straight into net/http like the standard library's embed.FS.
+	mux := http.NewServeMux()
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(content))))
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp := http.Get(srv.URL + "/static/html/index.html")?
+	defer resp.Body.Close()
+	fmt.Println("GET /static/html/index.html:", resp.StatusCode)
+	return
+}
+
+func main() {
+	err := run()
+	panic(err) if err != nil
+}

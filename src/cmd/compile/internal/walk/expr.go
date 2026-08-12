@@ -91,11 +91,26 @@ func walkExpr1(n ir.Node, init *ir.Nodes) ir.Node {
 	case ir.OGETG, ir.OGETCALLERSP:
 		return n
 
-	case ir.OTYPE, ir.ONAME, ir.OLITERAL, ir.ONIL, ir.OLINKSYMOFFSET:
+	case ir.OTYPE, ir.ONAME, ir.ONIL, ir.OLINKSYMOFFSET:
 		// TODO(mdempsky): Just return n; see discussion on CL 38655.
 		// Perhaps refactor to use Node.mayBeShared for these instead.
 		// If these return early, make sure to still call
 		// StringSym for constant strings.
+		return n
+
+	case ir.OLITERAL:
+		if n.Val().Kind() == constant.Composite {
+			// A forgo composite constant (struct/slice/array, e.g. from
+			// `const content = embed.Load(...)`) used in expression
+			// position -- not just chained into another const via
+			// field/index access, which types2 already resolves to a
+			// plain scalar before this ever runs. Materialize it once
+			// into a static read-only global (memoized per literal, see
+			// CompositeConstExpr) and read it from there, the same way a
+			// large string constant is backed by a StringSym rather than
+			// synthesized inline.
+			return staticdata.CompositeConstExpr(n)
+		}
 		return n
 
 	case ir.OMETHEXPR:

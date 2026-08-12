@@ -202,7 +202,7 @@ var depsRules = `
 	< os
 	< os/signal;
 
-	os, strings
+	io/fs, os, strings, time
 	< comptime/embed;
 
 	io/fs
