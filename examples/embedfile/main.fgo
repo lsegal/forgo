@@ -1,0 +1,32 @@
+package main
+
+import (
+	"comptime/embed"
+	"fmt"
+)
+
+// comptime/embed lets the compiler read files and inspect the filesystem
+// while it's compiling, folding the result into a real constant.
+
+// banner is read from banner.txt, next to this source file, entirely by
+// the compiler: the file never has to be opened at runtime.
+const banner = embed.ReadFile("banner.txt")
+
+const hasBanner = embed.Exists("banner.txt")
+const hasNothing = embed.Exists("does-not-exist.txt")
+
+// entries lists this directory's contents, newline-joined, as a compile
+// time constant.
+const entries = embed.ReadDir(".")
+
+// banner is a genuine compile-time constant: it can size an array, which
+// only accepts constant expressions.
+var proof [len(banner)]byte
+
+func main() {
+	fmt.Printf("banner: %q\n", banner)
+	fmt.Println("hasBanner:", hasBanner)
+	fmt.Println("hasNothing:", hasNothing)
+	fmt.Println("entries:", entries)
+	fmt.Println("array sized by len(banner):", len(proof))
+}

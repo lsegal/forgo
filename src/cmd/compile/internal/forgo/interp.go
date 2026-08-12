@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Value is either a go/constant.Value (comptime evaluation) or a NodeVal
@@ -466,7 +469,7 @@ func (in *Interp) evalCall(sc *scope, call *syntax.CallExpr) Value {
 
 	if sel, ok := call.Fun.(*syntax.SelectorExpr); ok {
 		if pkg, ok := sel.X.(*syntax.Name); ok {
-			if v, handled := in.evalStdlibCall(sc, pkg.Value, sel.Sel.Value, call.ArgList); handled {
+			if v, handled := in.evalStdlibCall(sc, call.Pos(), pkg.Value, sel.Sel.Value, call.ArgList); handled {
 				return v
 			}
 		}
@@ -494,13 +497,62 @@ func (in *Interp) evalCall(sc *scope, call *syntax.CallExpr) Value {
 }
 
 // evalStdlibCall implements a small, fixed allow-list of standard library
-// functions natively, so comptime functions can format results the same way
-// Nim's compileTime procs can use std/strformat.
-func (in *Interp) evalStdlibCall(sc *scope, pkg, fn string, argList []syntax.Expr) (Value, bool) {
+// (and forgo-provided compile-time helper) functions natively, so comptime
+// functions can format results the same way Nim's compileTime procs can use
+// std/strformat. pos is the call site, used by the "embed" (comptime/embed)
+// helpers to resolve relative file paths.
+func (in *Interp) evalStdlibCall(sc *scope, pos syntax.Pos, pkg, fn string, argList []syntax.Expr) (Value, bool) {
 	args := make([]any, len(argList))
 	for i, a := range argList {
 		args[i] = nativeValue(in.evalExpr(sc, a).(constant.Value))
 	}
+	return in.nativeCall(pos, pkg, fn, args)
+}
+
+// HasNative reports whether pkg.fn is one of forgo's natively evaluated
+// compile-time helpers, without actually invoking it. It lets callers (see
+// types2's forgoEvalConstCall) tell a real forgo native call apart from an
+// arbitrary function call that just happens to not be constant, before
+// committing to evaluating its arguments as constants.
+func (in *Interp) HasNative(pkg, fn string) bool {
+	switch pkg + "." + fn {
+	case "fmt.Sprintf", "strconv.Itoa",
+		"embed.ReadFile", "embed.ReadFileRange", "embed.Exists",
+		"embed.IsDir", "embed.ReadDir", "embed.Getwd":
+		return true
+	}
+	return false
+}
+
+// EvalNativeConst evaluates a call to one of forgo's native compile-time
+// helpers (see nativeCall) written directly as a const initializer, e.g.
+// `const data = embed.ReadFile("x.txt")`. Callers should check HasNative
+// first; EvalNativeConst returns an error if pkg.fn isn't actually native.
+func (in *Interp) EvalNativeConst(pos syntax.Pos, pkg, fn string, args []constant.Value) (result constant.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(runtimeErr); ok {
+				err = re.err
+				return
+			}
+			panic(r)
+		}
+	}()
+	nargs := make([]any, len(args))
+	for i, a := range args {
+		nargs[i] = nativeValue(a)
+	}
+	v, handled := in.nativeCall(pos, pkg, fn, nargs)
+	if !handled {
+		return nil, fmt.Errorf("%s.%s is not a comptime-callable function", pkg, fn)
+	}
+	return v.(constant.Value), nil
+}
+
+// nativeCall is the shared implementation behind evalStdlibCall (nested
+// calls inside a //forgo:comptime function body) and EvalNativeConst (calls
+// written directly as a const initializer).
+func (in *Interp) nativeCall(pos syntax.Pos, pkg, fn string, args []any) (Value, bool) {
 	switch pkg + "." + fn {
 	case "fmt.Sprintf":
 		if len(args) == 0 {
@@ -511,6 +563,7 @@ func (in *Interp) evalStdlibCall(sc *scope, pkg, fn string, argList []syntax.Exp
 			fail("forgo: fmt.Sprintf format must be a string")
 		}
 		return constant.MakeString(fmt.Sprintf(format, args[1:]...)), true
+
 	case "strconv.Itoa":
 		if len(args) != 1 {
 			fail("forgo: strconv.Itoa takes exactly one argument")
@@ -520,8 +573,105 @@ func (in *Interp) evalStdlibCall(sc *scope, pkg, fn string, argList []syntax.Exp
 			fail("forgo: strconv.Itoa requires an integer argument")
 		}
 		return constant.MakeString(fmt.Sprintf("%d", n)), true
+
+	case "embed.ReadFile":
+		path := nativeStringArg(args, 0, "embed.ReadFile")
+		data, err := os.ReadFile(resolveEmbedPath(pos, path))
+		if err != nil {
+			fail("forgo: embed.ReadFile(%q): %s", path, err)
+		}
+		return constant.MakeString(string(data)), true
+
+	case "embed.ReadFileRange":
+		if len(args) != 3 {
+			fail("forgo: embed.ReadFileRange takes exactly 3 arguments")
+		}
+		path := nativeStringArg(args, 0, "embed.ReadFileRange")
+		offset := nativeIntArg(args, 1, "embed.ReadFileRange")
+		length := nativeIntArg(args, 2, "embed.ReadFileRange")
+		data, err := os.ReadFile(resolveEmbedPath(pos, path))
+		if err != nil {
+			fail("forgo: embed.ReadFileRange(%q): %s", path, err)
+		}
+		if offset < 0 || length < 0 || offset+length > int64(len(data)) {
+			fail("forgo: embed.ReadFileRange(%q): range [%d:%d] out of bounds for %d-byte file", path, offset, offset+length, len(data))
+		}
+		return constant.MakeString(string(data[offset : offset+length])), true
+
+	case "embed.Exists":
+		path := nativeStringArg(args, 0, "embed.Exists")
+		_, err := os.Stat(resolveEmbedPath(pos, path))
+		return constant.MakeBool(err == nil), true
+
+	case "embed.IsDir":
+		path := nativeStringArg(args, 0, "embed.IsDir")
+		info, err := os.Stat(resolveEmbedPath(pos, path))
+		if err != nil {
+			fail("forgo: embed.IsDir(%q): %s", path, err)
+		}
+		return constant.MakeBool(info.IsDir()), true
+
+	case "embed.ReadDir":
+		path := nativeStringArg(args, 0, "embed.ReadDir")
+		entries, err := os.ReadDir(resolveEmbedPath(pos, path))
+		if err != nil {
+			fail("forgo: embed.ReadDir(%q): %s", path, err)
+		}
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		return constant.MakeString(strings.Join(names, "\n")), true
+
+	case "embed.Getwd":
+		if len(args) != 0 {
+			fail("forgo: embed.Getwd takes no arguments")
+		}
+		wd, err := os.Getwd()
+		if err != nil {
+			fail("forgo: embed.Getwd: %s", err)
+		}
+		return constant.MakeString(wd), true
 	}
 	return nil, false
+}
+
+// resolveEmbedPath resolves a relative path passed to one of the "embed"
+// (comptime/embed) helpers against the directory of the source file
+// containing the call, so `embed.ReadFile("data.txt")` reads the file next
+// to the .go/.fgo file it's written in, not relative to whatever directory
+// the compiler happens to be invoked from.
+func resolveEmbedPath(pos syntax.Pos, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	dir := "."
+	if base := pos.Base(); base != nil && base.Filename() != "" {
+		dir = filepath.Dir(base.Filename())
+	}
+	return filepath.Join(dir, path)
+}
+
+func nativeStringArg(args []any, i int, name string) string {
+	if i >= len(args) {
+		fail("forgo: %s requires a string argument", name)
+	}
+	s, ok := args[i].(string)
+	if !ok {
+		fail("forgo: %s requires a string argument", name)
+	}
+	return s
+}
+
+func nativeIntArg(args []any, i int, name string) int64 {
+	if i >= len(args) {
+		fail("forgo: %s requires an integer argument", name)
+	}
+	n, ok := args[i].(int64)
+	if !ok {
+		fail("forgo: %s requires an integer argument", name)
+	}
+	return n
 }
 
 func nativeValue(v constant.Value) any {

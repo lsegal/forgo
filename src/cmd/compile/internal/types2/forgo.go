@@ -41,42 +41,72 @@ func forgoInterpreter(check *Checker) *forgo.Interp {
 }
 
 // forgoEvalConstCall tries to evaluate init as a call to a //forgo:comptime
-// function with constant-foldable arguments. It reports whether it handled
-// init at all; x is only updated to a constant operand on success.
+// function (declared in this package, e.g. `f(...)`) or to one of forgo's
+// native compile-time helpers (a package-qualified call, e.g.
+// `embed.ReadFile(...)`) with constant-foldable arguments. It reports
+// whether it handled init at all; x is only updated to a constant operand
+// on success.
 func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 	call, ok := init.(*syntax.CallExpr)
 	if !ok {
 		return false
 	}
-	fname, ok := call.Fun.(*syntax.Name)
-	if !ok {
-		return false
-	}
 	in := forgoInterpreter(check)
-	fdecl, ok := in.Funcs[fname.Value]
-	if !ok {
-		return false
-	}
 
+	switch fun := call.Fun.(type) {
+	case *syntax.Name:
+		fdecl, ok := in.Funcs[fun.Value]
+		if !ok {
+			return false
+		}
+		args, ok := forgoEvalConstArgs(in, call)
+		if !ok {
+			return false
+		}
+		result, err := in.EvalComptime(fdecl, args)
+		if err != nil {
+			check.errorf(init, InvalidConstInit, "compile-time evaluation of %s failed: %s", fun.Value, err)
+			x.mode = invalid
+			return true
+		}
+		x.mode = constant_
+		x.val = result
+		return true
+
+	case *syntax.SelectorExpr:
+		pkg, ok := fun.X.(*syntax.Name)
+		if !ok || !in.HasNative(pkg.Value, fun.Sel.Value) {
+			return false
+		}
+		args, ok := forgoEvalConstArgs(in, call)
+		if !ok {
+			return false
+		}
+		result, err := in.EvalNativeConst(call.Pos(), pkg.Value, fun.Sel.Value, args)
+		if err != nil {
+			check.errorf(init, InvalidConstInit, "compile-time evaluation of %s.%s failed: %s", pkg.Value, fun.Sel.Value, err)
+			x.mode = invalid
+			return true
+		}
+		x.mode = constant_
+		x.val = result
+		return true
+	}
+	return false
+}
+
+// forgoEvalConstArgs constant-folds a call's argument list via the forgo
+// interpreter. It reports false if any argument isn't constant-foldable by
+// forgo, in which case the caller should let normal type-checking report
+// whatever error is appropriate.
+func forgoEvalConstArgs(in *forgo.Interp, call *syntax.CallExpr) ([]constant.Value, bool) {
 	args := make([]constant.Value, len(call.ArgList))
 	for i, a := range call.ArgList {
 		v, err := in.EvalConstExpr(a)
 		if err != nil {
-			// Argument isn't constant-foldable by forgo; let normal
-			// type-checking report whatever error is appropriate.
-			return false
+			return nil, false
 		}
 		args[i] = v
 	}
-
-	result, err := in.EvalComptime(fdecl, args)
-	if err != nil {
-		check.errorf(init, InvalidConstInit, "compile-time evaluation of %s failed: %s", fname.Value, err)
-		x.mode = invalid
-		return true
-	}
-
-	x.mode = constant_
-	x.val = result
-	return true
+	return args, true
 }
