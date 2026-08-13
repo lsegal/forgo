@@ -244,7 +244,9 @@ func (tl *forgoTryLowerer) forStmt(fn forgoFuncCtx, x *syntax.ForStmt) []syntax.
 		notCond.SetPos(origCond.Pos())
 		brk := &syntax.BranchStmt{Tok: syntax.Break}
 		brk.SetPos(origCond.Pos())
-		ifBreak := &syntax.IfStmt{Cond: notCond, Then: &syntax.BlockStmt{List: []syntax.Stmt{brk}}}
+		then := &syntax.BlockStmt{List: []syntax.Stmt{brk}, Rbrace: origCond.Pos()}
+		then.SetPos(origCond.Pos())
+		ifBreak := &syntax.IfStmt{Cond: notCond, Then: then}
 		ifBreak.SetPos(origCond.Pos())
 		newBody = append(newBody, ifBreak)
 	}
@@ -253,6 +255,14 @@ func (tl *forgoTryLowerer) forStmt(fn forgoFuncCtx, x *syntax.ForStmt) []syntax.
 	var postStmts []syntax.Stmt
 	if origPost != nil {
 		postStmts = tl.stmt(fn, origPost)
+		// The post clause moves from the loop header to the bottom of the
+		// body, so it now runs after everything above it. Move its statements'
+		// positions to the closing brace to match: the compiler records
+		// variable scopes in source order and rejects a scope that opens
+		// before the one preceding it.
+		for _, s := range postStmts {
+			forgoRepositionStmt(s, x.Body.Rbrace)
+		}
 	} else {
 		empty := new(syntax.EmptyStmt)
 		empty.SetPos(x.Pos())
@@ -265,8 +275,38 @@ func (tl *forgoTryLowerer) forStmt(fn forgoFuncCtx, x *syntax.ForStmt) []syntax.
 
 	x.Cond = nil
 	x.Post = nil
-	x.Body = &syntax.BlockStmt{List: newBody, Rbrace: x.Body.Rbrace}
+	// The rewritten body's first statement is the old Cond, which sat to the
+	// left of the old body's opening brace on the same source line. The
+	// block's own open-scope position has to be no later than that, or the
+	// scope check sees the block "open" after its own first statement.
+	body := &syntax.BlockStmt{List: newBody, Rbrace: x.Body.Rbrace}
+	body.SetPos(x.Pos())
+	x.Body = body
 	return append(pre, x)
+}
+
+// forgoRepositionStmt moves s, and every statement nested in it, to pos.
+// Expressions keep the positions they were written at, so errors and
+// debugging still point at the source the user wrote; only the statement
+// scaffolding moves, which is what scope bookkeeping looks at.
+func forgoRepositionStmt(s syntax.Stmt, pos syntax.Pos) {
+	if s == nil {
+		return
+	}
+	s.SetPos(pos)
+	switch x := s.(type) {
+	case *syntax.BlockStmt:
+		x.Rbrace = pos
+		for _, st := range x.List {
+			forgoRepositionStmt(st, pos)
+		}
+	case *syntax.IfStmt:
+		forgoRepositionStmt(x.Init, pos)
+		forgoRepositionStmt(x.Then, pos)
+		forgoRepositionStmt(x.Else, pos)
+	case *syntax.LabeledStmt:
+		forgoRepositionStmt(x.Stmt, pos)
+	}
 }
 
 // rewriteContinues redirects every `continue` (bare, or labeled targeting
@@ -429,10 +469,13 @@ func forgoErrCheck(fn forgoFuncCtx, tmpErr string, pos syntax.Pos) *syntax.IfStm
 	ret := new(syntax.ReturnStmt)
 	ret.SetPos(pos)
 
-	ifStmt := &syntax.IfStmt{
-		Cond: cond,
-		Then: &syntax.BlockStmt{List: []syntax.Stmt{setErr, ret}},
-	}
+	// The synthesized block needs a closing-brace position like any other:
+	// the noder records one for every block it walks, and DWARF scope
+	// generation rejects a block whose end is nowhere.
+	then := &syntax.BlockStmt{List: []syntax.Stmt{setErr, ret}, Rbrace: pos}
+	then.SetPos(pos)
+
+	ifStmt := &syntax.IfStmt{Cond: cond, Then: then}
 	ifStmt.SetPos(pos)
 	return ifStmt
 }

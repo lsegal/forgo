@@ -148,7 +148,7 @@ func loadfips(ctxt *Link) {
 	if !obj.EnableFIPS() {
 		return
 	}
-	if ctxt.BuildMode == BuildModePlugin { // not sure why this doesn't work
+	if ctxt.BuildMode == BuildModePlugin || fgohotLinking() { // not sure why this doesn't work
 		return
 	}
 	// Write the fipsinfo symbol, which crypto/internal/fips140/check uses.
@@ -247,7 +247,7 @@ func asmbfips(ctxt *Link, fipso string) {
 	if ctxt.LinkMode == LinkExternal {
 		return
 	}
-	if ctxt.BuildMode == BuildModePlugin { // not sure why this doesn't work
+	if ctxt.BuildMode == BuildModePlugin || fgohotLinking() { // not sure why this doesn't work
 		return
 	}
 
@@ -305,7 +305,7 @@ func hostlinkfips(ctxt *Link, exe, fipso string) error {
 	if !obj.EnableFIPS() {
 		return nil
 	}
-	if ctxt.BuildMode == BuildModePlugin { // not sure why this doesn't work
+	if ctxt.BuildMode == BuildModePlugin || fgohotLinking() { // not sure why this doesn't work
 		return nil
 	}
 	switch {

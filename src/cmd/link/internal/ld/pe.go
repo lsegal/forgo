@@ -1132,6 +1132,17 @@ func Peinit(ctxt *Link) {
 	pefile.nextSectOffset = uint32(PESECTHEADR)
 	pefile.nextFileOffset = uint32(PEFILEHEADR)
 
+	if base := fgohotPEBase(PESECTHEADR); base != 0 {
+		// This image is never loaded by the OS loader — runtime/fgohot maps
+		// it directly at an address the watcher chose (via -T) so it lands
+		// within jump range of the running program's own code. PE encodes
+		// addresses as RVAs relative to ImageBase, so ImageBase has to be
+		// derived from that chosen address instead of the usual fixed
+		// default, or the RVAs cmd/link computes wouldn't match where the
+		// image actually ends up.
+		PEBASE = base
+	}
+
 	if ctxt.LinkMode == LinkInternal {
 		// some mingw libs depend on this symbol, for example, FindPESectionByName
 		for _, name := range [2]string{"__image_base__", "_image_base__"} {

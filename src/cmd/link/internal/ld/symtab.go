@@ -791,7 +791,7 @@ func (ctxt *Link) symtab(pcln *pclntab) []sym.SymKind {
 		nilSlice() // moduleshashes slice
 	}
 
-	hasmain := ctxt.BuildMode == BuildModeExe || ctxt.BuildMode == BuildModePIE
+	hasmain := (ctxt.BuildMode == BuildModeExe || ctxt.BuildMode == BuildModePIE) && !fgohotLinking()
 	if hasmain {
 		moduledata.AddUint8(1)
 	} else {

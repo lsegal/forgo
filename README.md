@@ -445,6 +445,130 @@ diagnostic rather than a crash:
   where it isn't supported reports a specific compile error rather than
   crashing.
 
+### `forgo run --watch` — hot reload
+
+```bash
+forgo run --watch ./examples/hotreload
+```
+
+Edit a function, save, and the running program picks up the new code
+without restarting. Its goroutines keep running, its heap is untouched, and
+every package-level variable keeps the value it had — counters keep
+counting, caches stay warm, open files and connections stay open. This is
+the same thing Dart and Flutter do, done for an ahead-of-time compiled
+language.
+
+```
+$ forgo run --watch ./examples/hotreload
+pid 44081 — edit render() in examples/hotreload/main.fgo and save
+tick 1
+tick 2
+...                                    # edit render(), save
+forgo: reloaded 1 function in 11.9s
+GEN1 tick 104 (worker beat 51, 104 in history, up 51s)
+GEN1 tick 105
+```
+
+Note the tick count and the uptime: same process, new code.
+
+#### How it works
+
+A Go binary is fully linked ahead of time, so "inject new code" has to mean
+something concrete. It means this:
+
+1. The first build is an ordinary one, except the linker also writes down a
+   **record** of everything it linked: for each symbol, its address in the
+   binary and a digest of its contents together with the *names* its
+   relocations point at.
+2. The program starts with a small agent (`runtime/fgohot`) linked in. The
+   agent reserves half a gigabyte of address space within reach of the
+   program's own code — close enough that a direct jump can span the gap —
+   and tells the watcher where it is.
+3. On save, the whole program is linked again, against that record. Any
+   symbol whose digest is unchanged is **pinned**: it keeps the address it
+   already occupies in the running process, and is left out of the output
+   entirely. Only what changed, plus anything genuinely new, is laid out —
+   into the reserved region.
+
+   This is the step that preserves state. A changed function's references
+   to package-level variables, to the runtime, to type descriptors and
+   itabs are all resolved by the linker to the addresses those things
+   already live at. Nothing is copied, migrated, or re-initialized, because
+   nothing moved.
+4. The agent maps the resulting image, registers its `moduledata` with the
+   runtime — so the garbage collector, the stack unwinder, profiles and
+   panics all understand the new code — runs the initializers of packages
+   that are new, and finally overwrites the first five bytes of each
+   changed function with a jump to its new body, with the world stopped.
+
+A function already executing finishes its current call in the old code; the
+next call runs the new code. Dart's hot reload makes the same bargain.
+
+This has a sharp edge worth calling out explicitly: **a change inside a
+function that is already running and never returns doesn't take effect,**
+because the patch only redirects future calls, and there is no future call
+— the function is still inside the one call it's already in. The most
+common way to hit this is editing code written directly in `main()`'s own
+loop body (as opposed to a function `main()` *calls* each iteration, like
+`render()` in the example below) — `main()` never returns to be re-entered,
+so a patch to its entry point never matters for the activation already
+running. Move logic you want to be reloadable into an ordinary function
+that gets called repeatedly, and edit that instead. (Flutter's hot reload
+has the identical rule for a `State.build()` that's already mid-execution;
+this isn't a corner cut, it's inherent to reloading via call redirection
+rather than modifying a suspended stack frame in place.)
+
+#### What requires a restart
+
+Some changes cannot be applied to a process that is already running, and
+forgo refuses them rather than corrupting it. The program keeps running the
+old code and the watcher says why:
+
+```
+forgo: cannot reload without restarting — the type main.Point changed shape
+```
+
+- **A struct's layout changed.** Objects already on the heap were laid out
+  by the old descriptor, and code that is not being replaced still uses it.
+- **A function's signature changed.** Callers that are not being replaced
+  would still pass arguments the old way.
+- **A package's initialization changed.** Package `init` runs once per
+  process; re-running it would trample the state it already built, and
+  skipping it would leave the new code without state it expects.
+
+#### Limits
+
+- linux/amd64 and windows/amd64. macOS is unimplemented.
+- On Windows, the watched build always uses `-buildmode=exe`, overriding
+  the toolchain's PIE-by-default on windows/amd64. PIE's load address is
+  chosen by the OS at every launch, which would make the addresses a hot
+  link records meaningless from one run to the next; `-buildmode=exe`
+  keeps the fixed load address every other platform already gets by
+  default, so a hot link's `-T` reliably lands where the running
+  program's pinned symbols actually are. The linker refuses to hot-link a
+  PIE binary outright rather than silently producing bad relocations.
+- Windows images are never handed to the OS's PE loader — the agent maps
+  them itself — so it also performs the one step that requires: resolving
+  the image's own Import Address Table (the DLL functions the runtime
+  depends on, e.g. `kernel32.dll`) by walking the PE import directory and
+  calling `GetProcAddress` directly, the way the OS loader would.
+- The watched build compiles with inlining disabled (`-gcflags=all=-l`), so
+  that changing a function cannot leave stale copies of its body inside
+  callers that are not being replaced. Watch mode is therefore slower than
+  a normal build — it is a development mode, not a production one.
+- Each reload consumes a slice of the reserved region; after a few hundred
+  reloads the program must be restarted. It says so when that happens.
+- A reload links the whole program, so it costs about as long as a link,
+  not as long as a build from scratch — under a second to a couple of
+  seconds for a small program on a native filesystem. (If you're
+  developing forgo itself from WSL with `GOROOT` on a Windows-mounted
+  drive, expect that link step to be much slower — the 9p filesystem
+  bridge WSL uses for `/mnt/*` paths adds real overhead to the many small
+  file reads a link does; this doesn't apply to programs whose `GOROOT`
+  and module live entirely on a native filesystem, WSL's own or Windows'.)
+- `--watch` runs the package with default build flags; other build flags
+  passed alongside it are not yet forwarded to the watched build.
+
 ## Versioning
 
 forgo has its own version, independent of the golang/go release it's synced

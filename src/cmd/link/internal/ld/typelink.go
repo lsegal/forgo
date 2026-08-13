@@ -25,7 +25,9 @@ func (ctxt *Link) typelink() {
 	var typelinks []typelinkSortKey
 	var itabs []loader.Sym
 	for s := loader.Sym(1); s < loader.Sym(ldr.NSym()); s++ {
-		if !ldr.AttrReachable(s) {
+		if !ldr.AttrReachable(s) || fgohotPinnedSym(s) {
+			// A pinned symbol belongs to the module already running; its type
+			// and itab are registered there and must not be registered again.
 			continue
 		}
 		if ldr.IsTypelink(s) {

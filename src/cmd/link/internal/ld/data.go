@@ -1681,7 +1681,7 @@ func (ctxt *Link) dodata(symGroupType []sym.SymKind) {
 	ldr := ctxt.loader
 	for s := loader.Sym(1); s < loader.Sym(ldr.NSym()); s++ {
 		if !ldr.AttrReachable(s) || ldr.AttrSpecial(s) || ldr.AttrSubSymbol(s) ||
-			!ldr.TopLevelSym(s) {
+			!ldr.TopLevelSym(s) || fgohotPinnedSym(s) {
 			continue
 		}
 
