@@ -118,6 +118,13 @@ jobs:
           export GOTOOLCHAIN=local
           export PATH="$GITHUB_WORKSPACE/bin:$PATH"
           for dir in examples/*/; do
+            name="$(basename "$dir")"
+            # hotreload demonstrates `forgo run --watch`: its main() loops
+            # forever by design, so a plain `forgo run` would never return.
+            if [ "$name" = "hotreload" ]; then
+              echo "=== $name (skipped: runs forever by design, see examples/hotreload/main.fgo) ==="
+              continue
+            fi
             (cd "$dir" && forgo run .)
           done
 
@@ -130,6 +137,12 @@ jobs:
           $env:GOTOOLCHAIN = "local"
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           Get-ChildItem examples -Directory | ForEach-Object {
+            # hotreload demonstrates `forgo run --watch`: its main() loops
+            # forever by design, so a plain `forgo run` would never return.
+            if ($_.Name -eq "hotreload") {
+              Write-Host "=== $($_.Name) (skipped: runs forever by design, see examples/hotreload/main.fgo) ==="
+              return
+            }
             Push-Location $_.FullName
             & forgo run .
             if ($LASTEXITCODE -ne 0) { exit 1 }
