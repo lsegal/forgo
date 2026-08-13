@@ -114,6 +114,7 @@ func (w *watcher) writeAgentOverlay() error {
 	if err != nil {
 		return err
 	}
+	w.cgoDir = dir
 	src := filepath.Join(w.ctl, "agent_import.go")
 	const content = "package main\n\n" +
 		"// Added by `forgo run --watch`; not part of your source tree.\n" +
@@ -171,6 +172,7 @@ type watcher struct {
 	binary   string
 	overlay  string   // overlay that adds the agent import to the main package
 	roots    []string // directories whose .go files are watched
+	cgoDir   string   // package directory whose cgo sources/headers are watched
 
 	proc     *exec.Cmd
 	nextBase uint64 // where the next image goes in the reserved region
@@ -196,7 +198,7 @@ func (w *watcher) run() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	state := snapshotTree(w.roots)
+	state := snapshotTree(w.roots, w.cgoDir)
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	for {
@@ -215,7 +217,7 @@ func (w *watcher) run() {
 			w.proc.Process.Kill()
 			return
 		case <-tick.C:
-			next := snapshotTree(w.roots)
+			next := snapshotTree(w.roots, w.cgoDir)
 			if sameTree(state, next) {
 				continue
 			}
@@ -685,10 +687,12 @@ func watchRoots(pkgArgs []string) []string {
 }
 
 // snapshotTree records the size and modification time of every source file
-// under the watched roots.
-func snapshotTree(roots []string) map[string]string {
+// under the watched roots (.go/.fgo, module-wide), plus every cgo source or
+// header file under cgoDir (the package directory only — a cgo file outside
+// the package that's actually being built isn't part of this build).
+func snapshotTree(roots []string, cgoDir string) map[string]string {
 	out := map[string]string{}
-	for _, root := range roots {
+	walk := func(root string, include func(string) bool) {
 		filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
@@ -700,7 +704,7 @@ func snapshotTree(roots []string) map[string]string {
 				}
 				return nil
 			}
-			if !isSourceFile(path) {
+			if !include(path) {
 				return nil
 			}
 			if info, err := d.Info(); err == nil {
@@ -708,6 +712,12 @@ func snapshotTree(roots []string) map[string]string {
 			}
 			return nil
 		})
+	}
+	for _, root := range roots {
+		walk(root, isSourceFile)
+	}
+	if cgoDir != "" {
+		walk(cgoDir, isCgoSourceFile)
 	}
 	return out
 }
@@ -738,6 +748,19 @@ func exeSuffix() string {
 // extension the toolchain accepts.
 func isSourceFile(path string) bool {
 	return strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".fgo")
+}
+
+// isCgoSourceFile reports whether path names a C/C++/Objective-C source or
+// header file that cgo can compile as part of the package. An edit to one of
+// these matters exactly like an edit to a .go file, but — unlike .go files,
+// which apply module-wide — cgo files are only ever compiled from the
+// package directory that references them, so callers only watch them there.
+func isCgoSourceFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".m", ".mm":
+		return true
+	}
+	return false
 }
 
 func plural(n int, what string) string {
