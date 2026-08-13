@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forgo docs — the language reference</title>
+<meta name="description" content="Every addition forgo makes to Go, with the rules and the current limits.">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/broadsheet-c68398cb-9570-4550-9137-ae31bbf70d1c/styles.css">
+<script src="_ds/broadsheet-c68398cb-9570-4550-9137-ae31bbf70d1c/_ds_bundle.js"></script>
+<style>
+html { scroll-behavior: smooth; }
+body { margin: 0; text-wrap: pretty; }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-600); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg)">
+
+<nav class="nav" style="padding:15px max(clamp(20px,5vw,72px), calc((100% - 1180px) / 2 + clamp(20px,5vw,72px)));gap:24px;align-items:center">
+  <a class="nav-brand" href="index.html" style="display:flex;align-items:center;gap:10px;margin-right:auto;font-size:21px;letter-spacing:-0.01em;text-decoration:none;color:inherit">
+    <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true" style="display:block;overflow:visible">
+      <rect x="4" y="8" width="36" height="36" fill="var(--color-accent)" style="mix-blend-mode:multiply"></rect>
+      <rect x="17" y="19" width="36" height="36" fill="var(--color-accent-2)" style="mix-blend-mode:multiply"></rect>
+      <text x="28.5" y="42" text-anchor="middle" font-family="Source Serif 4, serif" font-weight="600" font-size="30" fill="var(--color-bg)">?</text>
+    </svg>
+    forgo
+  </a>
+  <a href="index.html">Home</a>
+  <a href="index.html#install">Install</a>
+  <a href="#packages">Packages</a>
+  <a class="btn btn-secondary" href="https://github.com/lsegal/forgo" style="text-decoration:none"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg>GitHub</a>
+</nav>
+
+<div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,72px)">
+
+  <header style="padding:70px 0 56px">
+    <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Reference</span>
+    <h1 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(38px,5.4vw,68px);line-height:1.08;letter-spacing:-0.02em;margin:0 0 0 -0.035em">The forgo documentation</h1>
+    <p style="font-size:17px;line-height:28px;max-width:58ch;margin:28px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Every addition forgo makes to Go, with the rules and the current limits. Sections follow the repository README.</p>
+    <hr style="height:5px;border:0;margin:42px 0 0;border-top:2px solid var(--color-text);border-bottom:1px solid var(--color-text)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 42px;padding:14px 0">
+      <a href="#install" style="font-size:15px;line-height:28px;text-decoration:none">Install &amp; upgrade</a>
+      <a href="#files" style="font-size:15px;line-height:28px;text-decoration:none">.fgo files</a>
+      <a href="#try" style="font-size:15px;line-height:28px;text-decoration:none">? — error propagation</a>
+      <a href="#throw" style="font-size:15px;line-height:28px;text-decoration:none">throw</a>
+      <a href="#postfix" style="font-size:15px;line-height:28px;text-decoration:none">Postfix if</a>
+      <a href="#comptime" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:comptime</a>
+      <a href="#macros" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:macro</a>
+      <a href="#packages" style="font-size:15px;line-height:28px;text-decoration:none">comptime/embed</a>
+      <a href="#json" style="font-size:15px;line-height:28px;text-decoration:none">comptime/json</a>
+      <a href="#consts" style="font-size:15px;line-height:28px;text-decoration:none">Non-scalar consts</a>
+      <a href="#hotreload" style="font-size:15px;line-height:28px;text-decoration:none">Hot reload</a>
+      <a href="#editors" style="font-size:15px;line-height:28px;text-decoration:none">Editors</a>
+      <a href="#versioning" style="font-size:15px;line-height:28px;text-decoration:none">Versioning</a>
+      <a href="#building" style="font-size:15px;line-height:28px;text-decoration:none">Building from source</a>
+    </div>
+    <hr style="height:0;border:0;border-top:1px solid var(--color-text);margin:0">
+  </header>
+
+  <section id="install" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Install &amp; upgrade</h2>
+    <pre style="margin:28px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Linux / macOS</span>
+curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
+
+<span style="color:var(--color-neutral-600)"># Windows</span>
+irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">Both scripts install the latest GitHub release to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">~/.forgo</code> by default. Pass a specific version (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">sh install.sh v0.2.0</code>, or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-Version v0.2.0</code> on Windows) to install that release instead of latest.</li>
+      <li style="margin-bottom:14px">Set <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_INSTALL_DIR</code> / <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_REPO</code> to change the install location or fork.</li>
+      <li style="margin-bottom:14px">After installing, point <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">GOROOT</code> at the install directory and add its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code> to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">PATH</code> — the script prints the exact commands — then run <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo run</code>, and so on.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo upgrade</code> (alias <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo update</code>) re-runs the same install script over the current installation. Pass a version to install that instead of latest (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo upgrade v0.4.0</code>); it honors the same environment variables.</li>
+    </ul>
+  </section>
+
+  <section id="files" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">.fgo</code> files</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Files using forgo-specific syntax use the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.fgo</code> extension instead of <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.go</code>. The toolchain treats the two identically everywhere — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo run</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo test</code>, module resolution — so a package can freely mix both. Files that are plain Go keep the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.go</code> extension.</p>
+  </section>
+
+  <section id="try" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">?</code> — Rust-style error propagation</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr?</code> evaluates <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr</code>, and if it produced a non-nil error, returns immediately from the enclosing function with that error; otherwise it evaluates to the non-error value, so it chains.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func loadConfig(path string) (name string, err error) {
+	f := open(path)<span style="color:var(--color-accent-2-700);font-weight:600">?</span>      <span style="color:var(--color-neutral-600)">// returns early if open fails</span>
+	cfg := parse(f)<span style="color:var(--color-accent-2-700);font-weight:600">?</span>.normalize()<span style="color:var(--color-accent-2-700);font-weight:600">?</span>
+	name = cfg.Name
+	return
+}</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> only works inside a function (or func literal) whose <strong>last result is a named <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code></strong>. On error it assigns to that named result and does a naked return, relying on Go’s zero-initialization of the other named results.</li>
+      <li style="margin-bottom:14px">Used where a value is expected (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">x := f()?</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">f()?.g()</code>), it assumes <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr</code> returns exactly <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">(value, error)</code>. Used as a whole statement, it assumes <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr</code> returns only <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code>; to discard a value explicitly, write <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">_ = f()?</code>.</li>
+      <li style="margin-bottom:14px">Chaining works because <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> is parsed as a postfix operator at the same precedence as <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">(...)</code>: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">foo()?.bar()?</code> parses as <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">(foo()?).bar()?</code>.</li>
+      <li style="margin-bottom:14px">It works in an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">for</code> init clause and in a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">for</code> loop’s Cond/Post clauses. Such a loop is rewritten with the condition checked (and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">break</code> on failure) at the top of the body and the post statement moved to the bottom; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">continue</code> targeting that loop is redirected to run the post statement first, so nested loops are unaffected.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> is lowered before type-checking, so it can’t verify its assumption about <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr</code>’s results — a mismatch surfaces as an ordinary type-checking error. It also can’t be used directly inside a labeled statement if that would require hoisting code before the label; move the fallible call above the label instead.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/main.fgo</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/loops.fgo</code> for loop headers and labels.</p>
+  </section>
+
+  <section id="throw" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">throw</code> — fail a function out with a new error</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw EXPR</code> returns immediately from the enclosing function, passing <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">EXPR</code> through as the last (error) result and a zero value for every other result. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw "some text"</code> is sugar for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw errors.New("some text")</code> — the two forms are exactly equivalent.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		<span style="color:var(--color-accent-2-700);font-weight:600">throw</span> errors.New(<span style="color:var(--color-accent-700)">"empty"</span>)     <span style="color:var(--color-neutral-600)">// same as: return nil, errors.New("empty")</span>
+	}
+	return &amp;Thing{name: s}, nil
+}
+
+<span style="color:var(--color-neutral-600)">// throw "text" (a bare string literal) is sugar for throw errors.New("text")</span>
+func makeThing2(s string) (*Thing, error) {
+	if s == "" {
+		<span style="color:var(--color-accent-2-700);font-weight:600">throw</span> <span style="color:var(--color-accent-700)">"empty"</span>                 <span style="color:var(--color-neutral-600)">// same as: throw errors.New("empty")</span>
+	}
+	return &amp;Thing{name: s}, nil
+}</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> works in any function (or func literal) whose <strong>last result's type is spelled <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code></strong> — unlike <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code>, it doesn't need that result to be named, since it builds the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code>'s value list directly instead of relying on Go's naked-return zero-initialization.</li>
+      <li style="margin-bottom:14px">Every result before the last needs a zero value the compiler can work out from its syntax alone: pointer, slice, map, chan, func, interface (including <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">any</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code>), or a basic type. A named struct, array, or other defined type isn't nil-able and can't be zeroed without a type checker, so <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> there is a compile error — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">no default value for &lt;result&gt;</code> — naming exactly which result couldn't be zeroed; fall back to a manual <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code> for that function.</li>
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw "literal text"</code> requires the file to already have <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">import "errors"</code> (under any name, or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.</code>) — a package's import graph is computed from the literal source text before the compiler runs, so an import added only during compilation wouldn't be visible to it. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw errors.New(...)</code> has no such requirement since you're already spelling out the import yourself.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> is a <strong>contextual</strong> keyword, not a reserved word — plain Go code that uses <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> as an ordinary identifier or function name (like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">runtime.throw</code> in the standard library) is completely unaffected. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> is only read as the statement when immediately followed by a new operand; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw(x)</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw.field</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw = x</code>, and a bare <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> all still parse as the identifier <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/chain.fgo</code> for a version using both <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">throw</code> forms.</p>
+  </section>
+
+  <section id="postfix" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">if</code> — one-line guard clauses</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">STMT if COND</code> is shorthand for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if COND { STMT }</code>, Ruby/Perl-style — useful for the kind of one-line guard clause <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> is often used in.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func check(s string) (n int, err error) {
+	<span style="color:var(--color-accent-2-700);font-weight:600">throw</span> <span style="color:var(--color-accent-700)">"empty"</span> <span style="color:var(--color-accent-2-700);font-weight:600">if</span> s == ""     <span style="color:var(--color-neutral-600)">// same as: if s == "" { throw "empty" }</span>
+	return len(s), nil
+}
+
+continue <span style="color:var(--color-accent-2-700);font-weight:600">if</span> i%2 == 0
+total += i <span style="color:var(--color-accent-2-700);font-weight:600">if</span> want(i)
+return errors.New(<span style="color:var(--color-accent-700)">"bad"</span>) <span style="color:var(--color-accent-2-700);font-weight:600">if</span> x &lt; 0</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">Eligible statement kinds: an expression statement, a channel send, a plain (non-<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">:=</code>) assignment (including <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">++</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">--</code>), <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">break</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">continue</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">goto</code>.</li>
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">x := f() if cond</code> is <strong>not</strong> allowed — wrapping a short variable declaration in an implicit block would silently shrink its scope to just that block, exactly the kind of subtle bug postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code> should never introduce. Use the ordinary block form when you need to declare inside the guard.</li>
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fallthrough if cond</code> is not allowed either, since <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fallthrough</code> must remain the last statement of its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">switch</code> case, not the body of a synthesized <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code>.</li>
+      <li>Unambiguous by construction: a statement must always be followed by <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">;</code> before the next statement can begin, so <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code> appearing immediately after a just-completed statement on the same line was always a syntax error before — there's no existing program this could misparse.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/postfixif.fgo</code></p>
+  </section>
+
+  <section id="comptime" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">//fgo:comptime</code> functions</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A function marked <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> is ordinary Go — it type-checks and compiles normally, and can be called at runtime like any other function. Additionally, when it (or a chain of comptime functions calling each other) is invoked directly as the initializer of a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> declaration with constant-foldable arguments, the compiler evaluates it during type-checking and folds the result into a real Go constant — usable anywhere the language requires a constant expression.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-accent-2-700);font-weight:600">//fgo:comptime</span>
+func calculateFactorial(n int) int {
+	result := 1
+	for i := 1; i &lt;= n; i++ {
+		result *= i
+	}
+	return result
+}
+
+<span style="color:var(--color-accent-2-700);font-weight:600">//fgo:comptime</span>
+func factorialMessage(n int) string {
+	return fmt.Sprintf(<span style="color:var(--color-accent-700)">"Factorial of %d is %d"</span>, n, calculateFactorial(n))
+}
+
+<span style="color:var(--color-neutral-600)">// Evaluated entirely by the compiler.</span>
+const factFive&#32;= calculateFactorial(5)
+const msg = factorialMessage(5)</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">Supported inside a comptime function body: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">int</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">float</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">string</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bool</code> locals and arithmetic, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code>, 3-clause <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">for</code> loops, compound assignment, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">++</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">--</code>, calls to other <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> functions, and a small allow-list of real stdlib calls (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fmt.Sprintf</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">strconv.Itoa</code>, and the <a href="#packages">comptime/embed</a> helpers). Anything else (closures, goroutines, maps, slices, method calls, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">range</code> loops, …) is not supported in v1 and reports a compile error if reached.</li>
+      <li>Folding only triggers for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> initializers, not other constant-expression contexts written directly as a call — go through an intermediate <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> if you need that. Comptime calls also can't cross package boundaries in v1: a function must be tagged <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> in the same package where it's folded.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/factorial/main.fgo</code>, including proof that <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">factFive</code> is a real constant (it sizes an array).</p>
+  </section>
+
+  <section id="macros" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">//fgo:macro</code> functions — AST macros</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A function marked <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:macro</code> receives the <em>unevaluated</em> syntax tree of each of its call-site arguments and returns a syntax tree that is spliced into the caller's code in place of the macro call — before type checking runs. Macro functions are never type-checked or compiled themselves; they exist purely at compile time and are removed from the AST once expanded.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-accent-2-700);font-weight:600">//fgo:macro</span>
+func double(x Node) Node {
+	return Quote(func() {
+		Splice(x) + Splice(x)
+	})
+}
+
+double(compute()) <span style="color:var(--color-neutral-600)">// expands to: compute() + compute()</span></pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Quote(func(){ ... })</code> captures the function literal's body as an AST template without evaluating it. A single-expression template unwraps so the macro can be used in expression position; anything else is treated as a statement-position macro.</li>
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Splice(x)</code> marks a point in a quoted template where the tree bound to local variable <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">x</code> (a macro parameter, or a value derived from one) is substituted in.</li>
+      <li>Macro parameter/return types (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Node</code> above) are placeholders — v1 does not define a real <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Node</code> type, since macro signatures are never type-checked. Macro call recognition is purely syntactic, expansion happens once per call site (recursively into the result), macros are expanded within function bodies only (not package-level <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">var</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> initializers in v1), and macros have no hygiene/renaming.</li>
+    </ul>
+  </section>
+
+  <section id="packages" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">comptime/embed</code> — compile-time file reads</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A small stdlib package for reading files and inspecting the filesystem at compile time, so a file's contents (or a directory listing, or an existence check) can be folded into a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> the same way a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> function's result can.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">import <span style="color:var(--color-accent-700)">"comptime/embed"</span>
+
+const banner = embed.ReadFile(<span style="color:var(--color-accent-700)">"banner.txt"</span>)   <span style="color:var(--color-neutral-600)">// read entirely by the compiler</span>
+const hasConfig&#32;= embed.Exists(<span style="color:var(--color-accent-700)">"config.json"</span>)
+const assetNames&#32;= embed.ReadDir(<span style="color:var(--color-accent-700)">"assets"</span>)    <span style="color:var(--color-neutral-600)">// newline-joined entry names</span></pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">It provides <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">ReadFile</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">ReadFileRange(path, offset, length)</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Exists</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">IsDir</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">ReadDir</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Getwd</code>. A relative path is resolved against the directory of the source file containing the call (like Zig's <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">@embedFile</code>), not the compiler's working directory. Every function panics on error rather than returning one — a missing file surfaces as a compile error pointing at the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> line, not a runtime panic.</p>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Load(patterns ...string) FS</code> goes further and embeds a whole tree of files into an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FS</code> value, the way <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//go:embed</code> populates an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">embed.FS</code> — folded through a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> initializer instead of a directive.</p>
+    <pre style="margin:20px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">const content = embed.Load(<span style="color:var(--color-accent-700)">"image"</span>, <span style="color:var(--color-accent-700)">"template"</span>, <span style="color:var(--color-accent-700)">"html/index.html"</span>)
+
+data, _ := content.ReadFile(<span style="color:var(--color-accent-700)">"image/hello.jpg"</span>)
+http.Handle(<span style="color:var(--color-accent-700)">"/static/"</span>, http.StripPrefix(<span style="color:var(--color-accent-700)">"/static/"</span>, http.FileServer(http.FS(content))))</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A pattern naming a directory embeds every file in that directory's subtree (skipping names beginning with <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.</code> or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">_</code>); a plain path embeds exactly that one file. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FS</code> implements <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">io/fs.FS</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">io/fs.ReadFileFS</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">io/fs.ReadDirFS</code> — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">content</code> above is a genuine compile-time constant (see <a href="#consts">non-scalar consts</a>), not a value rebuilt from disk at every reference.</p>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/embedfile/main.fgo</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/embedfs/main.fgo</code> for embedding a small file tree and serving it over HTTP.</p>
+  </section>
+
+  <section id="json" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">comptime/json</code> — compile-time JSON marshal/unmarshal</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Marshals and unmarshals JSON at compile time, so a value built from a struct/slice/map composite literal can be folded into a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> string, and (combined with <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">comptime/embed</code>) a JSON file's fields can be folded into <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code>s of their own.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">import (
+	<span style="color:var(--color-accent-700)">"comptime/embed"</span>
+	<span style="color:var(--color-accent-700)">"comptime/json"</span>
+)
+
+type Schema struct {
+	Name string
+	Port int
+}
+
+const cfgJSON&#32;= json.Marshal(Schema{Name: <span style="color:var(--color-accent-700)">"svc"</span>, Port: 8080})
+const schema = json.Unmarshal[Schema](embed.ReadFile(<span style="color:var(--color-accent-700)">"schema.json"</span>))
+
+<span style="color:var(--color-neutral-600)">// schema is a real compile-time constant of type Schema, so schema.Name,
+// schema.Port, etc. are themselves constants, usable anywhere Go requires one.</span>
+const port = schema.Port</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Unmarshal</code> is generic (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Unmarshal[T any](s string) T</code>) purely so real Go type-checking accepts <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.Field</code> on its result with a concrete field to point at; matching against a struct's fields ignores Go's export-name capitalization or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">json:"..."</code> struct tags — keep a struct's field names identical to the JSON keys you read them by. This isn't available as general local variables inside a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> function body (no closures, generics, or method calls there either).</p>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/schemajson/main.fgo</code>, loading and unmarshalling a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">schema.json</code> file entirely at compile time.</p>
+  </section>
+
+  <section id="consts" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Non-scalar (struct/slice/map) consts</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Ordinary Go restricts <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> to bool/numeric/string values — a struct, slice, or map can never be a constant, in any Go compiler. forgo changes that: a struct/map (an ordered field name → value mapping) or a slice/array (an ordered element list) can be a real constant, alongside the ordinary scalar kinds. In practice, this is what lets <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">comptime/json</code>'s <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Unmarshal[T]</code> fold into a real, named constant instead of only a one-shot expression.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">type Schema struct {
+	Name string
+	Port int
+	Tags []string
+}
+
+const schema = json.Unmarshal[Schema](embed.ReadFile(<span style="color:var(--color-accent-700)">"schema.json"</span>))
+
+<span style="color:var(--color-neutral-600)">// schema is a genuine compile-time constant, referenceable anywhere in the
+// package, not just inside the expression that produced it.</span>
+const name = schema.Name
+var proof [schema.Port % 16]byte <span style="color:var(--color-neutral-600)">// usable as an array length, like any const</span></pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">schema.Field</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">schema.Tags[0]</code> are themselves constants — so they compose with everything an ordinary scalar <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> already does: sizing an array, seeding another <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code>, a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">case</code> label, and so on.</p>
+    <p style="font-size:14px;line-height:24px;margin:28px 0 0;letter-spacing:0.02em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Current limits</p>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:14px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">A struct-, array-, or slice-shaped composite const (including nested combinations, like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">embed.FS</code>'s struct-holding-a-slice-of-structs) can be used directly as an ordinary runtime value. Every reference to the same <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> reads from the same underlying data.</li>
+      <li>A composite const with a <em>map</em> field still can't be used bare this way — only through field/index access down to a scalar or a further struct, as in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">schema.Tags[0]</code>. Go doesn't statically lay out map data at all, so materializing one as a plain value at an arbitrary reference site is unsupported; using one where it isn't supported reports a specific compile error rather than crashing.</li>
+    </ul>
+  </section>
+
+  <section id="hotreload" style="padding:0 0 84px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">forgo run --watch</code> — hot reload</h2>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">$ forgo run --watch ./examples/hotreload
+pid 44081 — edit render() in examples/hotreload/main.fgo and save
+tick 1
+tick 2
+...                                    <span style="color:var(--color-neutral-600)"># edit render(), save</span>
+<span style="color:var(--color-accent-2-700);font-weight:600">forgo: reloaded 1 function in 11.9s</span>
+GEN1 tick 104 (worker beat 51, 104 in history, up 51s)
+GEN1 tick 105</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Edit a function, save, and the running program picks up the new code without restarting. Its goroutines keep running, its heap is untouched, and every package-level variable keeps the value it had — counters keep counting, caches stay warm, open files and connections stay open. This is the same thing Dart and Flutter do, done for an ahead-of-time compiled language. Note the tick count and the uptime above: same process, new code.</p>
+
+    <h3 id="how-it-works" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">How it works</h3>
+    <p style="font-size:16px;line-height:28px;max-width:66ch;margin:16px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A Go binary is fully linked ahead of time, so "inject new code" has to mean something concrete:</p>
+    <ol style="font-size:16px;line-height:28px;max-width:70ch;margin:20px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">The first build is an ordinary one, except the linker also writes down a <strong>record</strong> of everything it linked: for each symbol, its address in the binary and a digest of its contents together with the names its relocations point at.</li>
+      <li style="margin-bottom:14px">The program starts with a small agent (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">runtime/fgohot</code>) linked in. The agent reserves half a gigabyte of address space within reach of the program's own code and tells the watcher where it is.</li>
+      <li style="margin-bottom:14px">On save, the whole program is linked again, against that record. Any symbol whose digest is unchanged is <strong>pinned</strong>: it keeps the address it already occupies in the running process, and is left out of the output entirely. Only what changed, plus anything genuinely new, is laid out into the reserved region. This is the step that preserves state — nothing is copied, migrated, or re-initialized, because nothing moved.</li>
+      <li>The agent maps the resulting image, registers its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">moduledata</code> with the runtime, runs the initializers of packages that are new, and finally overwrites the first five bytes of each changed function with a jump to its new body, with the world stopped.</li>
+    </ol>
+    <p style="font-size:16px;line-height:28px;max-width:66ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A function already executing finishes its current call in the old code; the next call runs the new code. Dart's hot reload makes the same bargain.</p>
+    <p style="font-size:16px;line-height:28px;max-width:66ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><strong>A change inside a function that is already running and never returns doesn't take effect</strong>, because the patch only redirects future calls, and there is no future call. The most common way to hit this is editing code written directly in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">main()</code>'s own loop body — move logic you want to be reloadable into an ordinary function that gets called repeatedly, and edit that instead. (Flutter's hot reload has the identical rule for a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">State.build()</code> that's already mid-execution.)</p>
+
+    <h3 id="what-requires-a-restart" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">What requires a restart</h3>
+    <p style="font-size:16px;line-height:28px;max-width:66ch;margin:16px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Some changes cannot be applied to a process that is already running, and forgo refuses them rather than corrupting it. The program keeps running the old code and the watcher says why:</p>
+    <pre style="margin:20px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">forgo: cannot reload without restarting — the type main.Point changed shape</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:20px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px"><strong>A struct's layout changed.</strong> Objects already on the heap were laid out by the old descriptor, and code that is not being replaced still uses it.</li>
+      <li style="margin-bottom:14px"><strong>A function's signature changed.</strong> Callers that are not being replaced would still pass arguments the old way.</li>
+      <li><strong>A package's initialization changed.</strong> Package <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">init</code> runs once per process; re-running it would trample the state it already built, and skipping it would leave the new code without state it expects.</li>
+    </ul>
+
+    <h3 id="limits" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Limits</h3>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">linux, macOS, and windows.</li>
+      <li style="margin-bottom:14px">On Windows, the watched build always uses <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-buildmode=exe</code>, overriding the toolchain's PIE-by-default on windows/amd64, so a hot link's addresses stay meaningful from one run to the next. The linker refuses to hot-link a PIE binary outright rather than silently producing bad relocations.</li>
+      <li style="margin-bottom:14px">Windows images are never handed to the OS's PE loader — the agent maps them itself, resolving the image's own Import Address Table by walking the PE import directory and calling <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">GetProcAddress</code> directly.</li>
+      <li style="margin-bottom:14px">The watched build compiles with inlining disabled (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-gcflags=all=-l</code>), so changing a function cannot leave stale copies of its body inside callers that are not being replaced. Watch mode is therefore slower than a normal build — it is a development mode, not a production one.</li>
+      <li style="margin-bottom:14px">Each reload consumes a slice of the reserved region; after a few hundred reloads the program must be restarted. It says so when that happens.</li>
+      <li style="margin-bottom:14px">A reload links the whole program, so it costs about as long as a link, not as long as a build from scratch — under a second to a couple of seconds for a small program on a native filesystem.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">--watch</code> runs the package with default build flags; other build flags passed alongside it are not yet forwarded to the watched build.</li>
+    </ul>
+  </section>
+
+  <section id="editors" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Editors — forgopls and the VS Code extension</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">The <a href="https://github.com/lsegal/forgo/tree/release-branch.go1.26/editors/vscode">Forgo VS Code extension</a> adds <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.fgo</code> syntax highlighting for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:macro</code>, plus a language client backed by <strong>forgopls</strong> — a build of gopls that understands <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> well enough to type-check it correctly. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:macro</code> are still compiler-only and will show as false-positive diagnostics.</p>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:16px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgopls</code> ships in the toolchain install; download the extension's <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">.vsix</code> from the <a href="https://github.com/lsegal/forgo/releases">latest release</a> and install it with:</p>
+    <pre style="margin:20px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">code --install-extension forgo-&lt;version&gt;.vsix</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:16px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">or in VS Code: Extensions view → <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">...</code> menu → <strong>Install from VSIX...</strong>. See <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/editors/vscode/README.md">editors/vscode/README.md</a> for settings and building from source.</p>
+  </section>
+
+  <section id="versioning" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Versioning</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo has its own version, independent of the golang/go release it's synced against — tracked in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_VERSION</code> at the repo root and tagged as <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">vX.Y.Z</code>. Bump it locally with:</p>
+    <pre style="margin:20px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">./scripts/version.sh show    <span style="color:var(--color-neutral-600)"># print the current version</span>
+./scripts/version.sh patch   <span style="color:var(--color-neutral-600)"># or minor / major — bumps and writes FORGO_VERSION</span></pre>
+    <p style="font-size:16px;line-height:28px;max-width:66ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">In practice this is normally driven by the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/.github/workflows/release.yml">Release workflow</a> (Actions → Release → Run workflow → pick <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">patch</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">minor</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">major</code>), which bumps <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_VERSION</code>, commits and tags it, builds the toolchain for linux/amd64, darwin/arm64, and windows/amd64, and publishes them all to a new GitHub release. <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/.github/workflows/ci.yml">CI</a> builds and smoke-tests the toolchain on every push/PR (Linux, macOS, Windows) so a release build is never the first time a change gets built end to end.</p>
+  </section>
+
+  <section id="building" style="padding:0 0 98px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Building from source</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">This repo's root <em>is</em> a Go distribution checkout (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">src/</code>, plus <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">pkg/</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">lib/</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">api/</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">go.env</code> needed to bootstrap-build it) — it's what you get by forking golang/go. Build it like upstream Go:</p>
+    <pre style="margin:20px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">cd src
+GOROOT_BOOTSTRAP=/path/to/a/go1.24+/install ./make.bash   <span style="color:var(--color-neutral-600)"># Linux/macOS</span>
+<span style="color:var(--color-neutral-600)"># or ./make.bat on Windows, ./make.rc on Plan 9</span></pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">This produces <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/forgo</code>, the name you actually invoke:</p>
+    <pre style="margin:20px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">GOROOT=/path/to/forgo /path/to/forgo/bin/forgo run ./examples/factorial</pre>
+  </section>
+
+  <footer style="padding:0 0 56px;font-size:13px;line-height:28px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">forgo is copyright © 2026 Loren Segal. Go is licensed under the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/LICENSE">BSD 3-Clause license</a>, copyright © 2009 The Go Authors. See the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/README.md">repository README</a> for the source of this reference.</footer>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>

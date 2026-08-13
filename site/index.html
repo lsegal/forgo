@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forgo — a fork of Go with compile-time execution, macros, and hot reload</title>
+<meta name="description" content="forgo is a fork of Go, synced to the 1.26.0 release, that adds compile-time execution, AST macros, ? error propagation, a JS-style throw, postfix if, and Dart/Flutter-style hot reload.">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/broadsheet-c68398cb-9570-4550-9137-ae31bbf70d1c/styles.css">
+<script src="_ds/broadsheet-c68398cb-9570-4550-9137-ae31bbf70d1c/_ds_bundle.js"></script>
+<style>
+html { scroll-behavior: smooth; }
+body { margin: 0; text-wrap: pretty; }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-600); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg)">
+
+<nav class="nav" style="padding:15px max(clamp(20px,5vw,72px), calc((100% - 1180px) / 2 + clamp(20px,5vw,72px)));gap:24px;align-items:center">
+  <span class="nav-brand" style="display:flex;align-items:center;gap:11px;margin-right:auto;font-size:22px;letter-spacing:-0.01em">
+    <svg viewBox="0 0 64 64" width="32" height="32" aria-hidden="true" style="display:block">
+      <rect x="5" y="9" width="35" height="35" fill="var(--color-accent)" style="mix-blend-mode:multiply"></rect>
+      <rect x="19" y="21" width="35" height="35" fill="var(--color-accent-2)" style="mix-blend-mode:multiply"></rect>
+      <text x="30" y="47" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-weight="600" font-size="40" fill="var(--color-bg)">4</text>
+    </svg>
+    forgo
+  </span>
+  <a href="#new">What’s new</a>
+  <a href="#install">Install</a>
+  <a href="docs.html">Docs</a>
+  <a class="btn btn-secondary" href="https://github.com/lsegal/forgo" style="text-decoration:none"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg>GitHub</a>
+</nav>
+
+<div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,72px)">
+
+  <section style="padding:98px 0 77px">
+    <h1 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(36px,4.9vw,64px);line-height:clamp(39px,5.3vw,69px);letter-spacing:-0.02em;margin:0 0 0 -0.035em">
+      <span class="cmyk-head" style="display:block"><span class="paper">A fork of Go with compile-time</span><span class="plate plate-c" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-m" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-y" aria-hidden="true">A fork of Go with compile-time</span></span>
+      <span class="cmyk-head" style="display:block"><span class="paper">execution, macros, and hot reload.</span><span class="plate plate-c" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-m" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-y" aria-hidden="true">execution, macros, and hot reload.</span></span>
+    </h1>
+    <p style="font-size:18px;line-height:30px;max-width:62ch;margin:36px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo is a fork of Go, currently synced to the 1.26.0 release, that adds Nim-style compile-time execution and AST macros, plus Rust-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">?</code> error-propagation, a JavaScript-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">throw</code> for failing a function out with a new error, a Ruby/Perl-style postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">if</code> for one-line guard clauses, and Dart/Flutter-style hot reload for a running program.</p>
+    <div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:34px">
+      <a class="btn btn-primary" href="#install" style="text-decoration:none;min-height:38px">Install forgo</a>
+      <a class="btn btn-ghost" href="#new" style="text-decoration:none;min-height:38px">What’s new</a>
+    </div>
+  </section>
+
+  <section aria-label="Fork facts" style="padding:0 0 84px">
+    <hr style="height:5px;border:0;margin:0;border-top:2px solid var(--color-text);border-bottom:1px solid var(--color-text)">
+    <p style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;margin:0;padding:14px 0;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent)">
+      <span>Fork of Go 1.26.0</span>
+      <span>Sources: .fgo and .go, mixed freely</span>
+      <span>linux · macOS · windows</span>
+      <span>Install: one line</span>
+    </p>
+    <hr style="height:0;border:0;border-top:1px solid var(--color-text);margin:0">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px 70px;padding:14px 0 28px">
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#comptime" style="text-decoration:none">//fgo:comptime functions</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px;color:var(--color-accent-700)">01</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#macros" style="text-decoration:none">//fgo:macro — AST macros</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">02</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#try" style="text-decoration:none">? — error propagation</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">03</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#throw" style="text-decoration:none">throw — fail out with a new error</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">04</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#postfix" style="text-decoration:none">Postfix if — one-line guard clauses</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">05</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#packages" style="text-decoration:none">comptime/embed and comptime/json</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">06</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#consts" style="text-decoration:none">Non-scalar consts</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">07</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#hotreload" style="text-decoration:none">forgo run --watch — hot reload</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">08</span></p>
+    </div>
+    <hr style="height:0;border:0;border-top:1px solid var(--color-text);margin:0">
+  </section>
+
+  <section id="install" style="padding:0 0 98px">
+    <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Installing a prebuilt release</span>
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Install</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:28px;margin-top:28px">
+      <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Linux / macOS</span>
+curl -fsSL https://raw.githubusercontent.com/lsegal/\
+forgo/release-branch.go1.26/install/install.sh | sh</pre>
+      <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Windows</span>
+irm https://raw.githubusercontent.com/lsegal/forgo/\
+release-branch.go1.26/install/install.ps1 | iex</pre>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px 70px;margin-top:34px">
+      <p style="font-size:16px;line-height:28px;margin:0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Both scripts install the latest GitHub release to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">~/.forgo</code> by default. After installing, point <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">GOROOT</code> at the install directory and add its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code> to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">PATH</code> — the script prints the exact commands — then run <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo</code> (e.g. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo run</code>).</p>
+      <p style="font-size:16px;line-height:28px;margin:0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Once installed, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo upgrade</code> (alias <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo update</code>) re-runs the same install script over the current installation. The release tarball also includes <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgopls</code> in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code>, for the <a href="docs.html#editors">VS Code extension</a>.</p>
+    </div>
+  </section>
+
+  <section id="new" style="padding:0 0 56px">
+    <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">What’s new</span>
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(28px,3.4vw,42px);line-height:1.14;letter-spacing:-0.018em;margin:0;max-width:36ch">Eight additions, on top of the Go 1.26.0 toolchain</h2>
+    <p style="font-size:17px;line-height:28px;max-width:60ch;margin:28px 0 0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Files using forgo-specific syntax use the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">.fgo</code> extension instead of <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">.go</code>. The toolchain treats the two identically everywhere — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo run</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo test</code>, module resolution — so a package can freely mix both. Each feature below links to its full rules in the <a href="docs.html">docs</a>.</p>
+  </section>
+
+  <section id="comptime" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">01</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">//fgo:comptime</code> functions</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">A function marked <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:comptime</code> is ordinary Go: it type-checks, compiles, and can be called at runtime like any other function. When it is invoked directly as the initializer of a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> declaration with constant-foldable arguments, the compiler evaluates it during type-checking and folds the result into a real Go constant — usable anywhere the language requires a constant expression.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#comptime" style="font-size:15.5px">What’s supported inside a comptime body →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-accent-2-700);font-weight:600">//fgo:comptime</span>
+func calculateFactorial(n int) int {
+	result := 1
+	for i := 1; i &lt;= n; i++ {
+		result *= i
+	}
+	return result
+}
+
+<span style="color:var(--color-neutral-600)">// Evaluated entirely by the compiler.</span>
+const factFive&#32;= calculateFactorial(5)</pre>
+    </div>
+  </section>
+
+  <section id="macros" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">02</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">//fgo:macro</code> — AST macros</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">A function marked <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:macro</code> receives the unevaluated syntax tree of each of its call-site arguments and returns a syntax tree that is spliced into the caller’s code in place of the macro call, before type checking runs. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Quote</code> captures a template without evaluating it; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Splice</code> marks where a bound tree is substituted in.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#macros" style="font-size:15.5px">Quote, Splice, and the v1 limits →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-accent-2-700);font-weight:600">//fgo:macro</span>
+func double(x Node) Node {
+	return Quote(func() {
+		Splice(x) + Splice(x)
+	})
+}
+
+double(compute()) <span style="color:var(--color-neutral-600)">// expands to: compute() + compute()</span></pre>
+    </div>
+  </section>
+
+  <section id="try" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">03</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">?</code> — error propagation</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr?</code> evaluates <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">expr</code>, and if it produced a non-nil error, returns immediately from the enclosing function with that error; otherwise it evaluates to the non-error value, so it chains. It requires a function whose last result is a named <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code>.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#try" style="font-size:15.5px">Chaining, loop headers, and caveats →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func loadConfig(path string) (name string, err error) {
+	f := open(path)<span style="color:var(--color-accent-2-700);font-weight:600">?</span>      <span style="color:var(--color-neutral-600)">// returns early if open fails</span>
+	cfg := parse(f)<span style="color:var(--color-accent-2-700);font-weight:600">?</span>.normalize()<span style="color:var(--color-accent-2-700);font-weight:600">?</span>
+	name = cfg.Name
+	return
+}</pre>
+    </div>
+  </section>
+
+  <section id="throw" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">04</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">throw</code> — fail a function out with a new error</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw EXPR</code> returns immediately from the enclosing function, passing <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">EXPR</code> through as the last (error) result and a zero value for every other result. A bare string literal is sugar for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">errors.New</code>. It is a contextual keyword, so Go code that uses <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> as an identifier is unaffected.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#throw" style="font-size:15.5px">Zero-value rules and the errors import →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func makeThing(s string) (*Thing, error) {
+	if s == "" {
+		<span style="color:var(--color-accent-2-700);font-weight:600">throw</span> <span style="color:var(--color-accent-700)">"empty"</span>   <span style="color:var(--color-neutral-600)">// = throw errors.New("empty")</span>
+	}
+	return &amp;Thing{name: s}, nil
+}</pre>
+    </div>
+  </section>
+
+  <section id="postfix" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">05</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0">Postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">if</code> — one-line guard clauses</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">STMT if COND</code> is shorthand for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if COND { STMT }</code>. It works as a modifier on any statement kind that doesn’t introduce a new binding into the surrounding scope: an expression statement, a channel send, a plain assignment, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">break</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">continue</code>/<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">goto</code>.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#postfix" style="font-size:15.5px">What it deliberately excludes →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func check(s string) (n int, err error) {
+	<span style="color:var(--color-accent-2-700);font-weight:600">throw</span> <span style="color:var(--color-accent-700)">"empty"</span> <span style="color:var(--color-accent-2-700);font-weight:600">if</span> s == ""
+	return len(s), nil
+}
+
+continue <span style="color:var(--color-accent-2-700);font-weight:600">if</span> i%2 == 0
+total += i <span style="color:var(--color-accent-2-700);font-weight:600">if</span> want(i)</pre>
+    </div>
+  </section>
+
+  <section id="packages" style="padding:0 0 56px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">06</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">comptime/embed</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">comptime/json</code></h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Two stdlib packages the compiler executes natively. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">comptime/embed</code> reads files and inspects the filesystem at compile time — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">ReadFile</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">ReadDir</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Exists</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Load</code>, which embeds a whole file tree as an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">io/fs.FS</code>. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">comptime/json</code> marshals and unmarshals JSON there.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#packages" style="font-size:15.5px">Full package reference →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">import (
+	<span style="color:var(--color-accent-700)">"comptime/embed"</span>
+	<span style="color:var(--color-accent-700)">"comptime/json"</span>
+)
+
+const banner = embed.ReadFile(<span style="color:var(--color-accent-700)">"banner.txt"</span>)
+const content = embed.Load(<span style="color:var(--color-accent-700)">"assets"</span>)
+const schema = json.Unmarshal[Schema](
+	embed.ReadFile(<span style="color:var(--color-accent-700)">"schema.json"</span>))</pre>
+    </div>
+  </section>
+
+  <section id="consts" style="padding:0 0 98px">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">07</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0">Non-scalar consts</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Ordinary Go restricts <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> to bool, numeric, and string values. forgo also allows a struct or map (an ordered field-name-to-value mapping) and a slice or array (an ordered element list) to be a real constant. Field and index access on one is itself constant, so it composes with everything a scalar <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">const</code> already does.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#consts" style="font-size:15.5px">Current limits →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">type Schema struct {
+	Name string
+	Port int
+	Tags []string
+}
+
+const schema = json.Unmarshal[Schema](embed.ReadFile(<span style="color:var(--color-accent-700)">"schema.json"</span>))
+
+const name = schema.Name
+var proof [schema.Port % 16]byte <span style="color:var(--color-neutral-600)">// an array length, like any const</span></pre>
+    </div>
+  </section>
+
+  <section id="hotreload" style="padding:0 0 42px">
+    <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">08</span>
+    <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">forgo run --watch</code> — hot reload</h3>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start;margin-top:20px">
+      <div>
+        <p style="font-size:16px;line-height:28px;margin:0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Edit a function, save, and the running program picks up the new code without restarting. Its goroutines keep running, its heap is untouched, and every package-level variable keeps the value it had — counters keep counting, caches stay warm, open files and connections stay open. This is the same thing Dart and Flutter do, done for an ahead-of-time compiled language.</p>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Watch mode compiles with inlining disabled and runs on linux, macOS, and windows. A change to a function that is already running and never returns does not take effect, and a change to a struct’s layout, a function’s signature, or a package’s initialization is refused rather than applied.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#hotreload" style="font-size:15.5px">How it works, what needs a restart, and the limits →</a></p>
+      </div>
+      <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">$ forgo run --watch ./examples/hotreload
+pid 44081 — edit render() in examples/hotreload/main.fgo and save
+tick 1
+tick 2
+...                       <span style="color:var(--color-neutral-600)"># edit render(), save</span>
+<span style="color:var(--color-accent-2-700);font-weight:600">forgo: reloaded 1 function in 11.9s</span>
+GEN1 tick 104 (worker beat 51, 104 in history, up 51s)
+GEN1 tick 105</pre>
+    </div>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;max-width:58ch;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Note the tick count and the uptime: same process, new code.</p>
+  </section>
+
+  <section aria-label="Toolchain notes" style="padding:56px 0 98px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:42px clamp(28px,4vw,70px)">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Editors</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:32px;margin:0">forgopls and the VS Code extension</h3>
+        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The extension adds <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.fgo</code> syntax highlighting plus a language client backed by forgopls, a build of gopls that understands <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">?</code> well enough to type-check it correctly. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:comptime</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:macro</code> are still compiler-only and show as false-positive diagnostics.</p>
+      </div>
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Coding agents</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:32px;margin:0">AGENTS.md</h3>
+        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Using a coding agent on a forgo codebase? Point it at AGENTS.md. It tells the agent when to reach for <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">?</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">throw</code>, postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">if</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:comptime</code>, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:macro</code> instead of plain-Go idioms — including the rule that a forgo codebase should never hand-write <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">return ..., err</code> just to propagate or introduce an error.</p>
+      </div>
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Compatibility</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:32px;margin:0">Still a Go distribution</h3>
+        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The repo root is a Go distribution checkout and builds the way upstream Go does. Plain <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.go</code> files compile as before, the standard library is Go 1.26.0’s, and forgo carries its own version — tracked in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">FORGO_VERSION</code> — independent of the release it is synced against.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:0 0 84px">
+    <h3 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(26px,3.2vw,38px);line-height:1.16;letter-spacing:-0.018em;margin:0;max-width:32ch">Install the toolchain, or read the reference</h3>
+    <div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:28px">
+      <a class="btn btn-primary" href="#install" style="text-decoration:none;min-height:38px">Install forgo</a>
+      <a class="btn btn-secondary" href="docs.html" style="text-decoration:none;min-height:38px">Read the docs</a>
+      <a class="btn btn-ghost" href="https://github.com/lsegal/forgo" style="text-decoration:none;min-height:38px">GitHub</a>
+    </div>
+  </section>
+
+  <footer style="padding:0 0 56px;font-size:13px;line-height:28px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">forgo is copyright © 2026 Loren Segal. Go is licensed under the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/LICENSE">BSD 3-Clause license</a>, copyright © 2009 The Go Authors.</footer>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>
