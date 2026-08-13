@@ -1,0 +1,72 @@
+// Command hotreload demonstrates `forgo run --watch`.
+//
+// Run it with:
+//
+//	forgo run --watch ./examples/hotreload
+//
+// then edit render below — change the format string, the arithmetic, add a
+// call to a new function — and save. The program does not restart: the tick
+// count keeps climbing, the history slice keeps everything it had, and the
+// worker goroutine started at boot keeps running. Only the code changes.
+//
+// Edit render(), not the body of main()'s loop. A reload only redirects
+// future calls to a changed function; main() here is one call that never
+// returns, so a change to code written directly inside its loop body never
+// takes effect; it isn't reached again through a call, just fallen through.
+// render() is a separate function main() calls fresh every iteration, so a
+// change to it is visible on the very next tick. (Dart/Flutter hot reload
+// has the identical rule for an already-running build()/main() activation.)
+package main
+
+import (
+	"fmt"
+	"os"
+	"time"
+)
+
+// State that must survive a reload. None of this is re-initialized when new
+// code is injected, because the new code refers to these variables at the
+// addresses they already occupy.
+var (
+	ticks   int
+	history []string
+	seen    = map[string]int{}
+	started = time.Now()
+)
+
+// render is the interesting one to edit. Change it and save.
+func render() string {
+	return fmt.Sprintf("tick %d", ticks)
+}
+
+// worker runs for the life of the process, proving goroutines are not
+// disturbed by a reload.
+func worker(beat chan<- int) {
+	for i := 1; ; i++ {
+		time.Sleep(time.Second)
+		beat <- i
+	}
+}
+
+func main() {
+	fmt.Printf("pid %d — edit render() in %s and save\n", os.Getpid(), sourceName())
+	beat := make(chan int, 1)
+	go worker(beat)
+
+	for {
+		ticks++
+		line := render()
+		history = append(history, line)
+		seen[line]++
+		select {
+		case n := <-beat:
+			fmt.Printf("%s (worker beat %d, %d in history, up %v)\n",
+				line, n, len(history), time.Since(started).Round(time.Second))
+		default:
+			fmt.Println(line)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func sourceName() string { return "examples/hotreload/main.fgo" }

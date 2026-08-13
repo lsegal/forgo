@@ -20,7 +20,7 @@ import (
 )
 
 var CmdRun = &base.Command{
-	UsageLine: "go run [build flags] [-exec xprog] package [arguments...]",
+	UsageLine: "go run [build flags] [-exec xprog] [--watch] package [arguments...]",
 	Short:     "compile and run Go program",
 	Long: `
 Run compiles and runs the named main Go package.
@@ -57,6 +57,17 @@ The go command places $GOROOT/bin at the beginning of $PATH in the
 subprocess environment, so that subprocesses that execute 'go' commands
 use the same 'go' as their parent.
 
+If the --watch flag is given, 'forgo run' keeps watching the program's
+source files and reloads the program in place whenever they change, without
+restarting it: goroutines keep running, the heap is untouched, and package
+level variables keep their values. Only the code that changed is replaced,
+and it takes effect the next time each changed function is called.
+
+Changes that cannot be applied to a running program — a struct's layout, a
+function's signature, or a package's initialization — are reported instead,
+and the program keeps running its old code until it is restarted. Hot
+reload currently requires linux/amd64.
+
 The exit status of Run is not the exit status of the compiled binary.
 
 For more about build flags, see 'go help build'.
@@ -72,9 +83,14 @@ func init() {
 	work.AddBuildFlags(CmdRun, work.DefaultBuildFlags)
 	work.AddCoverFlags(CmdRun, nil)
 	CmdRun.Flag.Var((*base.StringsFlag)(&work.ExecCmd), "exec", "")
+	CmdRun.Flag.BoolVar(&watchFlag, "watch", false, "")
 }
 
 func runRun(ctx context.Context, cmd *base.Command, args []string) {
+	if watchFlag {
+		forgoWatch(ctx, args)
+		return
+	}
 	moduleLoader := modload.NewLoader()
 	if shouldUseOutsideModuleMode(args) {
 		// Set global module flags for 'go run cmd@version'.

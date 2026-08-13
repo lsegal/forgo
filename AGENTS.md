@@ -345,6 +345,29 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
   `?` token/operator and `//fgo:` pragma parsing.
 
+Hot reload (`forgo run --watch`) lives in four places:
+
+- `src/cmd/link/internal/ld/forgo_hot.go` — pins symbols that did not
+  change to the address they already have in the running program, so only
+  changed code is laid out; writes the symbol record and the reload
+  manifest.
+- `src/runtime/forgo_hot.go` — registers a reloaded module with the
+  runtime and patches function entry points with the world stopped.
+- `src/runtime/fgohot/` — the in-process agent the watcher talks to. The
+  Windows build additionally resolves the hot-linked image's own PE
+  import table (`pe_windows.go`) since the agent maps the image itself
+  rather than handing it to the OS loader, which is the only thing that
+  would otherwise do that.
+- `src/cmd/go/internal/run/forgo_watch.go` — the `--watch` driver. Reads
+  ELF program headers on Linux, PE section headers on Windows
+  (`loadSegments`/`loadSegmentsPE`), and forces `-buildmode=exe` on
+  Windows so the toolchain's PIE-by-default doesn't randomize the load
+  address the linker relied on when it pinned symbols.
+
+The hooks these need in upstream files are all single lines, marked by a
+call to a `fgohot*` function (`main.go`, `data.go`, `lib.go`, `symtab.go`,
+`typelink.go`, `fips140.go`, `pe.go`).
+
 These are all either new files (untouched by upstream merges) or single-line
 hooks into existing files. Follow that same pattern if you're adding a new
 forgo feature: put the logic in a new file, and touch existing upstream

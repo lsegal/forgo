@@ -50,7 +50,7 @@ func postfixIfStmt(s syntax.Stmt) syntax.Stmt {
 	case *syntax.PostfixIfStmt:
 		inner := postfixIfStmt(x.Stmt)
 		postfixIfExprFuncLits(x.Cond)
-		then := &syntax.BlockStmt{List: []syntax.Stmt{inner}}
+		then := &syntax.BlockStmt{List: []syntax.Stmt{inner}, Rbrace: inner.Pos()}
 		then.SetPos(inner.Pos())
 		ifs := &syntax.IfStmt{Cond: x.Cond, Then: then}
 		ifs.SetPos(x.Pos())

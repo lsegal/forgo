@@ -373,6 +373,11 @@ func Main(arch *sys.Arch, theArch Arch) {
 	bench.Start("deadcode")
 	deadcode(ctxt)
 
+	if fgohotActive() {
+		bench.Start("fgohot")
+		fgohotSnapshot(ctxt)
+	}
+
 	bench.Start("linksetup")
 	ctxt.linksetup()
 
@@ -439,6 +444,9 @@ func Main(arch *sys.Arch, theArch Arch) {
 	ctxt.dodata(symGroupType)
 	bench.Start("address")
 	order := ctxt.address()
+	if fgohotActive() {
+		fgohotFinish(ctxt)
+	}
 	bench.Start("dwarfcompress")
 	dwarfcompress(ctxt)
 	bench.Start("layout")
