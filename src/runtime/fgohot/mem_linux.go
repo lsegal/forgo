@@ -24,13 +24,15 @@ const mapFixedNoreplace = 0x100000
 func pageSize() int { return syscall.Getpagesize() }
 
 // reserve claims size bytes of address space close enough to the program's
-// code that a direct jump can reach it, without committing any memory.
-func reserve(near, size uintptr) (uintptr, error) {
+// code that a direct jump can reach it, without committing any memory. On
+// success it always returns exactly size — see mem_darwin.go's reserve for
+// why the return also carries a (possibly smaller) size at all.
+func reserve(near, size uintptr) (uintptr, uintptr, error) {
 	ps := uintptr(pageSize())
 	// Start just past the program's text and walk forward. Staying within
-	// 2GB of the text is what lets a five byte jump reach the new code.
+	// maxReach of the text is what lets the patch jump reach the new code.
 	const gap = 64 << 20
-	for addr := (near + gap) &^ (ps - 1); addr < near+(1<<31)-size; addr += 256 << 20 {
+	for addr := (near + gap) &^ (ps - 1); addr < near+maxReach-size; addr += probeStep {
 		p, _, errno := syscall.Syscall6(syscall.SYS_MMAP, addr, size,
 			syscall.PROT_NONE,
 			syscall.MAP_PRIVATE|syscall.MAP_ANON|syscall.MAP_NORESERVE|mapFixedNoreplace,
@@ -39,15 +41,15 @@ func reserve(near, size uintptr) (uintptr, error) {
 			continue
 		}
 		if p == addr {
-			return p, nil
+			return p, size, nil
 		}
 		// An old kernel ignored MAP_FIXED_NOREPLACE and put it elsewhere.
 		syscall.Syscall(syscall.SYS_MUNMAP, p, size, 0)
-		if p > near && p-near < 1<<31 {
-			return p, nil
+		if p > near && p-near < maxReach {
+			return p, size, nil
 		}
 	}
-	return 0, errors.New("no free address space within reach of the program's code")
+	return 0, 0, errors.New("no free address space within reach of the program's code")
 }
 
 // commit backs a slice of the reserved region with memory.

@@ -315,6 +315,21 @@ TEXT runtime·munmap_trampoline(SB),NOSPLIT,$0
 	MOVL	$0xf1, 0xf1  // crash
 	RET
 
+TEXT runtime·mprotect_trampoline(SB),NOSPLIT,$0
+	MOVQ	DI, BX
+	MOVQ	0(BX), DI		// arg 1 addr
+	MOVQ	8(BX), SI		// arg 2 len
+	MOVL	16(BX), DX		// arg 3 prot
+	CALL	libc_mprotect(SB)
+	XORL	DX, DX
+	CMPL	AX, $-1
+	JNE	ok
+	CALL	libc_error(SB)
+	MOVL	(AX), DX		// errno
+ok:
+	MOVL	DX, 20(BX)
+	RET
+
 TEXT runtime·usleep_trampoline(SB),NOSPLIT,$0
 	MOVL	0(DI), DI	// arg 1 usec
 	CALL	libc_usleep(SB)

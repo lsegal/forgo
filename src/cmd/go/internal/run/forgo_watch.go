@@ -33,6 +33,7 @@ package run
 import (
 	"context"
 	"debug/elf"
+	"debug/macho"
 	"debug/pe"
 	"fmt"
 	"io/fs"
@@ -65,10 +66,10 @@ const headroom = 0x10000
 // forgoWatch runs pkg and reloads it in place whenever its sources change.
 func forgoWatch(ctx context.Context, args []string) {
 	switch {
-	case runtime.GOARCH != "amd64":
-		base.Fatalf("forgo run --watch: hot reload currently requires amd64, not %s", runtime.GOARCH)
-	case runtime.GOOS != "linux" && runtime.GOOS != "windows":
-		base.Fatalf("forgo run --watch: hot reload currently requires linux or windows, not %s", runtime.GOOS)
+	case runtime.GOARCH != "amd64" && !(runtime.GOARCH == "arm64" && runtime.GOOS == "darwin"):
+		base.Fatalf("forgo run --watch: hot reload currently requires amd64, or arm64 on darwin, not %s/%s", runtime.GOOS, runtime.GOARCH)
+	case runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin":
+		base.Fatalf("forgo run --watch: hot reload currently requires linux, windows or darwin, not %s", runtime.GOOS)
 	}
 	pkgArgs, progArgs := splitRunArgs(args)
 	if len(pkgArgs) == 0 {
@@ -244,6 +245,12 @@ func (w *watcher) build(extraGcflags []string, out string, ldflags ...string) er
 		argv = append(argv, "-overlay="+w.overlay)
 	}
 	argv = append(argv, extraGcflags...)
+	// On darwin/arm64 (and windows/arm64) the OS forces PIE regardless of
+	// -buildmode=exe — see cmd/link/internal/ld/config.go. -fgohotpie tells
+	// the linker this caller knows and will correct recorded addresses for
+	// the OS's ASLR slide (see (*watcher).aslrSlide) before reusing them, so
+	// it should record/pin anyway instead of refusing a PIE binary outright.
+	ldflags = append(ldflags, "-fgohotpie")
 	argv = append(argv, "-ldflags="+strings.Join(ldflags, " "), "-o", out)
 	argv = append(argv, w.pkgArgs...)
 
@@ -278,7 +285,7 @@ func (w *watcher) handshake() error {
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		var base, size uint64
+		var base, size, landmark uint64
 		for _, line := range strings.Split(string(data), "\n") {
 			f := strings.Fields(line)
 			if len(f) < 2 {
@@ -289,6 +296,8 @@ func (w *watcher) handshake() error {
 				base, _ = strconv.ParseUint(strings.TrimPrefix(f[1], "0x"), 16, 64)
 			case "size":
 				size, _ = strconv.ParseUint(strings.TrimPrefix(f[1], "0x"), 16, 64)
+			case "landmark":
+				landmark, _ = strconv.ParseUint(strings.TrimPrefix(f[1], "0x"), 16, 64)
 			}
 		}
 		if base == 0 || size == 0 {
@@ -297,9 +306,82 @@ func (w *watcher) handshake() error {
 		}
 		w.nextBase = base
 		w.regionTo = base + size
+		if err := w.correctASLR(landmark); err != nil {
+			return err
+		}
 		return nil
 	}
 	return fmt.Errorf("the program did not start a hot reload agent")
+}
+
+// correctASLR rebases the host build's recorded symbol addresses onto the
+// actual addresses of the process now running them.
+//
+// Every platform forgo hot reload supports keeps one property even when the
+// OS uses ASLR: the whole image is displaced by, at most, a single constant
+// offset from where the linker put it — never per-symbol. Most platforms
+// keep that offset at zero by building with -buildmode=exe; where the OS
+// forces PIE regardless (darwin/arm64, windows/arm64 — see cmd/link's
+// config.go), this recovers the offset from one landmark both sides agree
+// on: runtime/fgohot.serve, an ordinary function whose linked address the
+// record names and whose actual address the agent just reported as
+// "landmark" in the handshake (computed with reflect, from inside the very
+// process the record needs correcting for) — and applies it to every
+// recorded address, so the rest of the pin mechanism never has to know
+// ASLR happened at all.
+func (w *watcher) correctASLR(actualLandmark uint64) error {
+	if actualLandmark == 0 {
+		return nil // this agent build predates the "landmark" handshake line
+	}
+	recorded, err := recordedAddr(w.record, "runtime/fgohot.serve")
+	if err != nil {
+		return err
+	}
+	slide := int64(actualLandmark) - int64(recorded)
+	if slide == 0 {
+		return nil
+	}
+	return rebaseRecord(w.record, slide)
+}
+
+// recordedAddr returns the address a forgo hot reload symbol record (written
+// by the linker's -fgohotsyms, and parsed the same way by fgohotReadRecord in
+// cmd/link/internal/ld/forgo_hot.go) gives name.
+func recordedAddr(path, name string) (uint64, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) == 6 && f[0] == name {
+			return strconv.ParseUint(f[5], 16, 64)
+		}
+	}
+	return 0, fmt.Errorf("%s: no %s symbol recorded", path, name)
+}
+
+// rebaseRecord adds slide to every address in a forgo hot reload symbol
+// record, rewriting the file in place. See (*watcher).correctASLR.
+func rebaseRecord(path string, slide int64) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		f := strings.Split(line, "\t")
+		if len(f) != 6 {
+			continue
+		}
+		addr, err := strconv.ParseUint(f[5], 16, 64)
+		if err != nil {
+			continue
+		}
+		f[5] = strconv.FormatUint(uint64(int64(addr)+slide), 16)
+		lines[i] = strings.Join(f, "\t")
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
 }
 
 // reload rebuilds, links against the running program, and hands the result to
@@ -436,10 +518,14 @@ type loadSeg struct {
 // ordinary executable file that happens never to be executed — dispatched by
 // the format the running program's own toolchain produces.
 func loadSegments(path string) (segs []loadSeg, lo, hi uint64, err error) {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return loadSegmentsPE(path)
+	case "darwin":
+		return loadSegmentsMachO(path)
+	default:
+		return loadSegmentsELF(path)
 	}
-	return loadSegmentsELF(path)
 }
 
 func loadSegmentsELF(path string) (segs []loadSeg, lo, hi uint64, err error) {
@@ -507,6 +593,38 @@ func loadSegmentsPE(path string) (segs []loadSeg, lo, hi uint64, err error) {
 			addr: oh.ImageBase + uint64(s.VirtualAddress), fileoff: uint64(s.Offset),
 			filesz: filesz, memsz: uint64(s.VirtualSize), prot: prot,
 		})
+	}
+	if len(segs) == 0 {
+		return nil, 0, 0, fmt.Errorf("%s has nothing to load", path)
+	}
+	return segs, lo, hi, nil
+}
+
+// loadSegmentsMachO reads the loadable segments of a Mach-O image. Addresses
+// are absolute, as in ELF — __PAGEZERO (vmaddr 0, no protection at all) is
+// the one segment every macOS executable has that isn't meant to be loaded.
+func loadSegmentsMachO(path string) (segs []loadSeg, lo, hi uint64, err error) {
+	f, err := macho.Open(path)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer f.Close()
+	lo = ^uint64(0)
+	for _, l := range f.Loads {
+		seg, ok := l.(*macho.Segment)
+		if !ok || seg.Memsz == 0 || seg.Prot == 0 {
+			continue
+		}
+		prot := "r"
+		switch {
+		case seg.Prot&0x4 != 0: // VM_PROT_EXECUTE
+			prot = "rx"
+		case seg.Prot&0x2 != 0: // VM_PROT_WRITE
+			prot = "rw"
+		}
+		segs = append(segs, loadSeg{seg.Addr, seg.Offset, seg.Filesz, seg.Memsz, prot})
+		lo = min(lo, seg.Addr)
+		hi = max(hi, seg.Addr+seg.Memsz)
 	}
 	if len(segs) == 0 {
 		return nil, 0, 0, fmt.Errorf("%s has nothing to load", path)

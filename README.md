@@ -538,7 +538,35 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 
 #### Limits
 
-- linux/amd64 and windows/amd64. macOS is unimplemented.
+- linux/amd64 and windows/amd64 work end to end. darwin/amd64 (Intel Mac,
+  or Rosetta on Apple Silicon) shares the same non-PIE, RWX-capable model as
+  those two and should work the same way, but hasn't actually been run
+  end to end on real darwin/amd64 hardware to confirm — the darwin pieces
+  described below were built and tested on Apple Silicon, where the last
+  step currently refuses (see darwin/arm64, next).
+- darwin/arm64 (Apple Silicon) builds, runs, and reserves address space, but
+  a reload always refuses at the last step — redirecting an existing
+  function's entry point — with a clear error rather than restarting or
+  corrupting the process. The reason is specific to this platform: patching
+  a live function needs its page briefly writable *and* executable at once,
+  and Apple's W^X enforcement on arm64 refuses that combination outright.
+  The workaround every other platform effectively gets for free — make the
+  page writable, write the jump, make it executable again — isn't safe here
+  either: nothing can correctly bracket the window where the page is
+  writable but not executable, because that window can't be shrunk to
+  nothing without a way to guarantee no other thread is concurrently
+  executing runtime-internal code (not just the function being patched —
+  small runtime trampolines any thread might be running through can share
+  its 16KB page) on it, and stopping the world around the protection change
+  itself doesn't converge on this platform rather than fixing the race.
+  Making this actually work needs either a per-symbol page-isolation
+  guarantee from the linker (so nothing else can ever share a patched
+  function's page) or a different low-level mechanism than plain
+  `mprotect` — real further work, not a quick fix. Everything upstream of
+  that last step (the darwin memory backend, Mach-O image parsing, the
+  ASLR-slide correction the OS's forced PIE on this architecture needs, and
+  an arm64 entry-point patcher using an indirect branch instead of amd64's
+  direct `JMP rel32`) is implemented and exercised.
 - On Windows, the watched build always uses `-buildmode=exe`, overriding
   the toolchain's PIE-by-default on windows/amd64. PIE's load address is
   chosen by the OS at every launch, which would make the addresses a hot

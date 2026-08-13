@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !linux && !windows
+//go:build !linux && !windows && !darwin
 
 package fgohot
 
@@ -27,7 +27,7 @@ var errUnsupported = errors.New("hot reload is not implemented on " + runtime.GO
 
 func pageSize() int { return syscall.Getpagesize() }
 
-func reserve(near, size uintptr) (uintptr, error) { return 0, errUnsupported }
+func reserve(near, size uintptr) (uintptr, uintptr, error) { return 0, 0, errUnsupported }
 
 func commit(addr, size uintptr) error { return errUnsupported }
 

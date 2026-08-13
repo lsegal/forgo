@@ -2590,6 +2590,18 @@ func (ctxt *Link) textaddress() {
 		limit = 1 // debug mode, force generating trampolines for everything
 	}
 
+	if fgohotLinking() {
+		// A hot link's own text is always tiny — a handful of changed
+		// functions — so on size alone this pass would never think it
+		// needs trampolines. But the symbols that text calls may be pinned
+		// at addresses well outside a direct call's reach: anywhere within
+		// the agent's reserved region, which can be far from the running
+		// program's own text (see runtime/fgohot's reach_*.go). Force
+		// trampoline generation unconditionally rather than trust a size
+		// heuristic that has no way to know that.
+		limit = 1
+	}
+
 	if ctxt.IsAIX() && ctxt.IsExternal() {
 		// On AIX, normally we won't generate direct calls to external symbols,
 		// except in one test, cmd/go/testdata/script/link_syso_issue33139.txt.
@@ -2602,7 +2614,9 @@ func (ctxt *Link) textaddress() {
 	// First pass: assign addresses assuming the program is small and will
 	// not require trampoline generation.
 	big := false
+	var fgohotCurPkg string
 	for _, s := range ctxt.Textp {
+		va = fgohotPageAlign(ldr, s, &fgohotCurPkg, va)
 		sect, n, va = assignAddress(ctxt, sect, n, s, va, false, big)
 		if va-start >= limit {
 			big = true
@@ -2623,7 +2637,9 @@ func (ctxt *Link) textaddress() {
 
 		ntramps := 0
 		var curPkg string
+		var fgohotCurPkg string
 		for i, s := range ctxt.Textp {
+			va = fgohotPageAlign(ldr, s, &fgohotCurPkg, va)
 			// When we find the first symbol in a package, perform a
 			// single iteration that assigns temporary addresses to all
 			// of the text in the same package, using the maximum possible

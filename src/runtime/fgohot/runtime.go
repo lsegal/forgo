@@ -13,6 +13,13 @@ import "unsafe"
 // this architecture.
 func supported() bool
 
+// beginPatch stops the world; endPatch resumes it. apply brackets a whole
+// patch application — including the protection changes around the writes,
+// not just the writes themselves — between the two. See forgo_hot.go's
+// fgohotBeginPatch for why the writes alone aren't enough.
+func beginPatch()
+func endPatch()
+
 // textRange returns the bounds of the running program's own code.
 func textRange() (start, end uintptr)
 

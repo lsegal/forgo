@@ -40,18 +40,17 @@ import (
 // fgohotSupported reports whether hot reload can work on this platform.
 //
 // The entry-point patching below needs to write an architecture specific
-// jump over the first instructions of a live function. Only amd64 is
-// implemented today; other architectures report a clean error rather than
-// corrupting the text segment.
+// jump over the first instructions of a live function, and, on arm64, flush
+// the instruction cache afterward. amd64 is implemented on every OS forgo
+// hot reload otherwise supports; arm64 is implemented only for darwin
+// (Apple Silicon), whose I-cache maintenance goes through a libSystem call
+// this file only wires up there. Other combinations report a clean error
+// rather than corrupting the text segment.
 //
 //go:linkname fgohotSupported runtime/fgohot.supported
 func fgohotSupported() bool {
-	return GOARCH == "amd64"
+	return GOARCH == "amd64" || (GOARCH == "arm64" && GOOS == "darwin")
 }
-
-// fgohotPatchLen is the number of bytes fgohotPatch overwrites at the entry
-// point of a function it redirects.
-const fgohotPatchLen = 5 // amd64: JMP rel32
 
 // fgohotTextRange reports the text segment of the running program, so the
 // agent can make the pages it is about to patch temporarily writable.
@@ -129,6 +128,39 @@ func fgohotDoInit(tasks []*initTask) {
 	doInit(tasks)
 }
 
+// fgohotWorldStop holds the token between fgohotBeginPatch and
+// fgohotEndPatch. A plain package variable is safe here because the agent
+// only ever has one patch in flight at a time — its own serve loop is the
+// sole caller, never concurrent with itself.
+var fgohotWorldStop worldStop
+
+// fgohotBeginPatch stops the world. The caller must call fgohotEndPatch
+// exactly once after, whether or not fgohotPatch itself is ultimately
+// called.
+//
+// This is a separate step from fgohotPatch, rather than being inside it as
+// it once was, because the agent needs the world stopped for more than just
+// the writes fgohotPatch makes: on a platform that cannot mark a page both
+// writable and executable at once (observed on darwin/arm64; see
+// runtime/fgohot's fgohot.go), it briefly has to make the page
+// writable-only around those writes, and if the world were still running
+// at that moment, another goroutine calling straight into the function
+// being patched would fault on the vanished exec permission. Stopping the
+// world before that protection change, not just before the writes,
+// closes that window.
+//
+//go:linkname fgohotBeginPatch runtime/fgohot.beginPatch
+func fgohotBeginPatch() {
+	fgohotWorldStop = stopTheWorld(stwUnknown)
+}
+
+// fgohotEndPatch resumes what fgohotBeginPatch stopped.
+//
+//go:linkname fgohotEndPatch runtime/fgohot.endPatch
+func fgohotEndPatch() {
+	startTheWorld(fgohotWorldStop)
+}
+
 // fgohotPatch redirects functions to new implementations. pairs holds
 // (oldEntry, newEntry) tuples: after it returns, every call that targets
 // oldEntry executes the body at newEntry instead.
@@ -138,8 +170,10 @@ func fgohotDoInit(tasks []*initTask) {
 // the same guarantee Dart's hot reload gives: the change takes effect the
 // next time the function is called.
 //
-// It runs with the world stopped and refuses to patch if any goroutine is
-// stopped inside the handful of bytes it needs to overwrite.
+// The caller must have the world stopped already, via fgohotBeginPatch —
+// see there for why that happens outside this function now. This refuses to
+// patch if any goroutine is stopped inside the handful of bytes it needs to
+// overwrite.
 //
 //go:linkname fgohotPatch runtime/fgohot.patchFuncs
 func fgohotPatch(pairs []uintptr) string {
@@ -153,7 +187,6 @@ func fgohotPatch(pairs []uintptr) string {
 		return ""
 	}
 
-	stw := stopTheWorld(stwUnknown)
 	msg := fgohotCheckStacks(pairs)
 	if msg == "" {
 		for i := 0; i < len(pairs); i += 2 {
@@ -162,7 +195,6 @@ func fgohotPatch(pairs []uintptr) string {
 			}
 		}
 	}
-	startTheWorld(stw)
 	return msg
 }
 
@@ -197,25 +229,5 @@ func fgohotCheckStacks(pairs []uintptr) string {
 
 // fgohotWriteJump overwrites the first fgohotPatchLen bytes at old with an
 // unconditional jump to new. The caller must have stopped the world and made
-// the page writable.
-//
-//go:nosplit
-func fgohotWriteJump(old, new uintptr) string {
-	if old == 0 || new == 0 {
-		return "hot reload: nil patch target"
-	}
-	delta := int64(new) - int64(old+fgohotPatchLen)
-	if delta < -0x7fffffff || delta > 0x7fffffff {
-		// The agent reserves the image region within reach of the program's
-		// text precisely so this cannot happen; if it does, refuse rather
-		// than write a longer sequence over a function that may be shorter.
-		return "hot reload: replacement code is out of jump range"
-	}
-	p := (*[fgohotPatchLen]byte)(unsafe.Pointer(old))
-	p[0] = 0xe9 // JMP rel32
-	p[1] = byte(delta)
-	p[2] = byte(delta >> 8)
-	p[3] = byte(delta >> 16)
-	p[4] = byte(delta >> 24)
-	return ""
-}
+// the page writable. Implemented per architecture — see forgo_hot_amd64.go
+// and forgo_hot_arm64.go.

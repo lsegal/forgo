@@ -33,23 +33,25 @@ var (
 func pageSize() int { return syscall.Getpagesize() }
 
 // reserve claims size bytes of address space close enough to the program's
-// code that a direct jump can reach it, without committing any memory.
-func reserve(near, size uintptr) (uintptr, error) {
+// code that a direct jump can reach it, without committing any memory. On
+// success it always returns exactly size — see mem_darwin.go's reserve for
+// why the return also carries a (possibly smaller) size at all.
+func reserve(near, size uintptr) (uintptr, uintptr, error) {
 	// VirtualAlloc rounds a requested base down to the 64KB allocation
 	// granularity, so walk forward in granularity-sized steps.
 	const granularity = 64 << 10
 	const gap = 64 << 20
-	for addr := (near + gap) &^ (granularity - 1); addr < near+(1<<31)-size; addr += 256 << 20 {
+	for addr := (near + gap) &^ (granularity - 1); addr < near+maxReach-size; addr += probeStep {
 		p, _, _ := procVirtualAlloc.Call(addr, size, memReserve, protR)
 		if p == 0 {
 			continue
 		}
-		if p >= near && p-near < 1<<31 {
-			return p, nil
+		if p >= near && p-near < maxReach {
+			return p, size, nil
 		}
 		procVirtualFree.Call(p, 0, memRelease)
 	}
-	return 0, errors.New("no free address space within reach of the program's code")
+	return 0, 0, errors.New("no free address space within reach of the program's code")
 }
 
 // commit backs a slice of the reserved region with memory.

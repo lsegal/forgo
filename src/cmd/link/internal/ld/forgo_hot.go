@@ -50,7 +50,44 @@ var (
 	flagFgoHotSyms     = flag.String("fgohotsyms", "", "record the linked symbol table in `file` for later forgo hot reloads")
 	flagFgoHotPin      = flag.String("fgohotpin", "", "hot reload: link against the symbol record in `file`, reusing the addresses it names")
 	flagFgoHotManifest = flag.String("fgohotmanifest", "", "hot reload: describe the resulting image in `file`")
+	flagFgoHotPIE      = flag.Bool("fgohotpie", false, "hot reload: allow recording/pinning a PIE binary's addresses, on the caller's assurance it will correct them for the OS's ASLR slide before reuse")
 )
+
+// fgohotPkgPath is runtime/fgohot's own package path.
+const fgohotPkgPath = "runtime/fgohot"
+
+// fgohotPageSize is the granularity fgohotPageAlign pads to. 16KB covers
+// every VM page size forgo hot reload's protection dance needs to worry
+// about (darwin's is always 16KB; padding a little extra on a platform
+// whose real page size is smaller, e.g. 4KB, is harmless).
+const fgohotPageSize = 1 << 14
+
+// fgohotPageAlign rounds va up to a page boundary when the layout walk is
+// about to cross into or out of package runtime/fgohot's symbols.
+//
+// Why: on a platform that cannot mark a page both writable and executable
+// at once (darwin/arm64 — see runtime/fgohot's fgohot.go), applying a hot
+// patch briefly removes exec permission from the page it's writing to.
+// runtime/fgohot's own code is what makes that mprotect call; if it landed
+// on the very page being patched, the call's own return would fault the
+// instant exec permission vanished — a real, observed crash, not a
+// theoretical one, because a blank `import _ "runtime/fgohot"` (which every
+// watched build adds) tends to place the package immediately next to its
+// importer rather than safely far away. This is called for every symbol
+// during layout, in both the small-program and trampoline-aware passes in
+// address() (data.go), and is a no-op unless this is an -fgohotsyms or
+// -fgohotpin link.
+func fgohotPageAlign(ldr *loader.Loader, s loader.Sym, curPkg *string, va uint64) uint64 {
+	if !fgohotActive() {
+		return va
+	}
+	pkg := ldr.SymPkg(s)
+	if (pkg == fgohotPkgPath) != (*curPkg == fgohotPkgPath) {
+		va = uint64(Rnd(int64(va), fgohotPageSize))
+	}
+	*curPkg = pkg
+	return va
+}
 
 // fgohotLinking reports whether this is a hot link — a link against a program
 // that is already running.
@@ -165,10 +202,14 @@ var fgohotNeverPinKind = map[sym.SymKind]bool{
 // immediately after deadcode, and, when a pin record was supplied, decides
 // there and then which symbols this link may reuse from the running program.
 func fgohotSnapshot(ctxt *Link) {
-	if ctxt.BuildMode == BuildModePIE {
-		// A PIE binary's addresses are meaningless to record: the OS assigns
-		// its real load address at each launch, not this link.
-		Exitf("hot reload requires a non-PIE binary (-buildmode=exe)")
+	if ctxt.BuildMode == BuildModePIE && !*flagFgoHotPIE {
+		// A PIE binary's addresses only describe the running process up to
+		// the OS's per-launch ASLR slide — meaningless to record unless the
+		// caller has a way to recover that slide and correct for it
+		// (-fgohotpie asserts it does; forgo run --watch passes it on
+		// platforms, such as darwin/arm64, where the OS forces PIE and
+		// -buildmode=exe cannot avoid it).
+		Exitf("hot reload requires a non-PIE binary (-buildmode=exe), or -fgohotpie with a caller that corrects for ASLR")
 	}
 
 	ldr := ctxt.loader
