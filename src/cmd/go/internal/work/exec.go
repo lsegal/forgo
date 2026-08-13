@@ -54,6 +54,17 @@ const DefaultCFlags = "-O2 -g"
 
 // actionList returns the list of actions in the dag rooted at root
 // as visited in a depth-first post-order traversal.
+// trimGoExt strips a Go source extension — ".go", or forgo's ".fgo" for
+// files using forgo-specific syntax (see go/build's goExts) — from name, so
+// cgo-generated filenames derived from it (.cgo1.go, .cgo2.c, .cover.go)
+// come out the same regardless of which one the source file used.
+func trimGoExt(name string) string {
+	if trimmed := strings.TrimSuffix(name, ".fgo"); trimmed != name {
+		return trimmed
+	}
+	return strings.TrimSuffix(name, ".go")
+}
+
 func actionList(root *Action) []*Action {
 	seen := map[*Action]bool{}
 	all := []*Action{}
@@ -682,7 +693,7 @@ func (b *Builder) runCover(a, buildAction *Action, objdir string, gofiles, cgofi
 			sourceFile = filepath.Join(p.Dir, file)
 			coverFile = objdir + file
 		}
-		coverFile = strings.TrimSuffix(coverFile, ".go") + ".cover.go"
+		coverFile = trimGoExt(coverFile) + ".cover.go"
 		infiles = append(infiles, sourceFile)
 		outfiles = append(outfiles, coverFile)
 		if i < len(gofiles) {
@@ -3010,7 +3021,7 @@ func (b *Builder) runCgo(ctx context.Context, a *Action) error {
 	gofiles := []string{objdir + "_cgo_gotypes.go"}
 	cfiles := []string{objdir + "_cgo_export.c"}
 	for _, fn := range cgofiles {
-		f := strings.TrimSuffix(filepath.Base(fn), ".go")
+		f := trimGoExt(filepath.Base(fn))
 		gofiles = append(gofiles, objdir+f+".cgo1.go")
 		cfiles = append(cfiles, objdir+f+".cgo2.c")
 	}

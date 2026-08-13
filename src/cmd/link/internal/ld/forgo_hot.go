@@ -332,7 +332,21 @@ func fgohotPin(ctxt *Link) {
 	fgohot.isPinned = make(map[loader.Sym]bool, len(rec))
 
 	for s, cur := range fgohot.snap {
-		if fgohotNeverPinKind[cur.kind] {
+		if fgohotNeverPinKind[cur.kind] || ldr.AttrSubSymbol(s) || ldr.SubSym(s) != 0 {
+			// A subsymbol's address is never assigned on its own — only its
+			// outermost container ever goes through assignAddress, which
+			// then walks the whole chain (see resetAddress/assignAddress in
+			// data.go). Pinning a subsymbol independently of its container
+			// (or a container independently of its subsymbols) can leave
+			// one half of the pair with a real address and the other stuck
+			// at its unresolved offset — observed with cgo's generated
+			// call stubs, whose per-build-random names never match the
+			// host record, so a container that does (its content is
+			// otherwise identical) gets pinned and removed from this
+			// link's layout while its now-orphaned subsymbol still expects
+			// one. Laying out the whole chain fresh every time sidesteps
+			// the mismatch entirely, same as fgohotNeverPinKind below.
+			//
 			// Not really "laid out" at all — resolved per-link by a
 			// platform-specific mechanism (the PE import table on Windows,
 			// the PLT/GOT for cgo elsewhere). A hash comparison here would be

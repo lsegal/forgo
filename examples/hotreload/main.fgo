@@ -16,7 +16,28 @@
 // render() is a separate function main() calls fresh every iteration, so a
 // change to it is visible on the very next tick. (Dart/Flutter hot reload
 // has the identical rule for an already-running build()/main() activation.)
+//
+// greet, below, is plain C reached through cgo — edit its printf and save
+// like any other change here. The C source lives in the comment immediately
+// above `import "C"`, so cgo recompiles it (via the system C compiler) on
+// every build, watched or not; what makes this interesting for hot reload
+// specifically is that the *call site* in render() is ordinary Go being
+// patched the same way any other call would be, into a cgo stub that
+// forgo's hot linker never pins (see fgohotNeverPinKind in
+// cmd/link/internal/ld/forgo_hot.go) and instead relays out fresh on every
+// relink, same as it would for any symbol resolved by the external linker
+// rather than laid out by cmd/link itself.
 package main
+
+/*
+#include <stdio.h>
+
+static void greet(int n) {
+	printf("[C] hello from cgo, tick %d\n", n);
+	fflush(stdout);
+}
+*/
+import "C"
 
 import (
 	"fmt"
@@ -36,6 +57,7 @@ var (
 
 // render is the interesting one to edit. Change it and save.
 func render() string {
+	C.greet(C.int(ticks))
 	return fmt.Sprintf("tick %d", ticks)
 }
 
