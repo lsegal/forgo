@@ -251,6 +251,17 @@ func (w *watcher) build(extraGcflags []string, out string, ldflags ...string) er
 	// the OS's ASLR slide (see (*watcher).aslrSlide) before reusing them, so
 	// it should record/pin anyway instead of refusing a PIE binary outright.
 	ldflags = append(ldflags, "-fgohotpie")
+	// External linking (cgo's default) hands relocations to the system
+	// linker, which needs every referenced symbol to have a section — but a
+	// pinned symbol deliberately has none; it isn't laid out by this link
+	// at all, just reused at the address it already has. That combination
+	// fails outright ("missing section for ..."). Internal linking doesn't
+	// have this requirement, so watched builds force it. This does mean a
+	// cgo package that specifically needs external linking (net or os/user
+	// on some platforms, C++ code, static libraries that don't support
+	// internal linking) can't be hot-reloaded — a real limitation, not a
+	// bug being papered over.
+	ldflags = append(ldflags, "-linkmode=internal")
 	argv = append(argv, "-ldflags="+strings.Join(ldflags, " "), "-o", out)
 	argv = append(argv, w.pkgArgs...)
 

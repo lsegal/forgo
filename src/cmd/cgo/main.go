@@ -326,10 +326,11 @@ func main() {
 	}
 
 	// Find first arg that looks like a go file and assume everything before
-	// that are options to pass to gcc.
+	// that are options to pass to gcc. ".fgo" is forgo's extension for
+	// files using forgo-specific syntax; see go/build's goExts.
 	var i int
 	for i = len(args); i > 0; i-- {
-		if !strings.HasSuffix(args[i-1], ".go") {
+		if !strings.HasSuffix(args[i-1], ".go") && !strings.HasSuffix(args[i-1], ".fgo") {
 			break
 		}
 	}
