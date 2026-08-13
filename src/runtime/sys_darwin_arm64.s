@@ -114,6 +114,28 @@ TEXT runtime·munmap_trampoline(SB),NOSPLIT,$0
 	BL	notok<>(SB)
 	RET
 
+TEXT runtime·sys_icache_invalidate_trampoline(SB),NOSPLIT,$0
+	MOVD	8(R0), R1	// arg 2 len
+	MOVD	0(R0), R0	// arg 1 start
+	BL	libc_sys_icache_invalidate(SB)
+	RET
+
+TEXT runtime·mprotect_trampoline(SB),NOSPLIT,$0
+	MOVD	R0, R19
+	MOVD	0(R19), R0	// arg 1 addr
+	MOVD	8(R19), R1	// arg 2 len
+	MOVW	16(R19), R2	// arg 3 prot
+	BL	libc_mprotect(SB)
+	MOVD	$0, R1
+	MOVD	$-1, R2
+	CMP	R0, R2
+	BNE	ok
+	BL	libc_error(SB)
+	MOVW	(R0), R1
+ok:
+	MOVW	R1, 20(R19)
+	RET
+
 TEXT runtime·madvise_trampoline(SB),NOSPLIT,$0
 	MOVD	8(R0), R1	// arg 2 len
 	MOVW	16(R0), R2	// arg 3 advice

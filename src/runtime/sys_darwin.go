@@ -201,6 +201,24 @@ func munmap(addr unsafe.Pointer, n uintptr) {
 }
 func munmap_trampoline()
 
+// mprotect changes the protection of the n bytes at addr. It returns 0 on
+// success or the errno on failure. Used by forgo hot reload (runtime/fgohot,
+// linknamed in forgo_hot_darwin.go) to make freshly mapped code executable
+// and to make an already-running function's entry point briefly writable.
+//
+//go:nosplit
+func mprotect(addr unsafe.Pointer, n uintptr, prot int32) int32 {
+	args := struct {
+		addr unsafe.Pointer
+		n    uintptr
+		prot int32
+		ret  int32
+	}{addr, n, prot, 0}
+	libcCall(unsafe.Pointer(abi.FuncPCABI0(mprotect_trampoline)), unsafe.Pointer(&args))
+	return args.ret
+}
+func mprotect_trampoline()
+
 //go:nosplit
 //go:cgo_unsafe_args
 func madvise(addr unsafe.Pointer, n uintptr, flags int32) {
@@ -593,6 +611,7 @@ func proc_regionfilename_trampoline()
 
 //go:cgo_import_dynamic libc_mmap mmap "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_munmap munmap "/usr/lib/libSystem.B.dylib"
+//go:cgo_import_dynamic libc_mprotect mprotect "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_madvise madvise "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_mlock mlock "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_error __error "/usr/lib/libSystem.B.dylib"

@@ -28,14 +28,18 @@ package fgohot
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// reserveSize is how much address space the agent reserves up front for
-// reloaded code. Each reload consumes a fresh slice of it, so this bounds how
-// many times a program can be reloaded before it must be restarted.
+// reserveSize is how much address space the agent asks reserve for up front
+// for reloaded code. Each reload consumes a fresh slice of it, so this
+// bounds how many times a program can be reloaded before it must be
+// restarted. Only a target: reserve may hand back less (see mem_darwin.go),
+// in which case regSize — what the agent actually tells the watcher it
+// has — reflects the smaller, real amount.
 const reserveSize = 512 << 20
 
 // pollInterval is how often the agent looks for a new request.
@@ -58,20 +62,28 @@ func init() {
 		return
 	}
 	textStart, textEnd := textRange()
-	base, err := reserve(textEnd, reserveSize)
+	base, size, err := reserve(textEnd, reserveSize)
 	if err != nil {
 		writeFile("agent.err", "hot reload could not reserve address space: "+err.Error()+"\n")
 		return
 	}
-	regBase, regSize = base, reserveSize
+	regBase, regSize = base, size
 
 	// Publish what the watcher needs in order to link images that fit into
 	// this process: where its code lives and where new code may go.
+	//
+	// landmark is this process's own actual address for a function (serve,
+	// below) that the host build's symbol record also names — the two
+	// together are how the watcher recovers the OS's ASLR slide on a
+	// platform that forces PIE (darwin/arm64, windows/arm64), where the
+	// record's addresses only describe where the linker put things, not
+	// where this particular launch of the program actually landed.
 	writeFile("agent", strings.Join([]string{
 		"pid " + strconv.Itoa(os.Getpid()),
 		"base " + hex(regBase),
 		"size " + hex(regSize),
 		"text " + hex(textStart) + " " + hex(textEnd),
+		"landmark " + hex(reflect.ValueOf(serve).Pointer()),
 		"",
 	}, "\n"))
 
@@ -167,15 +179,35 @@ func apply(gen string) string {
 
 	// Finally redirect the old entry points. The program's own text has to be
 	// writable for the moment it takes to write the jumps.
+	//
+	// This asks for RWX, not just RW: the page must never actually lose exec
+	// permission, because nothing here can safely bracket a window where it
+	// does. The obvious fix — stop the world first, so no other goroutine
+	// can be running to fault on it — does not work: it does hang, not race,
+	// but it still hangs (observed directly: with the world stopped, the
+	// mprotect call itself, or something concurrently made by another M
+	// still executing runtime-internal code like nanotime/usleep on the
+	// same 16KB page — page granularity does not distinguish patchable
+	// user code from the tiny runtime trampolines every M constantly calls
+	// through — never returns). On a platform that refuses RWX outright
+	// (observed on darwin/arm64; Apple's W^X enforcement), there is
+	// currently no safe way to apply this patch, so it refuses rather than
+	// guess at a fix that trades a hang for a crash. See forgo's README for
+	// the current state of arm64 support.
 	if len(req.patches) > 0 {
 		lo, hi := patchBounds(req.patches)
-		if err := protect(lo, hi-lo, protRWX); err != nil {
-			return "cannot unprotect text: " + err.Error()
+		beginPatch()
+		err := protect(lo, hi-lo, protRWX)
+		var msg string
+		if err != nil {
+			msg = "cannot unprotect text: this platform does not allow a page to be both writable and executable, and forgo hot reload has no safe way yet to apply a patch without one (" + err.Error() + ")"
+		} else {
+			msg = patchFuncs(req.patches)
+			if err := protect(lo, hi-lo, protRX); err != nil && msg == "" {
+				msg = "cannot reprotect text: " + err.Error()
+			}
 		}
-		msg := patchFuncs(req.patches)
-		if err := protect(lo, hi-lo, protRX); err != nil && msg == "" {
-			msg = "cannot reprotect text: " + err.Error()
-		}
+		endPatch()
 		if msg != "" {
 			return msg
 		}
