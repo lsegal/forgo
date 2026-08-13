@@ -74,6 +74,12 @@ jobs:
           status=0
           for dir in examples/*/; do
             name="$(basename "$dir")"
+            # hotreload demonstrates `forgo run --watch`: its main() loops
+            # forever by design, so a plain `forgo run` would never return.
+            if [ "$name" = "hotreload" ]; then
+              echo "=== $name (skipped: runs forever by design, see examples/hotreload/main.fgo) ==="
+              continue
+            fi
             echo "=== $name ==="
             if ! (cd "$dir" && forgo run .); then
               echo "!!! example $name failed"
@@ -92,6 +98,12 @@ jobs:
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           $failed = $false
           Get-ChildItem examples -Directory | ForEach-Object {
+            # hotreload demonstrates `forgo run --watch`: its main() loops
+            # forever by design, so a plain `forgo run` would never return.
+            if ($_.Name -eq "hotreload") {
+              Write-Host "=== $($_.Name) (skipped: runs forever by design, see examples/hotreload/main.fgo) ==="
+              return
+            }
             Write-Host "=== $($_.Name) ==="
             Push-Location $_.FullName
             & forgo run .
