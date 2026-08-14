@@ -235,6 +235,17 @@ func (w *watcher) build(extraGcflags []string, out string, ldflags ...string) er
 	// Inlining would copy a changed function's body into callers that are not
 	// being replaced, so a reload would only take effect in some of them.
 	argv = append(argv, "-gcflags=all=-l")
+	// A hot patch replaces a function entry with a full-address trampoline:
+	// 14 bytes on amd64 and 16 bytes on arm64. Preserve each architecture's
+	// normal alignment explicitly (32 and 16 bytes respectively), so even a
+	// one-instruction function has a private patch slot and replacing it
+	// cannot overwrite the next function. Apply this to the initial host and
+	// every reload alike; the latter keeps subsequent records consistent.
+	funcAlign := 16
+	if runtime.GOARCH == "amd64" {
+		funcAlign = 32
+	}
+	ldflags = append(ldflags, fmt.Sprintf("-funcalign=%d", funcAlign))
 	// The addresses recorded for pinning are the ones this link assigns; they
 	// only describe the running process if the OS loads it at exactly those
 	// addresses. Go defaults to PIE on windows/amd64, which the OS instead
