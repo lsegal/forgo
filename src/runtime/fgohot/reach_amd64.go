@@ -6,9 +6,12 @@
 
 package fgohot
 
-// A JMP rel32 reaches +-2GB, which is what patching a function's entry point
-// needs and what bounds how far from the program's own text the reserved
-// region for new code may be.
+// The function-entry patch itself has full 64-bit reach (see
+// runtime/forgo_hot_amd64.go). The reload image still has to remain within
+// +-2GB of the running program: ordinary compiler-generated calls and
+// references to pinned package data use signed 32-bit PC-relative operands.
+// A call can grow a linker trampoline, but an arbitrary data instruction
+// cannot, so the address-space reservation must respect the tighter limit.
 const (
 	maxReach  = 1 << 31
 	probeStep = 256 << 20

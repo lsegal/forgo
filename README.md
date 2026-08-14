@@ -482,8 +482,9 @@ something concrete. It means this:
    relocations point at.
 2. The program starts with a small agent (`runtime/fgohot`) linked in. The
    agent reserves half a gigabyte of address space within reach of the
-   program's own code — close enough that a direct jump can span the gap —
-   and tells the watcher where it is.
+   program's own code — close enough that ordinary PC-relative references
+   from new code can still reach pinned code and data — and tells the watcher
+   where it is.
 3. On save, the whole program is linked again, against that record. Any
    symbol whose digest is unchanged is **pinned**: it keeps the address it
    already occupies in the running process, and is left out of the output
@@ -498,8 +499,10 @@ something concrete. It means this:
 4. The agent maps the resulting image, registers its `moduledata` with the
    runtime — so the garbage collector, the stack unwinder, profiles and
    panics all understand the new code — runs the initializers of packages
-   that are new, and finally overwrites the first five bytes of each
-   changed function with a jump to its new body, with the world stopped.
+   that are new, and finally overwrites each changed function's aligned entry
+   slot with a full-address indirect jump to its new body, with the world
+   stopped. On amd64 that is a register-preserving 14-byte trampoline, so
+   entry-point redirection is not limited to the `JMP rel32` ±2GB range.
 
 A function already executing finishes its current call in the old code; the
 next call runs the new code. Dart's hot reload makes the same bargain.
@@ -565,8 +568,9 @@ forgo: cannot reload without restarting — the type main.Point changed shape
   `mprotect` — real further work, not a quick fix. Everything upstream of
   that last step (the darwin memory backend, Mach-O image parsing, the
   ASLR-slide correction the OS's forced PIE on this architecture needs, and
-  an arm64 entry-point patcher using an indirect branch instead of amd64's
-  direct `JMP rel32`) is implemented and exercised.
+  an arm64 entry-point patcher using an indirect branch) is implemented and
+  exercised. amd64 now uses the same full-address strategy rather than a
+  direct `JMP rel32`.
 - On Windows, the watched build always uses `-buildmode=exe`, overriding
   the toolchain's PIE-by-default on windows/amd64. PIE's load address is
   chosen by the OS at every launch, which would make the addresses a hot

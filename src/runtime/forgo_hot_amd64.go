@@ -7,8 +7,18 @@ package runtime
 import "unsafe"
 
 // fgohotPatchLen is the number of bytes fgohotPatch overwrites at the entry
-// point of a function it redirects.
-const fgohotPatchLen = 5 // JMP rel32
+// point of a function it redirects:
+//
+//	JMP QWORD PTR [RIP+0]
+//	<8 byte target>
+//
+// Unlike JMP rel32, this sequence reaches the entire 64-bit address space.
+// It also leaves every register untouched, which matters at a Go ABI entry:
+// MOVABS target, RAX; JMP RAX would be two bytes shorter, but RAX may contain
+// an argument. forgo run --watch links the host with -funcalign=16, so these
+// 14 bytes never overlap the following function even when the original body
+// is shorter than the patch.
+const fgohotPatchLen = 14
 
 // fgohotWriteJump overwrites the first fgohotPatchLen bytes at old with an
 // unconditional jump to new. The caller must have stopped the world and made
@@ -19,18 +29,13 @@ func fgohotWriteJump(old, new uintptr) string {
 	if old == 0 || new == 0 {
 		return "hot reload: nil patch target"
 	}
-	delta := int64(new) - int64(old+fgohotPatchLen)
-	if delta < -0x7fffffff || delta > 0x7fffffff {
-		// The agent reserves the image region within reach of the program's
-		// text precisely so this cannot happen; if it does, refuse rather
-		// than write a longer sequence over a function that may be shorter.
-		return "hot reload: replacement code is out of jump range"
-	}
 	p := (*[fgohotPatchLen]byte)(unsafe.Pointer(old))
-	p[0] = 0xe9 // JMP rel32
-	p[1] = byte(delta)
-	p[2] = byte(delta >> 8)
-	p[3] = byte(delta >> 16)
-	p[4] = byte(delta >> 24)
+	p[0] = 0xff // JMP QWORD PTR [RIP+disp32]
+	p[1] = 0x25
+	p[2] = 0 // disp32 = 0: the pointer immediately follows the instruction
+	p[3] = 0
+	p[4] = 0
+	p[5] = 0
+	*(*uintptr)(unsafe.Pointer(old + 6)) = new
 	return ""
 }

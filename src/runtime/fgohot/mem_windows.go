@@ -33,7 +33,9 @@ var (
 func pageSize() int { return syscall.Getpagesize() }
 
 // reserve claims size bytes of address space close enough to the program's
-// code that a direct jump can reach it, without committing any memory. On
+// code that its PC-relative references to pinned code and data can reach,
+// without committing any memory. The entry trampoline itself has full 64-bit
+// reach (see runtime/forgo_hot_amd64.go). On
 // success it always returns exactly size — see mem_darwin.go's reserve for
 // why the return also carries a (possibly smaller) size at all.
 func reserve(near, size uintptr) (uintptr, uintptr, error) {
