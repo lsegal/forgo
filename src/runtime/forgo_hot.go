@@ -198,6 +198,11 @@ func fgohotPatch(pairs []uintptr) string {
 	return msg
 }
 
+//go:linkname fgohotCheckPatchFuncs runtime/fgohot.checkPatchFuncs
+func fgohotCheckPatchFuncs(pairs []uintptr) string {
+	return fgohotCheckStacks(pairs)
+}
+
 // fgohotCheckStacks reports whether any goroutine is parked with a program
 // counter inside a region fgohotWriteJump is about to overwrite.
 func fgohotCheckStacks(pairs []uintptr) string {

@@ -36,8 +36,17 @@ func moduleInitTasks(moduledata uintptr) []*initTask
 func doInitTasks(tasks []*initTask)
 
 // patchFuncs redirects function entry points. pairs holds (old, new) tuples.
-// It stops the world for the duration and returns "" on success.
+// The caller must have stopped the world; it returns "" on success.
 func patchFuncs(pairs []uintptr) string
+
+// checkPatchFuncs refuses a patch when a stopped goroutine's PC is in bytes
+// the patch will replace. Darwin/arm64 prepares jumps in a private page, so
+// it must perform this check against the original addresses separately.
+func checkPatchFuncs(pairs []uintptr) string
+
+// flushICache publishes newly mapped instructions on architectures whose
+// instruction cache is not coherent with data writes.
+func flushICache(addr, size uintptr)
 
 // initTask mirrors runtime.initTask. Only pointers to it cross the boundary,
 // so the contents do not matter here.
