@@ -144,6 +144,11 @@ type fgohotState struct {
 	// functions that changed and so need their old entry point redirected.
 	patches []fgohotPatch
 
+	// stable entry addresses inherited from the prior generation. A symbol
+	// may be laid out fresh for dependency reasons without becoming active;
+	// its throwaway image address must never replace this one in the record.
+	stableText map[loader.Sym]uint64
+
 	// packages that are new in this image and whose init must still run.
 	newInitTasks []loader.Sym
 
@@ -330,6 +335,7 @@ func fgohotPin(ctxt *Link) {
 		Exitf("hot reload: %v", err)
 	}
 	fgohot.isPinned = make(map[loader.Sym]bool, len(rec))
+	fgohot.stableText = make(map[loader.Sym]uint64)
 
 	for s, cur := range fgohot.snap {
 		if fgohotNeverPinKind[cur.kind] || ldr.AttrSubSymbol(s) || ldr.SubSym(s) != 0 {
@@ -358,6 +364,9 @@ func fgohotPin(ctxt *Link) {
 		old := rec[fgohotIdentity(cur)]
 		if old == nil {
 			continue // genuinely new; lay it out fresh
+		}
+		if cur.kind == sym.STEXT {
+			fgohot.stableText[s] = old.addr
 		}
 		if old.hash == cur.hash && !fgohotNeverPin[cur.name] {
 			ldr.SetSymValue(s, int64(old.addr))
@@ -405,6 +414,7 @@ func fgohotPin(ctxt *Link) {
 	})
 
 	fgohotUnpinSectionRelative(ctxt)
+	fgohotPatchFreshText(ldr, rec)
 
 	if os.Getenv("FORGO_HOT_DEBUG") != "" {
 		var changed []string
@@ -436,6 +446,49 @@ func fgohotPin(ctxt *Link) {
 		fgohotWriteManifest(ctxt)
 		Exitf("hot reload not possible: %s", strings.Join(fgohot.refusals, "; "))
 	}
+}
+
+// fgohotPatchFreshText redirects fresh callers of changed functions. A caller
+// in an older hot generation can refer directly to that generation's callee,
+// rather than its stable original entry. If the caller was forced out of
+// pinning for section-layout reasons, redirect it too so the active call graph
+// moves forward as a unit. Repeat because that caller may itself have a fresh
+// caller in an older generation.
+func fgohotPatchFreshText(ldr *loader.Loader, rec map[fgohotKey]*fgohotSym) {
+	patched := make(map[loader.Sym]bool, len(fgohot.patches))
+	for _, patch := range fgohot.patches {
+		patched[patch.sym] = true
+	}
+	for changed := true; changed; {
+		changed = false
+		for s, cur := range fgohot.snap {
+			if cur.kind != sym.STEXT || patched[s] || fgohotNeverPin[cur.name] {
+				continue
+			}
+			old := rec[fgohotIdentity(cur)]
+			if old == nil || !fgohotRefersToPatched(ldr, s, patched) {
+				continue
+			}
+			if fgohot.isPinned[s] {
+				delete(fgohot.isPinned, s)
+				ldr.SetSymValue(s, 0)
+				ldr.SetAttrNotInSymbolTable(s, false)
+			}
+			fgohot.patches = append(fgohot.patches, fgohotPatch{cur.name, s, old.addr})
+			patched[s] = true
+			changed = true
+		}
+	}
+}
+
+func fgohotRefersToPatched(ldr *loader.Loader, s loader.Sym, patched map[loader.Sym]bool) bool {
+	relocs := ldr.Relocs(s)
+	for i := 0; i < relocs.Count(); i++ {
+		if patched[relocs.At(i).Sym()] {
+			return true
+		}
+	}
+	return false
 }
 
 // fgohotSectionRelative reports whether a relocation is resolved as an offset
@@ -545,25 +598,15 @@ func fgohotWriteRecord(ctxt *Link, path string) {
 	}
 	sort.Slice(syms, func(i, j int) bool { return syms[i] < syms[j] })
 
-	// A patched symbol's own address in this link is a throwaway location in
-	// the reload's reserved region — nothing outside this generation ever
-	// refers to it. Every caller that isn't part of this image still calls
-	// through the *original* entry point, which patchFuncs permanently
-	// turned into a jump. That original address is the one a later hot link
-	// needs to record: it is what stays reachable, and, once patched, it no
-	// longer holds the symbol's real code — so recording anything else here
-	// would let a later edit that happens to match some earlier generation's
-	// bytes get pinned back to an address that isn't that code anymore.
-	stableAddr := make(map[loader.Sym]uint64, len(fgohot.patches))
-	for _, p := range fgohot.patches {
-		stableAddr[p.sym] = p.old
-	}
-
 	fmt.Fprintln(w, "forgohot 1")
 	for _, s := range syms {
 		e := fgohot.snap[s]
 		v := uint64(ldr.SymValue(s))
-		if addr, ok := stableAddr[s]; ok {
+		if addr, ok := fgohot.stableText[s]; ok {
+			// Fresh text is linked into a throwaway location in the reload
+			// region. Calls enter through the original address forever, so
+			// preserve that address even when dependency layout forced an
+			// otherwise unchanged function into this image without a patch.
 			v = addr
 		}
 		if v == 0 || ldr.AttrSpecial(s) {

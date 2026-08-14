@@ -169,6 +169,9 @@ func apply(gen string) string {
 	if msg := resolveImports(req.base, image); msg != "" {
 		return msg
 	}
+	if msg := resolveMachOImports(image); msg != "" {
+		return msg
+	}
 
 	// Publish the new code to the runtime before anything can jump into it,
 	// so a garbage collection that starts mid-reload can still unwind it.
@@ -177,38 +180,8 @@ func apply(gen string) string {
 	}
 	doInitTasks(moduleInitTasks(req.moduledata))
 
-	// Finally redirect the old entry points. The program's own text has to be
-	// writable for the moment it takes to write the jumps.
-	//
-	// This asks for RWX, not just RW: the page must never actually lose exec
-	// permission, because nothing here can safely bracket a window where it
-	// does. The obvious fix — stop the world first, so no other goroutine
-	// can be running to fault on it — does not work: it does hang, not race,
-	// but it still hangs (observed directly: with the world stopped, the
-	// mprotect call itself, or something concurrently made by another M
-	// still executing runtime-internal code like nanotime/usleep on the
-	// same 16KB page — page granularity does not distinguish patchable
-	// user code from the tiny runtime trampolines every M constantly calls
-	// through — never returns). On a platform that refuses RWX outright
-	// (observed on darwin/arm64; Apple's W^X enforcement), there is
-	// currently no safe way to apply this patch, so it refuses rather than
-	// guess at a fix that trades a hang for a crash. See forgo's README for
-	// the current state of arm64 support.
 	if len(req.patches) > 0 {
-		lo, hi := patchBounds(req.patches)
-		beginPatch()
-		err := protect(lo, hi-lo, protRWX)
-		var msg string
-		if err != nil {
-			msg = "cannot unprotect text: this platform does not allow a page to be both writable and executable, and forgo hot reload has no safe way yet to apply a patch without one (" + err.Error() + ")"
-		} else {
-			msg = patchFuncs(req.patches)
-			if err := protect(lo, hi-lo, protRX); err != nil && msg == "" {
-				msg = "cannot reprotect text: " + err.Error()
-			}
-		}
-		endPatch()
-		if msg != "" {
+		if msg := patchText(req.patches); msg != "" {
 			return msg
 		}
 	}

@@ -17,7 +17,12 @@
 
 package runtime
 
-import "unsafe"
+import (
+	"internal/abi"
+	"unsafe"
+)
+
+//go:cgo_import_dynamic libc_mach_vm_remap mach_vm_remap "/usr/lib/libSystem.B.dylib"
 
 // fgohotMprotect changes the protection of the size bytes at addr. It
 // returns 0 on success or the errno on failure.
@@ -50,6 +55,36 @@ func fgohotMmapFixed(addr, size uintptr, prot int32) (uintptr, int32) {
 	}
 	return uintptr(p), 0
 }
+
+//go:linkname fgohotMmap runtime/fgohot.rtmmap
+func fgohotMmap(size uintptr, prot int32) (uintptr, int32) {
+	p, err := mmap(nil, size, prot, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+	return uintptr(p), int32(err)
+}
+
+//go:linkname fgohotMunmap runtime/fgohot.rtmunmap
+func fgohotMunmap(addr, size uintptr) {
+	munmap(unsafe.Pointer(addr), size)
+}
+
+// fgohotRemap atomically replaces target with a private copy of the mapping
+// at source. Both addresses and size must be page aligned.
+//
+//go:linkname fgohotRemap runtime/fgohot.rtremap
+func fgohotRemap(target, source, size uintptr) int32 {
+	targetAddress := uint64(target)
+	var current, maximum int32
+	args := struct {
+		target  *uint64
+		size    uintptr
+		source  uintptr
+		current *int32
+		maximum *int32
+	}{&targetAddress, size, source, &current, &maximum}
+	return int32(libcCall(unsafe.Pointer(abi.FuncPCABI0(mach_vm_remap_trampoline)), unsafe.Pointer(&args)))
+}
+
+func mach_vm_remap_trampoline()
 
 // fgohotVMRegion reports the mapped region at or after addr — the same
 // query vmmap itself uses, and the only way on darwin to tell whether a
