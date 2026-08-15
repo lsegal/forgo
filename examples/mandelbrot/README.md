@@ -2,9 +2,10 @@
 
 This example compares a scalar Mandelbrot escape-time kernel with a kernel
 built with forgo's `simd/archsimd` package. It processes eight pixels per
-vector with AVX2 on AMD64 and four with Neon on ARM64. Both kernels perform
-the same `float32` operations and produce the same checksum before timing
-begins.
+vector with AVX2 on AMD64 and four with Neon on ARM64. Before timing begins,
+the benchmark verifies that their checksums agree within a tight tolerance
+for boundary pixels where ARM64 may fuse scalar multiply-adds while explicit
+Neon `Mul`/`Add` operations round separately.
 
 Run with forgo:
 

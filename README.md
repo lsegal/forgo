@@ -592,7 +592,8 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 
 [`examples/mandelbrot`](examples/mandelbrot) is an allocation-free Mandelbrot
 benchmark with matching scalar and SIMD kernels. It validates the two
-checksums, then reports calibrated frame time, pixel throughput, and speedup.
+checksums (with a tight ARM64 boundary-rounding tolerance), then reports
+calibrated frame time, pixel throughput, and speedup.
 Forgo enables Go 1.27's experimental `simd/archsimd` package by default as a
 language feature: the example uses eight-lane AVX2 on AMD64 and four-lane Neon
 on ARM64 without requiring callers to set `GOEXPERIMENT`.
