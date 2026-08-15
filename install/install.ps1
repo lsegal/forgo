@@ -1,8 +1,8 @@
 # Installs forgo (https://github.com/lsegal/forgo) on Windows.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1))) -Version v0.2.0
+#   irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.ps1 | iex
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.ps1))) -Version v0.2.0
 #
 # Env vars:
 #   FORGO_REPO         "owner/repo" to install from (default: lsegal/forgo)

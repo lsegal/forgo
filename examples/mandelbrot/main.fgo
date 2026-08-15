@@ -1,4 +1,4 @@
-//go:build amd64
+//go:build amd64 || arm64
 
 package main
 
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"simd/archsimd"
 	"strconv"
 	"testing"
 )
@@ -15,7 +14,6 @@ const (
 	defaultWidth      = 1024
 	defaultHeight     = aspectHeight(1024)
 	defaultIterations = 256
-	laneCount         = 8
 )
 
 //fgo:comptime
@@ -38,14 +36,14 @@ func parseConfig(args []string) (cfg *config, err error) {
 	cfg.height = strconv.Atoi(args[1])? if len(args) > 1
 	cfg.iterations = strconv.Atoi(args[2])? if len(args) > 2
 	throw "width and height must be positive" if cfg.width <= 0 || cfg.height <= 0
-	throw "width must be a multiple of 8" if cfg.width%laneCount != 0
+	throw fmt.Errorf("width must be a multiple of %d", laneCount) if cfg.width%laneCount != 0
 	throw "iterations must be between 1 and 32767" if cfg.iterations < 1 || cfg.iterations > 32767
 	maxGroups := int64((1<<31)-1) / int64(cfg.iterations)
 	throw "configuration is too large for the SIMD checksum accumulator" if int64(cfg.width/laneCount) > maxGroups/int64(cfg.height)
 	return
 }
 
-// mandelbrotScalar intentionally traverses pixels in the same eight-wide
+// mandelbrotScalar intentionally traverses pixels in the same lane-width
 // groups as the SIMD kernel. That keeps coordinate rounding identical, so the
 // checksum comparison measures computation rather than boundary-pixel noise.
 func mandelbrotScalar(cfg *config) uint64 {
@@ -87,65 +85,6 @@ func mandelbrotScalar(cfg *config) uint64 {
 	return checksum
 }
 
-func mandelbrotSIMD(cfg *config) uint64 {
-	dx := float32(3) / float32(cfg.width)
-	dy := float32(2.4) / float32(cfg.height)
-	var laneDXValues [laneCount]float32
-	for lane := range laneCount {
-		laneDXValues[lane] = float32(lane) * dx
-	}
-	laneDX := archsimd.LoadFloat32x8(&laneDXValues)
-	four := archsimd.BroadcastFloat32x8(4)
-	one := archsimd.BroadcastInt32x8(1)
-	oneFloat := archsimd.BroadcastFloat32x8(1)
-	quarter := archsimd.BroadcastFloat32x8(0.25)
-	sixteenth := archsimd.BroadcastFloat32x8(0.0625)
-	maxIterations := archsimd.BroadcastInt32x8(int32(cfg.iterations))
-	var total archsimd.Int32x8
-
-	for y := range cfg.height {
-		ci := archsimd.BroadcastFloat32x8(float32(-1.2) + float32(y)*dy)
-		y2 := ci.Mul(ci)
-		for x := 0; x < cfg.width; x += laneCount {
-			cr := archsimd.BroadcastFloat32x8(float32(-2) + float32(x)*dx).Add(laneDX)
-			cardioidX := cr.Sub(quarter)
-			q := cardioidX.Mul(cardioidX).Add(y2)
-			cardioidMetric := q.Mul(q.Add(cardioidX))
-			cardioidLimit := quarter.Mul(y2)
-			inCardioid := cardioidMetric.LessEqual(cardioidLimit)
-			crPlusOne := cr.Add(oneFloat)
-			bulbMetric := crPlusOne.Mul(crPlusOne).Add(y2)
-			inPeriod2Bulb := bulbMetric.LessEqual(sixteenth)
-			inside := inCardioid.Or(inPeriod2Bulb)
-			outsideCardioid := cardioidMetric.Greater(cardioidLimit)
-			outsidePeriod2Bulb := bulbMetric.Greater(sixteenth)
-
-			var zr, zi archsimd.Float32x8
-			count := maxIterations.Masked(inside)
-			active := outsideCardioid.And(outsidePeriod2Bulb)
-
-			for iteration := 0; iteration < cfg.iterations; iteration++ {
-				zr2, zi2 := zr.Mul(zr), zi.Mul(zi)
-				active = active.And(zr2.Add(zi2).LessEqual(four))
-				break if active.ToBits() == 0
-				zri := zr.Mul(zi)
-				zi = zri.Add(zri).Add(ci)
-				zr = zr2.Sub(zi2).Add(cr)
-				count = count.Add(one.Masked(active))
-			}
-			total = total.Add(count)
-		}
-	}
-
-	var lanes [laneCount]int32
-	total.Store(&lanes)
-	var checksum uint64
-	for _, count := range lanes {
-		checksum += uint64(count)
-	}
-	return checksum
-}
-
 func measure(kernel func() uint64) testing.BenchmarkResult {
 	return testing.Benchmark(func(b *testing.B) {
 		b.ReportAllocs()
@@ -164,7 +103,7 @@ func printResult(name string, pixels int, result testing.BenchmarkResult) {
 
 func run() (err error) {
 	cfg := parseConfig(os.Args[1:])?
-	throw "AVX2 is required for this benchmark" if !archsimd.X86.AVX2()
+	throw "required SIMD instructions are unavailable" if !simdSupported()
 
 	scalarChecksum := mandelbrotScalar(cfg)
 	simdChecksum := mandelbrotSIMD(cfg)
@@ -175,7 +114,7 @@ func run() (err error) {
 	scalar := measure(func() uint64 { return mandelbrotScalar(cfg) })
 	simd := measure(func() uint64 { return mandelbrotSIMD(cfg) })
 	printResult("scalar", pixels, scalar)
-	printResult("AVX2 x8", pixels, simd)
+	printResult(simdName, pixels, simd)
 	fmt.Printf("speedup  %.2fx\n", float64(scalar.NsPerOp())/float64(simd.NsPerOp()))
 	return
 }

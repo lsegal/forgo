@@ -581,15 +581,15 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 		}
 		var x operand
 		check.expr(nil, &x, s.X)
-		if x.mode != invalid && !AssignableTo(x.typ, universeError) {
-			check.errorf(s.X, InvalidSyntaxTree, "forgo: throw's operand must be a string literal or error, not %s", x.typ)
+		if x.mode() != invalid && !AssignableTo(x.typ(), universeError) {
+			check.errorf(s.X, InvalidSyntaxTree, "forgo: throw's operand must be a string literal or error, not %s", x.typ())
 		}
 
 	case *ast.PostfixIfStmt:
 		// forgo: STMT if COND is shorthand for `if COND { STMT }`.
 		var x operand
 		check.expr(nil, &x, s.Cond)
-		if x.mode != invalid && !allBoolean(x.typ) {
+		if x.mode() != invalid && !allBoolean(x.typ()) {
 			check.error(s.Cond, InvalidCond, "non-boolean condition in if statement")
 		}
 		check.stmt(inner, s.Stmt)

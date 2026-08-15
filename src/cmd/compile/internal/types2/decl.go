@@ -350,7 +350,7 @@ func (check *Checker) constDecl(obj *Const, typ, init syntax.Expr, inherited boo
 			check.errpos = obj.pos
 		}
 		check.expr(nil, &x, init)
-		if x.mode != constant_ {
+		if x.mode() != constant_ {
 			forgoEvalConstCall(check, &x, init) // see forgo.go
 		}
 	}

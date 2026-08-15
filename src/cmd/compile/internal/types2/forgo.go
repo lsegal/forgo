@@ -76,7 +76,7 @@ func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 	v, err := in.EvalExprValue(init)
 	if err != nil {
 		check.errorf(init, InvalidConstInit, "compile-time evaluation failed: %s", err)
-		x.mode = invalid
+		x.mode_ = invalid
 		return true
 	}
 	// v is either a scalar or a struct/map/slice composite (see
@@ -87,11 +87,11 @@ func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 	cv, ok := forgo.ToConstant(v)
 	if !ok {
 		check.error(init, InvalidConstInit, "compile-time evaluation did not produce a usable constant value")
-		x.mode = invalid
+		x.mode_ = invalid
 		return true
 	}
 
-	x.mode = constant_
+	x.mode_ = constant_
 	x.val = cv
 	return true
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>forgo — a fork of Go with compile-time execution, macros, and hot reload</title>
-<meta name="description" content="forgo is a fork of Go, synced to the 1.26.0 release, that adds compile-time execution, AST macros, ? error propagation, a JS-style throw, postfix if, and Dart/Flutter-style hot reload.">
+<meta name="description" content="forgo is a fork of Go, synced to the Go 1.27 release branch, that adds compile-time execution, AST macros, ? error propagation, a JS-style throw, postfix if, SIMD by default, and Dart/Flutter-style hot reload.">
 <script src="./support.js"></script>
 </head>
 <body>
@@ -43,7 +43,7 @@ a:hover { color: var(--color-accent-600); }
       <span class="cmyk-head" style="display:block"><span class="paper">A fork of Go with compile-time</span><span class="plate plate-c" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-m" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-y" aria-hidden="true">A fork of Go with compile-time</span></span>
       <span class="cmyk-head" style="display:block"><span class="paper">execution, macros, and hot reload.</span><span class="plate plate-c" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-m" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-y" aria-hidden="true">execution, macros, and hot reload.</span></span>
     </h1>
-    <p style="font-size:18px;line-height:30px;max-width:62ch;margin:36px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo is a fork of Go, currently synced to the 1.26.0 release, that adds Nim-style compile-time execution and AST macros, plus Rust-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">?</code> error-propagation, a JavaScript-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">throw</code> for failing a function out with a new error, a Ruby/Perl-style postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">if</code> for one-line guard clauses, and Dart/Flutter-style hot reload for a running program.</p>
+    <p style="font-size:18px;line-height:30px;max-width:62ch;margin:36px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo is a fork of Go, currently synced to the Go 1.27 release branch, that adds Nim-style compile-time execution and AST macros, plus Rust-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">?</code> error-propagation, a JavaScript-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">throw</code> for failing a function out with a new error, a Ruby/Perl-style postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">if</code> for one-line guard clauses, SIMD enabled by default, and Dart/Flutter-style hot reload for a running program.</p>
     <div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:34px">
       <a class="btn btn-primary" href="#install" style="text-decoration:none;min-height:38px">Install forgo</a>
       <a class="btn btn-ghost" href="#new" style="text-decoration:none;min-height:38px">What’s new</a>
@@ -53,7 +53,7 @@ a:hover { color: var(--color-accent-600); }
   <section aria-label="Fork facts" style="padding:0 0 84px">
     <hr style="height:5px;border:0;margin:0;border-top:2px solid var(--color-text);border-bottom:1px solid var(--color-text)">
     <p style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;margin:0;padding:14px 0;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent)">
-      <span>Fork of Go 1.26.0</span>
+      <span>Fork of Go 1.27</span>
       <span>Sources: .fgo and .go, mixed freely</span>
       <span>linux · macOS · windows</span>
       <span>Install: one line</span>
@@ -78,10 +78,10 @@ a:hover { color: var(--color-accent-600); }
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:28px;margin-top:28px">
       <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Linux / macOS</span>
 curl -fsSL https://raw.githubusercontent.com/lsegal/\
-forgo/release-branch.go1.26/install/install.sh | sh</pre>
+forgo/release-branch.go1.27/install/install.sh | sh</pre>
       <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Windows</span>
 irm https://raw.githubusercontent.com/lsegal/forgo/\
-release-branch.go1.26/install/install.ps1 | iex</pre>
+release-branch.go1.27/install/install.ps1 | iex</pre>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px 70px;margin-top:34px">
       <p style="font-size:16px;line-height:28px;margin:0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Both scripts install the latest GitHub release to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">~/.forgo</code> by default. After installing, point <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">GOROOT</code> at the install directory and add its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code> to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">PATH</code> — the script prints the exact commands — then run <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo</code> (e.g. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo run</code>).</p>
@@ -91,7 +91,7 @@ release-branch.go1.26/install/install.ps1 | iex</pre>
 
   <section id="new" style="padding:0 0 56px">
     <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">What’s new</span>
-    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(28px,3.4vw,42px);line-height:1.14;letter-spacing:-0.018em;margin:0;max-width:36ch">Eight additions, on top of the Go 1.26.0 toolchain</h2>
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:clamp(28px,3.4vw,42px);line-height:1.14;letter-spacing:-0.018em;margin:0;max-width:36ch">Forgo additions, on top of the Go 1.27 toolchain</h2>
     <p style="font-size:17px;line-height:28px;max-width:60ch;margin:28px 0 0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Files using forgo-specific syntax use the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">.fgo</code> extension instead of <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">.go</code>. The toolchain treats the two identically everywhere — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo run</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px">forgo test</code>, module resolution — so a package can freely mix both. Each feature below links to its full rules in the <a href="docs.html">docs</a>.</p>
   </section>
 
@@ -265,7 +265,7 @@ GEN1 tick 105</pre>
       <div>
         <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Compatibility</span>
         <h3 style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:32px;margin:0">Still a Go distribution</h3>
-        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The repo root is a Go distribution checkout and builds the way upstream Go does. Plain <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.go</code> files compile as before, the standard library is Go 1.26.0’s, and forgo carries its own version — tracked in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">FORGO_VERSION</code> — independent of the release it is synced against.</p>
+        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The repo root is a Go distribution checkout and builds the way upstream Go does. Plain <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.go</code> files compile as before, the standard library is Go 1.27’s, and forgo carries its own version — tracked in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">FORGO_VERSION</code> — independent of the release it is synced against.</p>
       </div>
     </div>
   </section>
@@ -279,7 +279,7 @@ GEN1 tick 105</pre>
     </div>
   </section>
 
-  <footer style="padding:0 0 56px;font-size:13px;line-height:28px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">forgo is copyright © 2026 Loren Segal. Go is licensed under the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.26/LICENSE">BSD 3-Clause license</a>, copyright © 2009 The Go Authors.</footer>
+  <footer style="padding:0 0 56px;font-size:13px;line-height:28px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">forgo is copyright © 2026 Loren Segal. Go is licensed under the <a href="https://github.com/lsegal/forgo/blob/release-branch.go1.27/LICENSE">BSD 3-Clause license</a>, copyright © 2009 The Go Authors.</footer>
 
 </div>
 </div>

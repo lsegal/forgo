@@ -104,9 +104,7 @@ func fgohotAddModule(mdaddr uintptr) string {
 	moduledataverify1(md)
 
 	lock(&itabLock)
-	for _, i := range md.itablinks {
-		itabAdd(i)
-	}
+	addModuleItabs(md)
 	unlock(&itabLock)
 
 	return ""

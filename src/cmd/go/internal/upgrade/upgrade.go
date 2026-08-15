@@ -24,7 +24,7 @@ import (
 // otherwise fetch by hand via curl/irm.
 const (
 	defaultRepo   = "lsegal/forgo"
-	defaultBranch = "release-branch.go1.26"
+	defaultBranch = "release-branch.go1.27"
 )
 
 var CmdUpgrade = &base.Command{

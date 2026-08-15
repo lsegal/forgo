@@ -1,7 +1,7 @@
 # forgo — agent instructions
 
 This repository is **forgo**, a real git fork of [golang/go](https://github.com/golang/go)
-(currently synced to the 1.26.0 release — see [README.md](README.md) for
+(currently synced to the Go 1.27 release branch — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
 binary (built under `bin/`, `pkg/tool/`) that understands five extra

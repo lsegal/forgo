@@ -2,7 +2,7 @@ name: Deploy site to GitHub Pages
 
 on:
   push:
-    branches: [release-branch.go1.26]
+    branches: [release-branch.go1.27]
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'

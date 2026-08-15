@@ -1,6 +1,6 @@
 # forgo
 
-`forgo` is a fork of Go (currently synced to the 1.26.0 release) that adds
+`forgo` is a fork of Go (currently synced to the 1.27 release branch) that adds
 Nim-style compile-time execution and AST macros, plus Rust-style `?`
 error-propagation, `throw` for failing a function out with a new error, and
 a Ruby/Perl-style postfix `if` for one-line guard clauses.
@@ -16,12 +16,12 @@ including the rule that a forgo codebase should never hand-write `return
 
 ```bash
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.sh | sh
 ```
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.26/install/install.ps1 | iex
+irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.ps1 | iex
 ```
 
 Both scripts install the latest [GitHub release](https://github.com/lsegal/forgo/releases)
@@ -591,10 +591,11 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 ### SIMD Mandelbrot benchmark
 
 [`examples/mandelbrot`](examples/mandelbrot) is an allocation-free Mandelbrot
-benchmark with matching scalar and eight-lane AVX2 kernels. It validates the
-two checksums, then reports calibrated frame time, pixel throughput, and
-speedup. Side-by-side `fgo/main.fgo` and `go/main.go` implementations use the
-experimental `simd/archsimd` package with forgo and regular Go syntax.
+benchmark with matching scalar and SIMD kernels. It validates the two
+checksums, then reports calibrated frame time, pixel throughput, and speedup.
+Forgo enables Go 1.27's experimental `simd/archsimd` package by default as a
+language feature: the example uses eight-lane AVX2 on AMD64 and four-lane Neon
+on ARM64 without requiring callers to set `GOEXPERIMENT`.
 
 ## Versioning
 

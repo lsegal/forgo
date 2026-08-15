@@ -1187,21 +1187,21 @@ func (check *Checker) exprInternal(T *target, x *operand, e ast.Expr, hint Type)
 		list, _ := check.multiExpr(e.X, false)
 		switch len(list) {
 		case 1:
-			if list[0].mode != invalid && !AssignableTo(list[0].typ, universeError) {
-				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand must return (value, error) or a bare error, not %s", list[0].typ)
+			if list[0].mode() != invalid && !AssignableTo(list[0].typ(), universeError) {
+				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand must return (value, error) or a bare error, not %s", list[0].typ())
 				goto Error
 			}
-			x.mode = novalue
-			x.typ = Typ[Invalid]
+			x.mode_ = novalue
+			x.typ_ = Typ[Invalid]
 			x.expr = e
 			return statement
 		case 2:
-			if list[1].mode != invalid && !AssignableTo(list[1].typ, universeError) {
-				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand's last result must be error, not %s", list[1].typ)
+			if list[1].mode() != invalid && !AssignableTo(list[1].typ(), universeError) {
+				check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand's last result must be error, not %s", list[1].typ())
 				goto Error
 			}
-			x.mode = value
-			x.typ = list[0].typ
+			x.mode_ = value
+			x.typ_ = list[0].typ()
 		default:
 			check.errorf(e, InvalidSyntaxTree, "forgo: ?'s operand must return (value, error) or a bare error, not %d results", len(list))
 			goto Error
