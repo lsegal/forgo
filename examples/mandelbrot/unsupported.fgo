@@ -1,0 +1,9 @@
+//go:build !amd64
+
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Mandelbrot SIMD benchmark skipped: requires AMD64")
+}

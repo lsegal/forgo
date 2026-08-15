@@ -5,7 +5,7 @@ eight-pixel-wide AVX2 kernel built with Go's experimental `simd/archsimd`
 package. Both kernels perform the same `float32` operations and produce the
 same checksum before timing begins.
 
-Set `GOEXPERIMENT=simd`, then run:
+Run with forgo:
 
 ```text
 cd examples/mandelbrot
@@ -18,6 +18,7 @@ Optional positional arguments set width, height, and maximum iterations:
 forgo run . 1920 1080 512
 ```
 
-The width must be a multiple of eight. The benchmark requires an AMD64 CPU
-with AVX2 and reports calibrated time per frame, throughput, allocations, and
-the SIMD speedup over the scalar kernel.
+SIMD is enabled by default in forgo. The width must be a multiple of eight.
+The benchmark requires an AMD64 CPU with AVX2 and reports calibrated time per
+frame, throughput, allocations, and the SIMD speedup over the scalar kernel.
+On other architectures the example prints a skip message.
