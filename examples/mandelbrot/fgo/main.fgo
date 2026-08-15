@@ -1,0 +1,186 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"simd/archsimd"
+	"strconv"
+	"testing"
+)
+
+const (
+	defaultWidth      = 1024
+	defaultHeight     = aspectHeight(1024)
+	defaultIterations = 256
+	laneCount         = 8
+)
+
+//fgo:comptime
+func aspectHeight(width int) int {
+	return width * 3 / 4
+}
+
+type config struct {
+	width      int
+	height     int
+	iterations int
+}
+
+var checksumSink uint64
+
+func parseConfig(args []string) (cfg *config, err error) {
+	cfg = &config{defaultWidth, defaultHeight, defaultIterations}
+	throw "usage: mandelbrot [width [height [iterations]]]" if len(args) > 3
+	cfg.width = strconv.Atoi(args[0])? if len(args) > 0
+	cfg.height = strconv.Atoi(args[1])? if len(args) > 1
+	cfg.iterations = strconv.Atoi(args[2])? if len(args) > 2
+	throw "width and height must be positive" if cfg.width <= 0 || cfg.height <= 0
+	throw "width must be a multiple of 8" if cfg.width%laneCount != 0
+	throw "iterations must be between 1 and 32767" if cfg.iterations < 1 || cfg.iterations > 32767
+	maxGroups := int64((1<<31)-1) / int64(cfg.iterations)
+	throw "configuration is too large for the SIMD checksum accumulator" if int64(cfg.width/laneCount) > maxGroups/int64(cfg.height)
+	return
+}
+
+// mandelbrotScalar intentionally traverses pixels in the same eight-wide
+// groups as the SIMD kernel. That keeps coordinate rounding identical, so the
+// checksum comparison measures computation rather than boundary-pixel noise.
+func mandelbrotScalar(cfg *config) uint64 {
+	dx := float32(3) / float32(cfg.width)
+	dy := float32(2.4) / float32(cfg.height)
+	var laneDX [laneCount]float32
+	for lane := range laneCount {
+		laneDX[lane] = float32(lane) * dx
+	}
+
+	var checksum uint64
+	for y := range cfg.height {
+		ci := float32(-1.2) + float32(y)*dy
+		for x := 0; x < cfg.width; x += laneCount {
+			base := float32(-2) + float32(x)*dx
+			for lane := range laneCount {
+				cr := base + laneDX[lane]
+				y2 := ci * ci
+				cardioidX := cr - 0.25
+				q := cardioidX*cardioidX + y2
+				inCardioid := q*(q+cardioidX) <= 0.25*y2
+				inPeriod2Bulb := (cr+1)*(cr+1)+y2 <= 0.0625
+				if inCardioid || inPeriod2Bulb {
+					checksum += uint64(cfg.iterations)
+					continue
+				}
+
+				var zr, zi float32
+				for iteration := 0; iteration < cfg.iterations; iteration++ {
+					zr2, zi2 := zr*zr, zi*zi
+					break if zr2+zi2 > 4
+					zi = (zr * zi) + (zr * zi) + ci
+					zr = zr2 - zi2 + cr
+					checksum++
+				}
+			}
+		}
+	}
+	return checksum
+}
+
+func mandelbrotSIMD(cfg *config) uint64 {
+	dx := float32(3) / float32(cfg.width)
+	dy := float32(2.4) / float32(cfg.height)
+	var laneDXValues [laneCount]float32
+	for lane := range laneCount {
+		laneDXValues[lane] = float32(lane) * dx
+	}
+	laneDX := archsimd.LoadFloat32x8(&laneDXValues)
+	four := archsimd.BroadcastFloat32x8(4)
+	one := archsimd.BroadcastInt32x8(1)
+	oneFloat := archsimd.BroadcastFloat32x8(1)
+	quarter := archsimd.BroadcastFloat32x8(0.25)
+	sixteenth := archsimd.BroadcastFloat32x8(0.0625)
+	maxIterations := archsimd.BroadcastInt32x8(int32(cfg.iterations))
+	var total archsimd.Int32x8
+
+	for y := range cfg.height {
+		ci := archsimd.BroadcastFloat32x8(float32(-1.2) + float32(y)*dy)
+		y2 := ci.Mul(ci)
+		for x := 0; x < cfg.width; x += laneCount {
+			cr := archsimd.BroadcastFloat32x8(float32(-2) + float32(x)*dx).Add(laneDX)
+			cardioidX := cr.Sub(quarter)
+			q := cardioidX.Mul(cardioidX).Add(y2)
+			cardioidMetric := q.Mul(q.Add(cardioidX))
+			cardioidLimit := quarter.Mul(y2)
+			inCardioid := cardioidMetric.LessEqual(cardioidLimit)
+			crPlusOne := cr.Add(oneFloat)
+			bulbMetric := crPlusOne.Mul(crPlusOne).Add(y2)
+			inPeriod2Bulb := bulbMetric.LessEqual(sixteenth)
+			inside := inCardioid.Or(inPeriod2Bulb)
+			outsideCardioid := cardioidMetric.Greater(cardioidLimit)
+			outsidePeriod2Bulb := bulbMetric.Greater(sixteenth)
+
+			var zr, zi archsimd.Float32x8
+			count := maxIterations.Masked(inside)
+			active := outsideCardioid.And(outsidePeriod2Bulb)
+
+			for iteration := 0; iteration < cfg.iterations; iteration++ {
+				zr2, zi2 := zr.Mul(zr), zi.Mul(zi)
+				active = active.And(zr2.Add(zi2).LessEqual(four))
+				break if active.ToBits() == 0
+				zri := zr.Mul(zi)
+				zi = zri.Add(zri).Add(ci)
+				zr = zr2.Sub(zi2).Add(cr)
+				count = count.Add(one.Masked(active))
+			}
+			total = total.Add(count)
+		}
+	}
+
+	var lanes [laneCount]int32
+	total.Store(&lanes)
+	var checksum uint64
+	for _, count := range lanes {
+		checksum += uint64(count)
+	}
+	return checksum
+}
+
+func measure(kernel func() uint64) testing.BenchmarkResult {
+	return testing.Benchmark(func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			checksumSink = kernel()
+		}
+	})
+}
+
+func printResult(name string, pixels int, result testing.BenchmarkResult) {
+	ns := result.NsPerOp()
+	megapixelsPerSecond := float64(pixels) * 1e3 / float64(ns)
+	fmt.Printf("%-8s %10d ns/frame  %8.2f MPix/s  %d allocs/op\n",
+		name, ns, megapixelsPerSecond, result.AllocsPerOp())
+}
+
+func run() (err error) {
+	cfg := parseConfig(os.Args[1:])?
+	throw "AVX2 is required for this benchmark" if !archsimd.X86.AVX2()
+
+	scalarChecksum := mandelbrotScalar(cfg)
+	simdChecksum := mandelbrotSIMD(cfg)
+	throw fmt.Errorf("kernel checksum mismatch: scalar=%d simd=%d", scalarChecksum, simdChecksum) if scalarChecksum != simdChecksum
+
+	pixels := cfg.width * cfg.height
+	fmt.Printf("Mandelbrot: %dx%d, %d max iterations, checksum %d\n", cfg.width, cfg.height, cfg.iterations, simdChecksum)
+	scalar := measure(func() uint64 { return mandelbrotScalar(cfg) })
+	simd := measure(func() uint64 { return mandelbrotSIMD(cfg) })
+	printResult("scalar", pixels, scalar)
+	printResult("AVX2 x8", pixels, simd)
+	fmt.Printf("speedup  %.2fx\n", float64(scalar.NsPerOp())/float64(simd.NsPerOp()))
+	return
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "mandelbrot:", err)
+		os.Exit(2)
+	}
+}

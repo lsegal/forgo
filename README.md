@@ -588,6 +588,14 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 - `--watch` runs the package with default build flags; other build flags
   passed alongside it are not yet forwarded to the watched build.
 
+### SIMD Mandelbrot benchmark
+
+[`examples/mandelbrot`](examples/mandelbrot) is an allocation-free Mandelbrot
+benchmark with matching scalar and eight-lane AVX2 kernels. It validates the
+two checksums, then reports calibrated frame time, pixel throughput, and
+speedup. Side-by-side `fgo/main.fgo` and `go/main.go` implementations use the
+experimental `simd/archsimd` package with forgo and regular Go syntax.
+
 ## Versioning
 
 forgo has its own version, independent of the golang/go release it's synced
