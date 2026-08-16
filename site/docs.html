@@ -65,10 +65,10 @@ a:hover { color: var(--color-accent-600); }
   <section id="install" style="padding:0 0 70px">
     <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Install &amp; upgrade</h2>
     <pre style="margin:28px 0 0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Linux / macOS</span>
-curl -fsSL https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.sh | sh
+curl -fsSL https://github.com/lsegal/forgo/releases/latest/download/install.sh | sh
 
 <span style="color:var(--color-neutral-600)"># Windows</span>
-irm https://raw.githubusercontent.com/lsegal/forgo/release-branch.go1.27/install/install.ps1 | iex</pre>
+irm https://github.com/lsegal/forgo/releases/latest/download/install.ps1 | iex</pre>
     <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
       <li style="margin-bottom:14px">Both scripts install the latest GitHub release to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">~/.forgo</code> by default. Pass a specific version (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">sh install.sh v0.2.0</code>, or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-Version v0.2.0</code> on Windows) to install that release instead of latest.</li>
       <li style="margin-bottom:14px">Set <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_INSTALL_DIR</code> / <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FORGO_REPO</code> to change the install location or fork.</li>

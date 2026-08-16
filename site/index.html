@@ -77,11 +77,9 @@ a:hover { color: var(--color-accent-600); }
     <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Install</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:28px;margin-top:28px">
       <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Linux / macOS</span>
-curl -fsSL https://raw.githubusercontent.com/lsegal/\
-forgo/release-branch.go1.27/install/install.sh | sh</pre>
+curl -fsSL https://github.com/lsegal/forgo/releases/latest/download/install.sh | sh</pre>
       <pre style="margin:0;padding:20px 22px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)"># Windows</span>
-irm https://raw.githubusercontent.com/lsegal/forgo/\
-release-branch.go1.27/install/install.ps1 | iex</pre>
+irm https://github.com/lsegal/forgo/releases/latest/download/install.ps1 | iex</pre>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px 70px;margin-top:34px">
       <p style="font-size:16px;line-height:28px;margin:0;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Both scripts install the latest GitHub release to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">~/.forgo</code> by default. After installing, point <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">GOROOT</code> at the install directory and add its <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">bin/</code> to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">PATH</code> — the script prints the exact commands — then run <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo</code> (e.g. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo build</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">forgo run</code>).</p>
