@@ -135,11 +135,11 @@ jobs:
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           forgo test cmd/compile/internal/syntax/... cmd/compile/internal/forgo/...
 
-      # Exercises install/install.{sh,ps1} for real against the latest
-      # published release, so a broken installer (e.g. a download/extract
-      # bug that only shows up when actually run) fails CI instead of
-      # being discovered by a user. Requires at least one prior release to
-      # exist, same as any real user running these scripts would.
+      # Exercises the published install.{sh,ps1} release assets for real
+      # against the latest release, so broken bootstrap URLs and installer
+      # download/extract bugs fail CI instead of being discovered by a user.
+      # Requires at least one prior release to exist, same as any real user
+      # running these scripts would.
       #
       # Deliberately uses a trivial inline program, not examples/*, since
       # the latest *published* release may predate toolchain-only changes
@@ -152,7 +152,8 @@ jobs:
           set -euo pipefail
           export FORGO_REPO=lsegal/forgo
           export FORGO_INSTALL_DIR="$RUNNER_TEMP/forgo-install-test"
-          bash install/install.sh
+          curl -fsSL "https://github.com/$FORGO_REPO/releases/latest/download/install.sh" -o "$RUNNER_TEMP/install.sh"
+          bash "$RUNNER_TEMP/install.sh"
           "$FORGO_INSTALL_DIR/bin/forgo" version
           smoke="$RUNNER_TEMP/forgo-install-smoke"
           mkdir -p "$smoke"
@@ -172,7 +173,9 @@ jobs:
           $ErrorActionPreference = "Stop"
           $env:FORGO_REPO = "lsegal/forgo"
           $env:FORGO_INSTALL_DIR = "$env:RUNNER_TEMP\forgo-install-test"
-          & .\install\install.ps1
+          $installer = "$env:RUNNER_TEMP\install.ps1"
+          Invoke-WebRequest "https://github.com/$env:FORGO_REPO/releases/latest/download/install.ps1" -OutFile $installer
+          & $installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:FORGO_INSTALL_DIR\bin\forgo.exe" version
           $smoke = "$env:RUNNER_TEMP\forgo-install-smoke"

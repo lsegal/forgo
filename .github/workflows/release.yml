@@ -252,5 +252,6 @@ jobs:
           set -euo pipefail
           gh release create "${{ needs.bump-version.outputs.tag }}" \
             dist/*.tar.gz dist/*.zip dist/*.vsix \
+            install/install.sh install/install.ps1 \
             --title "forgo ${{ needs.bump-version.outputs.tag }}" \
             --generate-notes
