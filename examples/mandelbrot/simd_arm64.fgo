@@ -13,59 +13,52 @@ func simdSupported() bool {
 	return true
 }
 
-func mandelbrotSIMD(cfg *config) uint64 {
-	dx := float32(3) / float32(cfg.width)
-	dy := float32(2.4) / float32(cfg.height)
-	var laneDXValues [laneCount]float32
-	for lane := range laneCount {
-		laneDXValues[lane] = float32(lane) * dx
-	}
-	laneDX := archsimd.LoadFloat32x4(laneDXValues[:])
+func mandelbrotSIMD(escapes []escape, points []point, maximum int32) {
 	four := archsimd.BroadcastFloat32x4(4)
+	two := archsimd.BroadcastFloat32x4(2)
 	one := archsimd.BroadcastInt32x4(1)
 	oneFloat := archsimd.BroadcastFloat32x4(1)
 	quarter := archsimd.BroadcastFloat32x4(0.25)
 	sixteenth := archsimd.BroadcastFloat32x4(0.0625)
-	maxIterations := archsimd.BroadcastInt32x4(int32(cfg.iterations))
-	var total archsimd.Int32x4
+	maxIterations := archsimd.BroadcastInt32x4(maximum)
 
-	for y := range cfg.height {
-		ci := archsimd.BroadcastFloat32x4(float32(-1.2) + float32(y)*dy)
-		y2 := ci.Mul(ci)
-		for x := 0; x < cfg.width; x += laneCount {
-			cr := archsimd.BroadcastFloat32x4(float32(-2) + float32(x)*dx).Add(laneDX)
-			cardioidX := cr.Sub(quarter)
-			q := cardioidX.Mul(cardioidX).Add(y2)
-			cardioidMetric := q.Mul(q.Add(cardioidX))
-			cardioidLimit := quarter.Mul(y2)
-			inCardioid := cardioidMetric.LessEqual(cardioidLimit)
-			crPlusOne := cr.Add(oneFloat)
-			bulbMetric := crPlusOne.Mul(crPlusOne).Add(y2)
-			inPeriod2Bulb := bulbMetric.LessEqual(sixteenth)
-			inside := inCardioid.Or(inPeriod2Bulb)
-			outsideCardioid := cardioidMetric.Greater(cardioidLimit)
-			outsidePeriod2Bulb := bulbMetric.Greater(sixteenth)
+	var cxValues, cyValues [laneCount]float32
+	var iterationValues [laneCount]int32
+	var escapedValues [laneCount]int32
+	for i := 0; i < len(points); i += laneCount {
+		for lane := range laneCount {
+			cxValues[lane] = points[i+lane].re
+			cyValues[lane] = points[i+lane].im
+		}
+		cx := archsimd.LoadFloat32x4(cxValues[:])
+		cy := archsimd.LoadFloat32x4(cyValues[:])
+		cardioidX := cx.Sub(quarter)
+		ySquared := cy.Mul(cy)
+		q := cardioidX.Mul(cardioidX).Add(ySquared)
+		cardioidMetric := q.Mul(q.Add(cardioidX))
+		cardioidLimit := quarter.Mul(ySquared)
+		inCardioid := cardioidMetric.LessEqual(cardioidLimit)
+		shifted := cx.Add(oneFloat)
+		bulbMetric := shifted.Mul(shifted).Add(ySquared)
+		inBulb := bulbMetric.LessEqual(sixteenth)
+		inside := inCardioid.Or(inBulb)
 
-			var zr, zi archsimd.Float32x4
-			count := maxIterations.Masked(inside)
-			active := outsideCardioid.And(outsidePeriod2Bulb)
-			for iteration := 0; iteration < cfg.iterations; iteration++ {
-				zr2, zi2 := zr.Mul(zr), zi.Mul(zi)
-				active = active.And(zr2.Add(zi2).LessEqual(four))
-				zri := zr.Mul(zi)
-				zi = zri.Add(zri).Add(ci)
-				zr = zr2.Sub(zi2).Add(cr)
-				count = count.Add(one.Masked(active))
-			}
-			total = total.Add(count)
+		var zx, zy, zxSquared, zySquared archsimd.Float32x4
+		iteration := maxIterations.Masked(inside)
+		active := cardioidMetric.Greater(cardioidLimit).And(bulbMetric.Greater(sixteenth))
+		for round := int32(0); round < maximum; round++ {
+			active = active.And(zxSquared.Add(zySquared).LessEqual(four))
+			break if active.ToInt32x4().ReduceMin() == 0
+			zy = zx.Mul(two).Mul(zy).Add(cy)
+			zx = zxSquared.Sub(zySquared).Add(cx)
+			zxSquared = zx.Mul(zx)
+			zySquared = zy.Mul(zy)
+			iteration = iteration.Add(one.Masked(active))
+		}
+		iteration.Store(iterationValues[:])
+		one.Masked(iteration.Less(maxIterations)).Store(escapedValues[:])
+		for lane := range laneCount {
+			escapes[i+lane] = escape{iterationValues[lane], uint32(escapedValues[lane])}
 		}
 	}
-
-	var lanes [laneCount]int32
-	total.Store(lanes[:])
-	var checksum uint64
-	for _, count := range lanes {
-		checksum += uint64(count)
-	}
-	return checksum
 }
