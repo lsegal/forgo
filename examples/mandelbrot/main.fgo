@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -27,7 +28,17 @@ type config struct {
 	iterations int
 }
 
-var checksumSink uint64
+type point struct {
+	re float32
+	im float32
+}
+
+type escape struct {
+	iterations int32
+	escaped    uint32
+}
+
+var escapeSink []escape
 
 func parseConfig(args []string) (cfg *config, err error) {
 	cfg = &config{defaultWidth, defaultHeight, defaultIterations}
@@ -38,62 +49,87 @@ func parseConfig(args []string) (cfg *config, err error) {
 	throw "width and height must be positive" if cfg.width <= 0 || cfg.height <= 0
 	throw fmt.Errorf("width must be a multiple of %d", laneCount) if cfg.width%laneCount != 0
 	throw "iterations must be between 1 and 32767" if cfg.iterations < 1 || cfg.iterations > 32767
-	maxGroups := int64((1<<31)-1) / int64(cfg.iterations)
-	throw "configuration is too large for the SIMD checksum accumulator" if int64(cfg.width/laneCount) > maxGroups/int64(cfg.height)
 	return
 }
 
-// mandelbrotScalar intentionally traverses pixels in the same lane-width
-// groups as the SIMD kernel. That keeps coordinate rounding identical, so the
-// checksum comparison measures computation rather than boundary-pixel noise.
-func mandelbrotScalar(cfg *config) uint64 {
+func makePoints(cfg *config) []point {
 	dx := float32(3) / float32(cfg.width)
 	dy := float32(2.4) / float32(cfg.height)
-	var laneDX [laneCount]float32
-	for lane := range laneCount {
-		laneDX[lane] = float32(lane) * dx
-	}
-
-	var checksum uint64
+	points := make([]point, cfg.width*cfg.height)
 	for y := range cfg.height {
-		ci := float32(-1.2) + float32(y)*dy
-		for x := 0; x < cfg.width; x += laneCount {
-			base := float32(-2) + float32(x)*dx
-			for lane := range laneCount {
-				cr := base + laneDX[lane]
-				y2 := ci * ci
-				cardioidX := cr - 0.25
-				cardioidSquare := cardioidX * cardioidX
-				q := cardioidSquare + y2
-				inCardioid := q*(q+cardioidX) <= 0.25*y2
-				crPlusOne := cr + 1
-				bulbSquare := crPlusOne * crPlusOne
-				bulbMetric := bulbSquare + y2
-				inPeriod2Bulb := bulbMetric <= 0.0625
-				if inCardioid || inPeriod2Bulb {
-					checksum += uint64(cfg.iterations)
-					continue
-				}
-
-				var zr, zi float32
-				for iteration := 0; iteration < cfg.iterations; iteration++ {
-					zr2, zi2 := zr*zr, zi*zi
-					break if zr2+zi2 > 4
-					zi = (zr * zi) + (zr * zi) + ci
-					zr = zr2 - zi2 + cr
-					checksum++
-				}
-			}
+		yOffset := float32(float32(y) * dy)
+		ci := float32(float32(-1.2) + yOffset)
+		for x := range cfg.width {
+			xOffset := float32(float32(x) * dx)
+			cr := float32(float32(-2) + xOffset)
+			points[y*cfg.width+x] = point{cr, ci}
 		}
 	}
-	return checksum
+	return points
 }
 
-func measure(kernel func() uint64) testing.BenchmarkResult {
+func mandelbrotScalar(escapes []escape, points []point, maxIterations int32) {
+	for i, p := range points {
+		cx, cy := p.re, p.im
+		cardioidX := float32(cx - 0.25)
+		ySquared := float32(cy * cy)
+		cardioidSquare := float32(cardioidX * cardioidX)
+		q := float32(cardioidSquare + ySquared)
+		qShifted := float32(q + cardioidX)
+		cardioidMetric := float32(q * qShifted)
+		cardioidLimit := float32(float32(0.25) * ySquared)
+		inside := cardioidMetric <= cardioidLimit
+		shifted := float32(cx + 1)
+		bulbSquare := float32(shifted * shifted)
+		inside = inside || float32(bulbSquare+ySquared) <= 0.0625
+
+		var zx, zy, zxSquared, zySquared float32
+		var iteration int32
+		if inside {
+			iteration = maxIterations
+		}
+		var escaped uint32
+		for iteration < maxIterations {
+			if float32(zxSquared+zySquared) > 4 {
+				escaped = 1
+				break
+			}
+			doubledZx := float32(zx * 2)
+			product := float32(doubledZx * zy)
+			zy = float32(product + cy)
+			difference := float32(zxSquared - zySquared)
+			zx = float32(difference + cx)
+			zxSquared = float32(zx * zx)
+			zySquared = float32(zy * zy)
+			iteration++
+		}
+		escapes[i] = escape{iteration, escaped}
+	}
+}
+
+func checksum(escapes []escape) uint64 {
+	var sum uint64
+	for _, result := range escapes {
+		sum += uint64(result.iterations)
+	}
+	return sum
+}
+
+func writeResults(path string, escapes []escape) (err error) {
+	data := make([]byte, len(escapes)*8)
+	for i, result := range escapes {
+		binary.LittleEndian.PutUint32(data[i*8:], uint32(result.iterations))
+		binary.LittleEndian.PutUint32(data[i*8+4:], result.escaped)
+	}
+	os.WriteFile(path, data, 0o644)?
+	return
+}
+
+func measure(kernel func()) testing.BenchmarkResult {
 	return testing.Benchmark(func(b *testing.B) {
 		b.ReportAllocs()
 		for range b.N {
-			checksumSink = kernel()
+			kernel()
 		}
 	})
 }
@@ -105,28 +141,36 @@ func printResult(name string, pixels int, result testing.BenchmarkResult) {
 		name, ns, megapixelsPerSecond, result.AllocsPerOp())
 }
 
-func checksumDelta(a, b uint64) uint64 {
-	return a - b if a >= b
-	return b - a
-}
-
 func run() (err error) {
 	cfg := parseConfig(os.Args[1:])?
 	throw "required SIMD instructions are unavailable" if !simdSupported()
 
-	scalarChecksum := mandelbrotScalar(cfg)
-	simdChecksum := mandelbrotSIMD(cfg)
-	pixels := cfg.width * cfg.height
-	// ARM64 may fuse scalar multiply-adds while explicit Neon Mul/Add methods
-	// round between operations. Only pixels directly on the set boundary can
-	// differ; reject any aggregate delta larger than 1/256 iteration per pixel.
-	tolerance := uint64(pixels/256 + 1)
-	delta := checksumDelta(scalarChecksum, simdChecksum)
-	throw fmt.Errorf("kernel checksum mismatch: scalar=%d simd=%d delta=%d tolerance=%d", scalarChecksum, simdChecksum, delta, tolerance) if delta > tolerance
+	points := makePoints(cfg)
+	scalarEscapes := make([]escape, len(points))
+	simdEscapes := make([]escape, len(points))
+	mandelbrotScalar(scalarEscapes, points, int32(cfg.iterations))
+	mandelbrotSIMD(simdEscapes, points, int32(cfg.iterations))
+	for i, scalar := range scalarEscapes {
+		simd := simdEscapes[i]
+		throw fmt.Errorf("pixel %d mismatch: scalar=%d/%d simd=%d/%d",
+			i, scalar.iterations, scalar.escaped, simd.iterations, simd.escaped) if scalar != simd
+	}
 
-	fmt.Printf("Mandelbrot: %dx%d, %d max iterations, checksum %d\n", cfg.width, cfg.height, cfg.iterations, simdChecksum)
-	scalar := measure(func() uint64 { return mandelbrotScalar(cfg) })
-	simd := measure(func() uint64 { return mandelbrotSIMD(cfg) })
+	if path := os.Getenv("MANDELBROT_RESULTS"); path != "" {
+		writeResults(path, simdEscapes)?
+	}
+
+	pixels := len(points)
+	fmt.Printf("Mandelbrot: %dx%d, %d max iterations, checksum %d\n",
+		cfg.width, cfg.height, cfg.iterations, checksum(simdEscapes))
+	scalar := measure(func() {
+		mandelbrotScalar(scalarEscapes, points, int32(cfg.iterations))
+		escapeSink = scalarEscapes
+	})
+	simd := measure(func() {
+		mandelbrotSIMD(simdEscapes, points, int32(cfg.iterations))
+		escapeSink = simdEscapes
+	})
 	printResult("scalar", pixels, scalar)
 	printResult(simdName, pixels, simd)
 	fmt.Printf("speedup  %.2fx\n", float64(scalar.NsPerOp())/float64(simd.NsPerOp()))
