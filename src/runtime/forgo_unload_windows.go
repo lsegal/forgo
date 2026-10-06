@@ -56,7 +56,11 @@ func forgoWakeSignalReceiver() {
 	}
 }
 
-func forgoTLSKey() uintptr { return 0 }
+// forgoTLSIndex is the TLS index that holds g, plus one; set by wintls on
+// amd64 and arm64. The destructor frees it once Go code is done.
+var forgoTLSIndex uintptr
+
+func forgoTLSKey() uintptr { return forgoTLSIndex }
 
 func forgoThreadExitOS(mp *m) {
 	// Keep mp.thread open: forgoJoinThreads needs it.

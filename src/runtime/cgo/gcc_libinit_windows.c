@@ -248,6 +248,9 @@ forgo_unload(void)
 	if (!a.ok) {
 		return;
 	}
+	if (a.tlsKey != 0) {
+		TlsFree((DWORD)(a.tlsKey - 1));
+	}
 	for (i = 0; i < a.nregions; i++) {
 		VirtualFree((void*)a.regions[2*i], 0, MEM_RELEASE);
 	}
