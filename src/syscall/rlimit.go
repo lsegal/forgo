@@ -29,7 +29,7 @@ var origRlimitNofile atomic.Pointer[Rlimit]
 // which Go of course has no choice but to respect.
 func init() {
 	var lim Rlimit
-	if err := Getrlimit(RLIMIT_NOFILE, &lim); err == nil && lim.Max > 0 && lim.Cur < lim.Max-1 {
+	if err := Getrlimit(RLIMIT_NOFILE, &lim); err == nil && lim.Max > 0 && lim.Cur < lim.Max-1 && !forgoRuntimeIsLibrary() {
 		origRlimitNofile.Store(&lim)
 		nlim := lim
 
