@@ -26,6 +26,47 @@ jobs:
           npm install
           npx @vscode/vsce package --out /tmp/forgo-ci.vsix
 
+  # The build-and-test matrix's macos-latest is Apple Silicon only, so this is
+  # the only job that runs forgo on darwin/amd64 (for example the per-runtime
+  # g TLS slot from #17). It is a separate job, not a matrix entry, so that it
+  # has its own time limit and can be left out of required checks: a stuck
+  # Intel queue must not block merges.
+  #
+  # macos-15-intel is GitHub's last Intel macOS image. GitHub stops supporting
+  # x86_64 on macOS when the macOS 15 image is retired in fall 2027
+  # (https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/).
+  # Delete this job once the label is gone. The macos-13 queueing problem noted
+  # in release.yml does not apply to this label.
+  darwin-amd64-multiruntime:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up bootstrap Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.6"
+
+      - name: Build forgo toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT_BOOTSTRAP="$(go env GOROOT)"
+          cd src
+          ./make.bash
+
+      - name: Multi-runtime c-shared tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          cp bin/forgo bin/go
+          forgo test -count=1 -v -run TestMultiRuntime cmd/cgo/internal/testcshared
+
   build-and-test:
     strategy:
       fail-fast: false
