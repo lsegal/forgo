@@ -61,8 +61,7 @@ mkdir -p "$golibs"
 	cd "$here"
 	GOROOT="$(native "$(cd "$(dirname "$forgo")/.." && pwd)")"
 	export GOROOT GOTOOLCHAIN=local CGO_ENABLED=1
-	# vet cannot parse forgo's syntax yet.
-	"$forgo" test -vet=off ./...
+	"$forgo" test ./...
 	for m in gain drive loader; do
 		"$forgo" build -buildmode=c-shared -o "$(native "$golibs/forgo-$m$ext")" "./$m"
 	done

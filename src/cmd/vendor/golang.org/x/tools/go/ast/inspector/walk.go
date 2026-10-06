@@ -124,6 +124,9 @@ func walk(v *visitor, ek edge.Kind, index int, node ast.Node) {
 		walk(v, edge.KeyValueExpr_Key, -1, n.Key)
 		walk(v, edge.KeyValueExpr_Value, -1, n.Value)
 
+	case *ast.TryExpr: // forgo
+		walk(v, edge.TryExpr_X, -1, n.X)
+
 	// Types
 	case *ast.ArrayType:
 		if n.Len != nil {
@@ -191,6 +194,13 @@ func walk(v *visitor, ek edge.Kind, index int, node ast.Node) {
 
 	case *ast.ReturnStmt:
 		walkList(v, edge.ReturnStmt_Results, n.Results)
+
+	case *ast.ThrowStmt: // forgo
+		walk(v, edge.ThrowStmt_X, -1, n.X)
+
+	case *ast.PostfixIfStmt: // forgo
+		walk(v, edge.PostfixIfStmt_Stmt, -1, n.Stmt)
+		walk(v, edge.PostfixIfStmt_Cond, -1, n.Cond)
 
 	case *ast.BranchStmt:
 		if n.Label != nil {

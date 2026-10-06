@@ -286,6 +286,9 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 		a.apply(n, "Key", nil, n.Key)
 		a.apply(n, "Value", nil, n.Value)
 
+	case *ast.TryExpr: // forgo
+		a.apply(n, "X", nil, n.X)
+
 	// Types
 	case *ast.ArrayType:
 		a.apply(n, "Len", nil, n.Len)
@@ -347,6 +350,13 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 
 	case *ast.ReturnStmt:
 		a.applyList(n, "Results")
+
+	case *ast.ThrowStmt: // forgo
+		a.apply(n, "X", nil, n.X)
+
+	case *ast.PostfixIfStmt: // forgo
+		a.apply(n, "Stmt", nil, n.Stmt)
+		a.apply(n, "Cond", nil, n.Cond)
 
 	case *ast.BranchStmt:
 		a.apply(n, "Label", nil, n.Label)

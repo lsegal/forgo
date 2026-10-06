@@ -484,6 +484,9 @@ func (f *Finder) expr(e ast.Expr) types.Type {
 		f.expr(e.Key)
 		f.expr(e.Value)
 
+	case *ast.TryExpr: // forgo
+		f.expr(e.X)
+
 	case *ast.ArrayType,
 		*ast.StructType,
 		*ast.FuncType,
@@ -584,6 +587,18 @@ func (f *Finder) stmt(s ast.Stmt) {
 				f.assign(formals.At(i).Type(), f.extract(tuple, i))
 			}
 		}
+
+	case *ast.ThrowStmt: // forgo
+		// A string literal X is sugar for errors.New(X) and has no
+		// recorded type; otherwise X is assigned to the error result.
+		if lit, ok := s.X.(*ast.BasicLit); !ok || lit.Kind != token.STRING {
+			formals := f.sig.Results()
+			f.assign(formals.At(formals.Len()-1).Type(), f.expr(s.X))
+		}
+
+	case *ast.PostfixIfStmt: // forgo
+		f.expr(s.Cond)
+		f.stmt(s.Stmt)
 
 	case *ast.SelectStmt:
 		f.stmt(s.Body)

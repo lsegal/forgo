@@ -36,9 +36,11 @@ start:
 		*ast.AssignStmt:
 		// No effect on control flow.
 		b.add(s)
+		b.tryReturn(s, s)
 
 	case *ast.DeferStmt:
 		b.add(s)
+		b.tryReturn(s, s)
 		// Assume conservatively that this behaves like:
 		//    defer func() { recover() }
 		// so any subsequent panic may act like a return.
@@ -46,6 +48,7 @@ start:
 
 	case *ast.ExprStmt:
 		b.add(s)
+		b.tryReturn(s, s)
 		if call, ok := s.X.(*ast.CallExpr); ok && !b.mayReturn(call) {
 			// Calls to panic, os.Exit, etc, never return.
 			b.current = b.newBlock(KindUnreachable, s)
@@ -58,6 +61,7 @@ start:
 			for _, spec := range d.Specs {
 				if spec, ok := spec.(*ast.ValueSpec); ok {
 					b.add(spec)
+					b.tryReturn(spec, s)
 				}
 			}
 		}
@@ -73,6 +77,26 @@ start:
 		b.current.returns = true
 		b.add(s)
 		b.current = b.newBlock(KindUnreachable, s)
+
+	case *ast.ThrowStmt: // forgo
+		// throw X returns X as the error result. Record the
+		// equivalent ReturnStmt so Block.Return finds it.
+		b.current.returns = true
+		b.add(s)
+		b.add(&ast.ReturnStmt{Return: s.Throw, Results: []ast.Expr{s.X}})
+		b.current = b.newBlock(KindUnreachable, s)
+
+	case *ast.PostfixIfStmt: // forgo
+		// STMT if COND is shorthand for if COND { STMT }.
+		then := b.newBlock(KindPostfixIfThen, s)
+		done := b.newBlock(KindPostfixIfDone, s)
+		b.add(s.Cond)
+		b.tryReturn(s.Cond, s)
+		b.ifelse(then, done)
+		b.current = then
+		b.stmt(s.Stmt)
+		b.jump(done)
+		b.current = done
 
 	case *ast.BranchStmt:
 		b.branchStmt(s)
@@ -91,6 +115,7 @@ start:
 			_else = b.newBlock(KindIfElse, s)
 		}
 		b.add(s.Cond)
+		b.tryReturn(s.Cond, s)
 		b.ifelse(then, _else)
 		b.current = then
 		b.stmt(s.Body)
@@ -502,6 +527,39 @@ func (b *builder) newBlock(kind BlockKind, stmt ast.Stmt) *Block {
 
 func (b *builder) add(n ast.Node) {
 	b.current.Nodes = append(b.current.Nodes, n)
+}
+
+// tryReturn models a forgo X? expression within n, part of statement s:
+// if X's error is non-nil, the function returns its named results.
+// Control flow therefore branches after n to a block ending in an
+// equivalent naked ReturnStmt, so Block.Return finds it.
+//
+// Only the expressions of simple statements, declarations, and if
+// conditions are modeled; a ? in a switch tag, for or range header,
+// or select case is not.
+func (b *builder) tryReturn(n ast.Node, s ast.Stmt) {
+	var try *ast.TryExpr
+	ast.Inspect(n, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false // a ? in a func literal returns from the literal
+		case *ast.TryExpr:
+			if try == nil {
+				try = n
+			}
+		}
+		return try == nil
+	})
+	if try == nil {
+		return
+	}
+	ret := b.newBlock(KindTryReturn, s)
+	done := b.newBlock(KindTryDone, s)
+	b.ifelse(ret, done)
+	b.current = ret
+	b.current.returns = true
+	b.add(&ast.ReturnStmt{Return: try.Question})
+	b.current = done
 }
 
 // jump adds an edge from the current block to the target block,

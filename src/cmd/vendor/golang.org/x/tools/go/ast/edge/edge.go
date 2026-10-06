@@ -166,12 +166,18 @@ const (
 	ValueSpec_Type
 	ValueSpec_Values
 
+	// forgo syntax nodes.
+	PostfixIfStmt_Cond
+	PostfixIfStmt_Stmt
+	ThrowStmt_X
+	TryExpr_X
+
 	maxKind
 )
 
 // Assert that the encoding fits in 7 bits,
 // as the inspector relies on this.
-// (We are currently at 104.)
+// (We are currently at 108.)
 var _ = [1 << 7]struct{}{}[maxKind]
 
 type fieldInfo struct {
@@ -296,4 +302,10 @@ var fieldInfos = [...]fieldInfo{
 	ValueSpec_Names:       info[*ast.ValueSpec]("Names"),
 	ValueSpec_Type:        info[*ast.ValueSpec]("Type"),
 	ValueSpec_Values:      info[*ast.ValueSpec]("Values"),
+
+	// forgo syntax nodes.
+	PostfixIfStmt_Cond: info[*ast.PostfixIfStmt]("Cond"),
+	PostfixIfStmt_Stmt: info[*ast.PostfixIfStmt]("Stmt"),
+	ThrowStmt_X:        info[*ast.ThrowStmt]("X"),
+	TryExpr_X:          info[*ast.TryExpr]("X"),
 }

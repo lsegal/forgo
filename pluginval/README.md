@@ -116,8 +116,7 @@ settings are environment variables documented at the top of `run.sh`:
 `REPEAT`, `ROUNDS`, `TIMEOUT_MS`, and `BUILD_DIR`. On Windows, run it from
 Git Bash.
 
-It runs `forgo test -vet=off ./...` first (vet cannot parse forgo's syntax
-yet), then, for each module and round:
+It runs `forgo test ./...` first, then, for each module and round:
 
 ```bash
 pluginval --strictness-level 10 --repeat 3 --randomise --skip-gui-tests \
