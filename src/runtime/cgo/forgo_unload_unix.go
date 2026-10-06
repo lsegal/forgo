@@ -28,3 +28,9 @@ var _cgo_forgo_join = &x_cgo_forgo_join
 //go:linkname _cgo_forgo_m0_exit _cgo_forgo_m0_exit
 var x_cgo_forgo_m0_exit byte
 var _cgo_forgo_m0_exit = &x_cgo_forgo_m0_exit
+
+//go:cgo_import_static x_cgo_forgo_sigstub_init
+//go:linkname x_cgo_forgo_sigstub_init x_cgo_forgo_sigstub_init
+//go:linkname _cgo_forgo_sigstub_init _cgo_forgo_sigstub_init
+var x_cgo_forgo_sigstub_init byte
+var _cgo_forgo_sigstub_init = &x_cgo_forgo_sigstub_init

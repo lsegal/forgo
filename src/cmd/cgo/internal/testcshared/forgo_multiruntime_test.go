@@ -102,6 +102,15 @@ func TestMultiRuntime(t *testing.T) {
 				runMultiRuntimeHost(t, nil, host, "unload", p.a, p.b)
 			})
 		}
+		// Unload A while B's signal handler is installed on top of A's
+		// and forwards to it.
+		if GOOS != "windows" {
+			for _, p := range pairs {
+				t.Run(p.name+"/unloadbelow", func(t *testing.T) {
+					runMultiRuntimeHost(t, nil, host, "unloadbelow", p.a, p.b)
+				})
+			}
+		}
 		t.Run("UnloadBlocked", func(t *testing.T) {
 			out, err := exec.Command(host, "unloadblocked", liba, libb).CombinedOutput()
 			const want = "unloading a Go library while goroutines are blocked in system calls or C code"

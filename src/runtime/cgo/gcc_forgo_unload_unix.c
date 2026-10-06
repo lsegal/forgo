@@ -14,6 +14,7 @@
 // teardown when the host unloads it.
 
 #include <errno.h>
+#include <signal.h>
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdlib.h>
@@ -180,6 +181,176 @@ x_cgo_forgo_m0_exit(void *unused __attribute__((unused)))
 {
 	siglongjmp(forgo_m0_jmp, 1);
 }
+
+// The signal handler stub.
+//
+// Signal handlers form a chain: a handler installed on top of this
+// runtime's (another Go runtime, a crash reporter) saves it and forwards
+// signals to it. Once the library is unmapped, such a forward would jump
+// into nothing. So the runtime installs its handler through a stub that is
+// mapped outside the library and stays mapped after it is gone. While the
+// library is loaded the stub jumps to the runtime's handler; at unload the
+// runtime points it at whatever was installed before it, so handlers above
+// keep working. See runtime/forgo_unload_unix.go.
+//
+// The stub is two pages: code, then the table it reads. Its entry
+// point is the start of the code page, called as handler(sig, info, ctx).
+// It looks up table->ent[sig&127] and, by kind:
+//	0: jumps to fn;
+//	1: returns if info is a Notify signal one forgo runtime handed down to
+//	   another (si_errno is "fgo!"; see runtime/forgo_multiruntime_mark.go),
+//	   and otherwise jumps to fn;
+//	2: returns;
+//	3: returns for a marked signal as for 1, and otherwise resets the signal
+//	   to its default action and raises it again, so that it takes effect
+//	   once the handler that forwarded it returns.
+// The code ends with an 8-byte literal holding the table's address.
+
+#if (defined(__linux__) || defined(__APPLE__)) && (defined(__x86_64__) || defined(__aarch64__))
+
+// struct forgo_sigstub_table is filled in by the runtime.
+// Keep in sync with forgoSigStubTable in runtime/forgo_unload_unix.go.
+struct forgo_sigstub_table {
+	uintptr owner;		// the runtime's handler while loaded; 0 after unload
+	uintptr signal_fn;	// libc signal and raise, for kind 3
+	uintptr raise_fn;
+	uintptr pad;
+	struct {
+		uintptr fn;
+		uintptr kind;
+	} ent[128];
+};
+
+#if defined(__x86_64__)
+// endbr64
+// movq data(%rip), %rax
+// movl %edi, %ecx; andl $127, %ecx; shll $4, %ecx
+// leaq 32(%rax,%rcx), %rax
+// movq 8(%rax), %rcx
+// testq %rcx, %rcx; jz 1f
+// testq %rsi, %rsi; jz 3f
+// cmpl $0x66676f21, 4(%rsi); je 2f
+// 3: cmpq $1, %rcx; je 1f
+// cmpq $2, %rcx; je 2f
+// movq data(%rip), %rax
+// pushq %rdi; xorl %esi, %esi; callq *8(%rax); popq %rdi
+// movq data(%rip), %rax; jmpq *16(%rax)
+// 1: jmpq *(%rax)
+// 2: retq
+// nop; data: .quad
+static const unsigned char forgo_sigstub_code[] = {
+	0xf3, 0x0f, 0x1e, 0xfa, 0x48, 0x8b, 0x05, 0x4d, 0x00, 0x00, 0x00, 0x89,
+	0xf9, 0x83, 0xe1, 0x7f, 0xc1, 0xe1, 0x04, 0x48, 0x8d, 0x44, 0x08, 0x20,
+	0x48, 0x8b, 0x48, 0x08, 0x48, 0x85, 0xc9, 0x74, 0x32, 0x48, 0x85, 0xf6,
+	0x74, 0x09, 0x81, 0x7e, 0x04, 0x21, 0x6f, 0x67, 0x66, 0x74, 0x26, 0x48,
+	0x83, 0xf9, 0x01, 0x74, 0x1e, 0x48, 0x83, 0xf9, 0x02, 0x74, 0x1a, 0x48,
+	0x8b, 0x05, 0x16, 0x00, 0x00, 0x00, 0x57, 0x31, 0xf6, 0xff, 0x50, 0x08,
+	0x5f, 0x48, 0x8b, 0x05, 0x08, 0x00, 0x00, 0x00, 0xff, 0x60, 0x10, 0xff,
+	0x20, 0xc3, 0x66, 0x90,
+};
+#else
+// bti c
+// ldr x16, data
+// and w17, w0, #127
+// add x16, x16, #32; add x16, x16, x17, lsl #4
+// ldr x17, [x16, #8]
+// cbz x17, 1f
+// cbz x1, 3f
+// ldr w9, [x1, #4]; movz w10, #0x6f21; movk w10, #0x6667, lsl #16
+// cmp w9, w10; b.eq 2f
+// 3: cmp x17, #1; b.eq 1f
+// cmp x17, #2; b.eq 2f
+// stp x29, x30, [sp, #-32]!; mov x29, sp; str x0, [sp, #16]
+// ldr x16, data; ldr x16, [x16, #8]; mov x1, #0; blr x16
+// ldr x0, [sp, #16]; ldp x29, x30, [sp], #32
+// ldr x16, data; ldr x16, [x16, #16]; br x16
+// 1: ldr x16, [x16]; br x16
+// 2: ret
+// data: .quad
+static const unsigned char forgo_sigstub_code[] = {
+	0x5f, 0x24, 0x03, 0xd5, 0xf0, 0x03, 0x00, 0x58, 0x11, 0x18, 0x00, 0x12,
+	0x10, 0x82, 0x00, 0x91, 0x10, 0x12, 0x11, 0x8b, 0x11, 0x06, 0x40, 0xf9,
+	0xf1, 0x02, 0x00, 0xb4, 0xc1, 0x00, 0x00, 0xb4, 0x29, 0x04, 0x40, 0xb9,
+	0x2a, 0xe4, 0x8d, 0x52, 0xea, 0xcc, 0xac, 0x72, 0x3f, 0x01, 0x0a, 0x6b,
+	0x60, 0x02, 0x00, 0x54, 0x3f, 0x06, 0x00, 0xf1, 0xe0, 0x01, 0x00, 0x54,
+	0x3f, 0x0a, 0x00, 0xf1, 0xe0, 0x01, 0x00, 0x54, 0xfd, 0x7b, 0xbe, 0xa9,
+	0xfd, 0x03, 0x00, 0x91, 0xe0, 0x0b, 0x00, 0xf9, 0x90, 0x01, 0x00, 0x58,
+	0x10, 0x06, 0x40, 0xf9, 0x01, 0x00, 0x80, 0xd2, 0x00, 0x02, 0x3f, 0xd6,
+	0xe0, 0x0b, 0x40, 0xf9, 0xfd, 0x7b, 0xc2, 0xa8, 0xd0, 0x00, 0x00, 0x58,
+	0x10, 0x0a, 0x40, 0xf9, 0x00, 0x02, 0x1f, 0xd6, 0x10, 0x02, 0x40, 0xf9,
+	0x00, 0x02, 0x1f, 0xd6, 0xc0, 0x03, 0x5f, 0xd6,
+};
+#endif
+
+// x_cgo_forgo_sigstub_init maps the stub. arg points to five uintptrs:
+// the runtime's handler (in), then the stub's entry point, its table, and
+// the address and length of its mapping (out). The outputs stay zero when
+// the stub cannot be mapped, such as under a hardened runtime that refuses
+// executable memory; the runtime then installs its handler directly.
+// Called from the runtime without a g, before it installs any handler.
+__attribute__((visibility("hidden"))) void
+x_cgo_forgo_sigstub_init(void *arg)
+{
+	uintptr *a = (uintptr*)arg;
+	size_t pg = (size_t)sysconf(_SC_PAGESIZE);
+	unsigned char *p;
+	struct forgo_sigstub_table *t;
+
+	p = mmap(NULL, 2*pg, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+	if (p == MAP_FAILED) {
+		return;
+	}
+	t = (struct forgo_sigstub_table*)(p + pg);
+	t->owner = a[0];
+	t->signal_fn = (uintptr)signal;
+	t->raise_fn = (uintptr)raise;
+	memcpy(p, forgo_sigstub_code, sizeof forgo_sigstub_code);
+	*(uintptr*)(p + sizeof forgo_sigstub_code) = (uintptr)t;
+	if (mprotect(p, pg, PROT_READ|PROT_EXEC) != 0) {
+		munmap(p, 2*pg);
+		return;
+	}
+	__builtin___clear_cache((char*)p, (char*)p + pg);
+	a[1] = (uintptr)p;
+	a[2] = (uintptr)t;
+	a[3] = (uintptr)p;
+	a[4] = 2*pg;
+}
+
+// _cgo_forgo_sigstub_owner returns the handler of the runtime that installed
+// h through its stub while that runtime is loaded, and 0 when h is not a
+// stub or its runtime is gone. h must be a signal handler that no loaded
+// module holds, so that its first bytes are readable code.
+__attribute__((visibility("hidden"))) uintptr
+_cgo_forgo_sigstub_owner(uintptr h)
+{
+	size_t pg = (size_t)sysconf(_SC_PAGESIZE);
+	struct forgo_sigstub_table *t;
+
+	if (h == 0 || h%pg != 0 || memcmp((void*)h, forgo_sigstub_code, sizeof forgo_sigstub_code) != 0) {
+		return 0;
+	}
+	t = *(struct forgo_sigstub_table**)(h + sizeof forgo_sigstub_code);
+	if ((uintptr)t != h + pg) {
+		return 0;
+	}
+	return __atomic_load_n(&t->owner, __ATOMIC_ACQUIRE);
+}
+
+#else
+
+__attribute__((visibility("hidden"))) void
+x_cgo_forgo_sigstub_init(void *arg __attribute__((unused)))
+{
+}
+
+__attribute__((visibility("hidden"))) uintptr
+_cgo_forgo_sigstub_owner(uintptr h __attribute__((unused)))
+{
+	return 0;
+}
+
+#endif
 
 #if defined(__linux__) || defined(__APPLE__)
 

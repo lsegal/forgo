@@ -536,6 +536,48 @@ static void host_fault(void) {
 	}
 }
 
+// run_unload_below loads A, then B, and unloads A while B's signal handler
+// sits on top of A's and forwards to it, as a plugin host does when it
+// unloads plugins in any order. B must keep recovering its own faults and
+// preempting its own goroutines, and the host's SIGSEGV handler, installed
+// before A, must still get faults in C code through the chain. Unloading B
+// afterwards puts back the handler it found, A's stub, which still leads
+// to the host's handler. The host does this a few times over.
+static void run_unload_below(void) {
+	int round, i;
+
+	install_host_handler();
+	for (round = 0; round < 3; round++) {
+		hostfaults = 0;
+		load(&libs[0]);
+		libs[0].work(1);
+		load(&libs[1]);
+		libs[1].work(1);
+		unload(&libs[0]);
+		if (is_loaded(libs[0].path)) {
+			fail("library is still loaded after unloading it", libs[0].path);
+		}
+		host_fault();
+		for (i = 0; i < 20; i++) {
+			libs[1].work(8);
+			if (libs[1].fault() != 1) {
+				fail("nil dereference was not recovered as a runtime error", libs[1].path);
+			}
+			host_fault();
+		}
+		libs[1].startspin();
+		for (i = 0; i < 5; i++) {
+			libs[1].gc();
+		}
+		unload(&libs[1]);
+		host_fault();
+		if (hostfaults != 22) {
+			fprintf(stderr, "FAIL: round %d: host handler saw %d faults, want 22\n", round, (int)hostfaults);
+			exit(1);
+		}
+	}
+}
+
 static void sleep_ms(int ms) {
 	struct timespec ts = {ms / 1000, (ms % 1000) * 1000000L};
 
@@ -792,6 +834,13 @@ int main(int argc, char** argv) {
 		printf("PASS\n");
 		return 0;
 	}
+#ifndef _WIN32
+	if (strcmp(mode, "unloadbelow") == 0) {
+		run_unload_below();
+		printf("PASS\n");
+		return 0;
+	}
+#endif
 	if (strcmp(mode, "unloadblocked") == 0) {
 		// A goroutine that never returns from C makes unloading
 		// impossible; the runtime must refuse with a fatal error rather

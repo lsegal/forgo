@@ -312,7 +312,7 @@ GEN1 tick 105</pre>
       <li style="margin-bottom:14px">Expect several host threads to call in at once, and expect an instance to move between threads.</li>
       <li style="margin-bottom:14px">A library can be unloaded (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">dlclose</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">FreeLibrary</code>) and loaded again; the next load gets a fresh runtime. Goroutines still alive at unload are discarded without running their deferred calls, so clean up from the host's deinit callback.</li>
       <li style="margin-bottom:14px">A goroutine in a blocking system call or C call must return before the unload; after five seconds the unload is refused with a fatal error. No host thread may be inside a call into the library while it is unloaded.</li>
-      <li>Unload libraries in the reverse order of loading when you can: a library can only take its signal handler out of the chain when no handler was installed on top of it.</li>
+      <li>Libraries can be unloaded in any order: on Unix a library installs its signal handler through a small stub that stays mapped after the library is gone and then forwards to the handler that was there before it. Where the process cannot map executable memory (a hardened runtime without the right entitlement), unload in the reverse order of loading.</li>
     </ul>
     <h3 id="plugin-process-state" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Process-wide state</h3>
     <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
