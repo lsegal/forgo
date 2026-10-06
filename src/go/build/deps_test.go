@@ -224,12 +224,6 @@ var depsRules = `
 	OS
 	< golang.org/x/sys/cpu;
 
-	# runtime/fgohot is the in-process half of forgo hot reload. It is linked
-	# in only by forgo run --watch, and talks to the watcher through plain
-	# files, so it needs nothing beyond OS and time.
-	OS, time
-	< runtime/fgohot;
-
 	# FMT is OS (which includes string routines) plus reflect and fmt.
 	# It does not include package log, which should be avoided in core packages.
 	arena, strconv, unicode
@@ -351,6 +345,13 @@ var depsRules = `
 	< debug/elf, debug/gosym, debug/macho, debug/pe, debug/plan9obj, internal/xcoff
 	< debug/buildinfo
 	< DEBUG;
+
+	# runtime/fgohot is the in-process half of forgo hot reload. It is linked
+	# in only by forgo run --watch and talks to the watcher through plain
+	# files, but it parses its own executable's Mach-O or PE image to find
+	# the symbols it patches, so it needs the executable parsers.
+	OS, time, reflect, encoding/binary, debug/macho, debug/pe
+	< runtime/fgohot;
 
 	# go parser and friends.
 	FMT, sort

@@ -624,18 +624,29 @@ threads with forced GCs, many instances of one plugin, nested cross-library
 callbacks with recovered panics, recovered nil dereferences while the other
 runtime is busy, preemption of a spinning goroutine, a host `SIGSEGV`
 handler installed before the libraries, and the golang/go#65050 reproducer.
+[`pluginval/`](pluginval/README.md) repeats the multi-runtime cases in a
+real plugin host: it validates Go VST3 plugins with Tracktion's pluginval at
+its highest strictness, with three Go runtimes in one process.
 
 Process-wide state. Some things a Go runtime sets belong to the whole
 process, so several runtimes share them:
 
-- `os/signal.Notify`: in a library, `Notify` takes a signal over from the
-  handler installed before it, so when two runtimes ask for the same signal,
-  the one that asked last gets it. When it calls `Reset` or `Stop`, the
-  signal goes back to the runtime below it. Upstream Go restored the handler
-  it had found even when another runtime had installed one on top since,
+- `os/signal.Notify`: every forgo runtime that calls `Notify` for a signal
+  gets it. A runtime whose handler sits on top of another forgo runtime's
+  handles the signal and also hands it down, and a runtime that has called
+  `Reset` or `Stop` passes what it is handed on to the next forgo runtime
+  only. A C handler installed before the libraries loses the signal while
+  any runtime is listening, as upstream documents for `Notify` in a library,
+  and gets it back once they have all called `Reset`. On Linux, macOS, and
+  FreeBSD the runtimes tell each other's handlers from C ones through the
+  dynamic loader (`dladdr`, `dlopen`, `dlsym`), so this works between forgo
+  c-shared libraries, but a c-archive runtime, an upstream Go library, and a
+  statically linked program fall back to upstream's rule: the runtime that
+  asked last gets the signal. Upstream Go also restored the handler it had
+  found on `Reset` even when another runtime had installed one on top since,
   which took the signal away from that runtime. A forgo runtime leaves its
-  handler in place and passes signals through instead. `signal.Ignore`
-  still ignores the signal for the whole process.
+  handler in place and passes signals through instead. `signal.Ignore` still
+  ignores the signal for the whole process.
 - `SIGPIPE`: a Go write to a closed pipe or socket fails with `EPIPE` in
   whichever runtime made it. The handler chain passes the signal down to
   the runtime running on that thread.
@@ -660,14 +671,17 @@ process, so several runtimes share them:
   them it falls back to `timeBeginPeriod`/`timeEndPeriod`, which Windows
   counts per call, so one runtime cannot cancel another's request.
 - Windows console control events: every runtime registers a handler when it
-  loads, and Windows calls the newest first. A runtime that has called
-  `Notify` for the event keeps it, so as on Unix the library loaded last
-  that asked gets it. For a close, logoff, or shutdown event that runtime
-  then blocks until Windows ends the process, and earlier runtimes never see
-  the event.
+  loads, and Windows calls the newest first. The runtimes also register in a
+  per-process list (a named file mapping keyed by the process ID), and the
+  first handler Windows calls delivers `os.Interrupt` or `SIGTERM` to every
+  runtime that called `Notify` for it. If any of them did, the event stops
+  there, so C handlers below lose it, as with one runtime. For a close,
+  logoff, or shutdown event that handler then blocks until Windows ends the
+  process, while every runtime that asked cleans up.
 
-`TestMultiRuntime` covers the `Notify` hand-back, `SIGPIPE`, the open-file
-limit, and the crash reports.
+`TestMultiRuntime` covers `Notify` delivery to both runtimes and the
+hand-back on `Reset`, Ctrl+Break on Windows, `SIGPIPE`, the open-file limit,
+and the crash reports.
 
 Rules for plugin authors:
 

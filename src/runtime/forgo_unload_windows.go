@@ -36,6 +36,7 @@ func forgoRestoreHandlers() {
 	if forgoCtrlHandlerPC != 0 {
 		stdcall(_SetConsoleCtrlHandler, forgoCtrlHandlerPC, 0)
 	}
+	forgoCtrlUnregister()
 	if forgoPowerHandle != 0 && forgoPowerUnregister != nil {
 		stdcall(forgoPowerUnregister, forgoPowerHandle)
 	}

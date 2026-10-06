@@ -542,12 +542,15 @@ static void sleep_ms(int ms) {
 	nanosleep(&ts, NULL);
 }
 
-// notify: both runtimes call os/signal.Notify for SIGUSR1. The one that
-// called it last gets the signal, as it would from a C handler installed
-// before it, and the signal must go back to the other runtime, and then to
-// the host, as they call Reset in any order. With withhost, the host
-// installed its own SIGUSR1 handler first; otherwise the default action,
-// which kills the process, sits below both runtimes.
+// notify: both runtimes call os/signal.Notify for SIGUSR1, and every
+// runtime that asked gets every signal, however their handlers are chained
+// and whichever of them calls Reset. A runtime that has called Reset no
+// longer gets it, and neither does the host while either runtime is still
+// listening. With withhost, the host installed its own SIGUSR1 handler
+// first, which, as with a single runtime, loses the signal to Notify;
+// otherwise the default action, which kills the process, sits below both
+// runtimes. Once both runtimes have called Reset, the host's original
+// handling is back.
 static volatile sig_atomic_t hostusr1;
 static int want[3];
 
@@ -585,6 +588,14 @@ static void usr1_round(int gotA, int gotB, int gotHost) {
 	}
 }
 
+static void usr1_rounds(int gotA, int gotB) {
+	int i;
+
+	for (i = 0; i < 5; i++) {
+		usr1_round(gotA, gotB, 0);
+	}
+}
+
 static void run_notify(int withhost) {
 	struct sigaction sa;
 	int i;
@@ -592,24 +603,23 @@ static void run_notify(int withhost) {
 	for (i = 0; i < 2; i++) {
 		libs[i].notifysignal(SIGUSR1);
 	}
-	for (i = 0; i < 5; i++) {
-		usr1_round(0, 1, 0);
-	}
-	// A's Reset must not uninstall B's handler, which sits on top of A's.
+	// B's handler sits on top of A's and hands the signal down to it.
+	usr1_rounds(1, 1);
+	// A's Reset must not uninstall B's handler, and A must not pass what
+	// B hands down on to the host or to the default action.
 	libs[0].resetsignal(SIGUSR1);
-	for (i = 0; i < 5; i++) {
-		usr1_round(0, 1, 0);
-	}
+	usr1_rounds(0, 1);
 	// A calling Notify again must not chain A's handler to itself.
 	libs[0].notifysignal(SIGUSR1);
-	for (i = 0; i < 5; i++) {
-		usr1_round(0, 1, 0);
-	}
-	// B's Reset hands the signal back to A.
+	usr1_rounds(1, 1);
+	// B's Reset hands the signal back to A alone.
 	libs[1].resetsignal(SIGUSR1);
-	for (i = 0; i < 5; i++) {
-		usr1_round(1, 0, 0);
-	}
+	usr1_rounds(1, 0);
+	// Now A's handler is the one below.
+	libs[1].notifysignal(SIGUSR1);
+	usr1_rounds(1, 1);
+	libs[1].resetsignal(SIGUSR1);
+	usr1_rounds(1, 0);
 	// A's Reset restores the host's original handling.
 	libs[0].resetsignal(SIGUSR1);
 	if (sigaction(SIGUSR1, NULL, &sa) != 0) {
@@ -680,6 +690,75 @@ static void rlimit_after(void) {
 }
 #endif
 
+#ifdef _WIN32
+// ctrlbreak: both runtimes call os/signal.Notify for os.Interrupt, and
+// every runtime that asked gets every Ctrl+Break console event, whichever
+// handler Windows calls first. A console control handler the host installed
+// first loses the event while either runtime is listening, and gets it back
+// once both have called Reset. The test starts the host in a new process
+// group, so the event reaches only this process.
+#define GO_SIGINT 2
+
+static volatile LONG hostbreaks;
+static int wantbreak[3];
+
+static BOOL WINAPI host_ctrl(DWORD type) {
+	if (type != CTRL_BREAK_EVENT) {
+		return FALSE;
+	}
+	InterlockedIncrement(&hostbreaks);
+	return TRUE;
+}
+
+static int break_counts(int i) {
+	return i < 2 ? libs[i].signalcount() : (int)hostbreaks;
+}
+
+static void break_round(int gotA, int gotB, int gotHost) {
+	int i, ms;
+
+	wantbreak[0] += gotA;
+	wantbreak[1] += gotB;
+	wantbreak[2] += gotHost;
+	if (!GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId())) {
+		printf("SKIP: GenerateConsoleCtrlEvent failed: %lu\n", GetLastError());
+		exit(0);
+	}
+	for (ms = 0; ms < 10000; ms++) {
+		if (break_counts(0) >= wantbreak[0] && break_counts(1) >= wantbreak[1] && break_counts(2) >= wantbreak[2]) {
+			break;
+		}
+		Sleep(1);
+	}
+	// Give a delivery that should not happen time to show up.
+	Sleep(50);
+	for (i = 0; i < 3; i++) {
+		if (break_counts(i) != wantbreak[i]) {
+			fprintf(stderr, "FAIL: Ctrl+Break seen by A, B, host = %d, %d, %d; want %d, %d, %d\n",
+				break_counts(0), break_counts(1), break_counts(2), wantbreak[0], wantbreak[1], wantbreak[2]);
+			exit(1);
+		}
+	}
+}
+
+static void run_ctrlbreak(void) {
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		libs[i].notifysignal(GO_SIGINT);
+	}
+	break_round(1, 1, 0);
+	libs[0].resetsignal(GO_SIGINT);
+	break_round(0, 1, 0);
+	libs[0].notifysignal(GO_SIGINT);
+	break_round(1, 1, 0);
+	libs[1].resetsignal(GO_SIGINT);
+	break_round(1, 0, 0);
+	libs[0].resetsignal(GO_SIGINT);
+	break_round(0, 0, 1);
+}
+#endif
+
 int main(int argc, char** argv) {
 	const char* mode;
 	int i, w;
@@ -701,6 +780,10 @@ int main(int argc, char** argv) {
 	}
 	if (strcmp(mode, "rlimit") == 0) {
 		rlimit_before();
+	}
+#else
+	if (strcmp(mode, "ctrlbreak") == 0 && !SetConsoleCtrlHandler(host_ctrl, TRUE)) {
+		fail("SetConsoleCtrlHandler", NULL);
 	}
 #endif
 
@@ -819,6 +902,9 @@ int main(int argc, char** argv) {
 			libs[i].work(8);
 		}
 		rlimit_after();
+#else
+	} else if (strcmp(mode, "ctrlbreak") == 0) {
+		run_ctrlbreak();
 #endif
 	} else {
 		fail("unknown mode", mode);

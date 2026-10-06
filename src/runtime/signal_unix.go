@@ -438,7 +438,7 @@ func sigFetchG(c *sigctxt) *g {
 //go:nosplit
 //go:nowritebarrierrec
 func sigtrampgo(sig uint32, info *siginfo, ctx unsafe.Pointer) {
-	if sigfwdgo(sig, info, ctx) {
+	if forgoSigNotifyFwd(sig, info, ctx) || sigfwdgo(sig, info, ctx) {
 		return
 	}
 	forgoSigfwdForeign(sig, info, ctx)
