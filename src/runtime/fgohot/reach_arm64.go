@@ -31,4 +31,12 @@ package fgohot
 // none within the first few hundred MB. mem_darwin.go's reserve also asks
 // for less than it wants rather than fail outright — see minReserve — for
 // whatever this doesn't find room for.
-const maxReach = 3 << 30 // 3GB
+//
+// probeStep is only used by the stepping reserve in mem_linux.go and
+// mem_windows.go. linux/arm64 and windows/arm64 do not support hot reload
+// yet (runtime.fgohotSupported reports false there), but the agent still has
+// to build for them.
+const (
+	maxReach  = 3 << 30 // 3GB
+	probeStep = 256 << 20
+)

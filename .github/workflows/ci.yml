@@ -63,6 +63,22 @@ jobs:
           & .\make.bat
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # The matrix above only builds linux/amd64, darwin/arm64 and
+      # windows/amd64, so forgo-only runtime code that compiles there but not
+      # on the other first-class ports would otherwise go unnoticed.
+      - name: Cross-build std for other platforms
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          for target in linux/arm64 windows/arm64 darwin/amd64 linux/riscv64; do
+            echo "=== $target ==="
+            GOOS="${target%/*}" GOARCH="${target#*/}" forgo build std
+          done
+
       - name: Run examples (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
