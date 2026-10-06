@@ -428,6 +428,8 @@ func (check *Checker) Files(files []*ast.File) (err error) {
 // syntax is properly type annotated even in a package containing
 // errors.
 func (check *Checker) checkFiles(files []*ast.File) {
+	defer forgoForgetChecker(check) // forgo: see forgo.go
+
 	print := func(msg string) {
 		if check.conf._Trace {
 			fmt.Println()

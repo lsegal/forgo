@@ -426,6 +426,9 @@ func (check *Checker) constDecl(obj *Const, typ, init ast.Expr, inherited bool) 
 			check.errpos = atPos(obj.pos)
 		}
 		check.expr(nil, &x, init)
+		if x.mode() != constant_ {
+			forgoEvalConstCall(check, &x, init) // see forgo.go
+		}
 	}
 	check.initConst(obj, &x)
 }

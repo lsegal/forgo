@@ -62,6 +62,14 @@ func run(pass *analysis.Pass) (any, error) {
 			return true // the function call is not related to this check.
 		}
 
+		// forgo: in `resp := http.Get(url)?`, the ? returns the error
+		// before resp can be used.
+		if len(stack) >= 2 {
+			if _, ok := stack[len(stack)-2].(*ast.TryExpr); ok {
+				return true
+			}
+		}
+
 		// Find the innermost containing block, and get the list
 		// of statements starting with the one containing call.
 		stmts, ncalls := restOfBlock(stack)
