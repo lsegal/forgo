@@ -43,15 +43,19 @@ func TestDarwinAMD64TLSG(t *testing.T) {
 	}
 
 	var sawTLSG, sawGS bool
+	var fixed []string
 	for line := range strings.Lines(string(out)) {
 		switch {
 		case strings.Contains(line, "GS:0x30"), strings.Contains(line, "GS:0, "):
-			t.Errorf("g accessed at a fixed TLS offset instead of through runtime.tls_g:\n%s", line)
+			fixed = append(fixed, line)
 		case strings.Contains(line, "MOVQ runtime.tls_g(SB), "):
 			sawTLSG = true
 		case strings.Contains(line, "GS:0("):
 			sawGS = true
 		}
+	}
+	if len(fixed) > 0 {
+		t.Errorf("%d instructions access g at a fixed TLS offset instead of through runtime.tls_g, such as:\n%s", len(fixed), strings.Join(fixed[:min(len(fixed), 5)], ""))
 	}
 	if !sawTLSG || !sawGS {
 		t.Errorf("no g load through runtime.tls_g found (load offset: %v, GS-relative access: %v)", sawTLSG, sawGS)
