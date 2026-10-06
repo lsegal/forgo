@@ -65,6 +65,12 @@ func trimGoExt(name string) string {
 	return strings.TrimSuffix(name, ".go")
 }
 
+// hasGoExt reports whether name has a Go source extension: ".go", or
+// forgo's ".fgo".
+func hasGoExt(name string) bool {
+	return strings.HasSuffix(name, ".go") || strings.HasSuffix(name, ".fgo")
+}
+
 func actionList(root *Action) []*Action {
 	seen := map[*Action]bool{}
 	all := []*Action{}
@@ -1177,7 +1183,7 @@ func (b *Builder) loadCachedCompiledGoFiles(a *Action) error {
 	for name := range strings.SplitSeq(string(list), "\n") {
 		if name == "" { // end of list
 			continue
-		} else if !strings.HasSuffix(name, ".go") {
+		} else if !hasGoExt(name) {
 			continue
 		}
 		if strings.HasPrefix(name, "./") {
@@ -1241,11 +1247,11 @@ func analysisModuleFromModulePublic(m *modinfo.ModulePublic) *analysis.Module {
 }
 
 func buildVetConfig(a *Action, srcfiles []string, vetDeps []*Action) {
-	// Classify files based on .go extension.
+	// Classify files based on .go (or forgo's .fgo) extension.
 	// srcfiles does not include raw cgo files.
 	var gofiles, nongofiles []string
 	for _, name := range srcfiles {
-		if strings.HasSuffix(name, ".go") {
+		if hasGoExt(name) {
 			gofiles = append(gofiles, name)
 		} else {
 			nongofiles = append(nongofiles, name)

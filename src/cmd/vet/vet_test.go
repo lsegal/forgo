@@ -62,6 +62,7 @@ func TestVet(t *testing.T) {
 		"copylock",
 		"deadcode",
 		"directive",
+		"forgo",
 		"hostport",
 		"httpresponse",
 		"lostcancel",
