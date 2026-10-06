@@ -550,7 +550,7 @@ func (rp *IndexPackage) Import(bctxt build.Context, mode build.ImportMode) (p *b
 			p.IgnoredGoFiles = append(p.IgnoredGoFiles, name)
 			continue
 		}
-		isTest := strings.HasSuffix(name, "_test.go")
+		isTest := isTestFileName(name)
 		isXTest := false
 		if isTest && strings.HasSuffix(tf.pkgName(), "_test") && p.Name != tf.pkgName() {
 			isXTest = true
@@ -761,7 +761,7 @@ Files:
 		}
 		numFiles++
 		m := imports_
-		if strings.HasSuffix(name, "_test.go") {
+		if isTestFileName(name) {
 			m = testImports
 		}
 		for _, p := range imps {
