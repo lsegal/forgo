@@ -65,4 +65,31 @@ func DestroyInstance(id C.int) C.int {
 //export LiveInstances
 func LiveInstances() C.int { return C.int(mr.LiveInstances()) }
 
+//export NotifySignal
+func NotifySignal(sig C.int) { mr.NotifySignal(int(sig)) }
+
+//export ResetSignal
+func ResetSignal(sig C.int) { mr.ResetSignal(int(sig)) }
+
+//export SignalCount
+func SignalCount() C.int { return C.int(mr.SignalCount()) }
+
+//export WriteClosedPipe
+func WriteClosedPipe() C.int { return C.int(mr.WriteClosedPipe()) }
+
+//export Crash
+func Crash() { mr.Crash() }
+
+//export CrashFault
+func CrashFault() { mr.CrashFault() }
+
+// parked blocks parkedInLibA forever, so that every crash report from
+// this library lists a goroutine whose name says which library it is.
+var parked = make(chan struct{})
+
+func parkedInLibA() { <-parked }
+
+//export Park
+func Park() { go parkedInLibA() }
+
 func main() {}

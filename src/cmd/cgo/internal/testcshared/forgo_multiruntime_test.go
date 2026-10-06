@@ -64,10 +64,11 @@ func TestMultiRuntime(t *testing.T) {
 		{"Different", liba, libb},
 		{"SameSource", liba, liba2},
 	}
-	modes := []string{"stress", "instances", "nested", "fault", "preempt", "hostsig"}
+	modes := []string{"stress", "instances", "nested", "fault", "preempt", "hostsig", "notify", "notifyhost", "sigpipe", "rlimit"}
+	unixOnly := map[string]bool{"hostsig": true, "notify": true, "notifyhost": true, "sigpipe": true, "rlimit": true}
 	for _, p := range pairs {
 		for _, mode := range modes {
-			if mode == "hostsig" && GOOS == "windows" {
+			if unixOnly[mode] && GOOS == "windows" {
 				continue
 			}
 			t.Run(p.name+"/"+mode, func(t *testing.T) {
@@ -84,6 +85,21 @@ func TestMultiRuntime(t *testing.T) {
 		t.Run("RTLDGlobal/stress", func(t *testing.T) {
 			runMultiRuntimeHost(t, []string{"MULTIRUNTIME_RTLD_GLOBAL=1"}, host, "stress", liba, libb)
 		})
+	}
+	// An unrecovered panic or fault in one library ends the process with
+	// that library's crash report alone, in both directions and whatever
+	// GOTRACEBACK asks for.
+	for _, mode := range []string{"crash", "crashfault"} {
+		for _, tb := range []string{"all", "crash"} {
+			for _, dir := range []struct{ name, a, b, own, other string }{
+				{"AB", liba, libb, "parkedInLibA", "parkedInLibB"},
+				{"BA", libb, liba, "parkedInLibB", "parkedInLibA"},
+			} {
+				t.Run(mode+"/"+tb+"/"+dir.name, func(t *testing.T) {
+					checkMultiRuntimeCrash(t, host, mode, tb, dir.a, dir.b, dir.own, dir.other)
+				})
+			}
+		}
 	}
 	// golang/go#65050 crashed intermittently, so run its shape repeatedly.
 	t.Run("Upstream65050", func(t *testing.T) {
@@ -108,6 +124,44 @@ func runMultiRuntimeHost(t *testing.T, env []string, host, mode, a, b string) {
 	}
 	if err != nil || strings.TrimSpace(string(out)) != "PASS" {
 		t.Fatalf("%s %s: %v\n%s", host, mode, err, out)
+	}
+}
+
+// checkMultiRuntimeCrash runs the host in a crash mode, which makes library
+// a panic or fault without recovering while library b is busy, and checks
+// that the process died with a's crash report: a's goroutines, which
+// include one named own, and none of b's, which include one named other.
+func checkMultiRuntimeCrash(t *testing.T, host, mode, traceback, a, b, own, other string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, host, mode, a, b)
+	cmd.Env = append(os.Environ(), "GOTRACEBACK="+traceback)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("%s %s: timed out\n%s", host, mode, out)
+	}
+	if err == nil {
+		t.Fatalf("%s %s: exited successfully, want a crash\n%s", host, mode, out)
+	}
+	report := string(out)
+	want := "panic: multiruntime: unrecovered panic"
+	if mode == "crashfault" {
+		want = "panic: runtime error: invalid memory address or nil pointer dereference"
+	}
+	for _, s := range []string{want, "goroutine ", "main.Crash", own} {
+		if !strings.Contains(report, s) {
+			t.Errorf("crash report does not contain %q", s)
+		}
+	}
+	if strings.Contains(report, other) {
+		t.Errorf("crash report contains %q from the other library", other)
+	}
+	if n := strings.Count(report, "panic: "); n != 1 {
+		t.Errorf("crash report has %d panics, want 1", n)
+	}
+	if t.Failed() {
+		t.Logf("%s %s:\n%s", host, mode, report)
 	}
 }
 
