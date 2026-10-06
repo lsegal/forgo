@@ -1,0 +1,5 @@
+quarter(12) = 3, <nil>
+quarter(0) = 0, <nil>
+quarter(6) = 0, EINVAL
+quarter(200) = 0, too big
+quarter(-4) = 0, negative: -4
