@@ -9,6 +9,7 @@ package bootstrap_test
 import (
 	"bytes"
 	"errors"
+	igoroot "internal/goroot"
 	"internal/testenv"
 	"os"
 	"os/exec"
@@ -66,7 +67,7 @@ func TestExperimentToolID(t *testing.T) {
 	runCmd(t, gorootSrc, env, makeScriptPath)
 
 	// Verify compiler version string.
-	goCmdPath := filepath.Join(goroot, "bin", "go")
+	goCmdPath := igoroot.GoCommand(goroot)
 	gotVersion := bytes.TrimSpace(runCmd(t, gorootSrc, env, goCmdPath, "tool", "compile", "-V=full"))
 	wantVersion := []byte(`compile version go1.999`)
 	if !bytes.Equal(gotVersion, wantVersion) {

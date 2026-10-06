@@ -38,8 +38,8 @@ func TestMultiRuntime(t *testing.T) {
 	}
 	liba := filepath.Join(dir, "liba"+ext)
 	libb := filepath.Join(dir, "libb"+ext)
-	run(t, nil, "go", "build", "-buildmode=c-shared", "-o", liba, "./multiruntime/liba")
-	run(t, nil, "go", "build", "-buildmode=c-shared", "-o", libb, "./multiruntime/libb")
+	run(t, nil, testenv.GoToolPath(t), "build", "-buildmode=c-shared", "-o", liba, "./multiruntime/liba")
+	run(t, nil, testenv.GoToolPath(t), "build", "-buildmode=c-shared", "-o", libb, "./multiruntime/libb")
 	// The same library under a second path is a second runtime built from
 	// identical code, as when a host loads both the VST2 and the VST3 build
 	// of one plugin.

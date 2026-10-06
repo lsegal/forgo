@@ -18,6 +18,7 @@ import (
 	"go/token"
 	"go/types"
 	"internal/buildcfg"
+	"internal/goroot"
 	"internal/testenv"
 	"io"
 	"log"
@@ -36,11 +37,7 @@ import (
 const verbose = false
 
 func goCmd() string {
-	var exeSuffix string
-	if runtime.GOOS == "windows" {
-		exeSuffix = ".exe"
-	}
-	path := filepath.Join(testenv.GOROOT(nil), "bin", "go"+exeSuffix)
+	path := goroot.GoCommand(testenv.GOROOT(nil))
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}

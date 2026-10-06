@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	igoroot "internal/goroot"
 	"internal/platform"
 	"internal/testenv"
 	"log"
@@ -140,7 +141,7 @@ func goCmd(t *testing.T, op string, args ...string) string {
 	if op != "tool" {
 		flags = []string{"-gcflags", gcflags}
 	}
-	return run(t, filepath.Join(goroot, "bin", "go"), append(append([]string{op}, flags...), args...)...)
+	return run(t, igoroot.GoCommand(goroot), append(append([]string{op}, flags...), args...)...)
 }
 
 // escape converts a string to something suitable for a shell command line.

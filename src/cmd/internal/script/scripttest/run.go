@@ -10,6 +10,7 @@ import (
 	"cmd/internal/script"
 	"context"
 	"fmt"
+	igoroot "internal/goroot"
 	"internal/testenv"
 	"internal/txtar"
 	"io/fs"
@@ -129,7 +130,7 @@ func NewEngine(t *testing.T, repls []ToolReplacement) (*script.Engine, []string)
 	}
 
 	// Add in commands for "go" and "cc".
-	testgo := filepath.Join(tgr, "bin", "go")
+	testgo := igoroot.GoCommand(tgr)
 	gocmd := script.Program(testgo, interrupt, gracePeriod)
 	addcmd("go", gocmd)
 	addcmd("cc", scriptCC(cmdExec, goEnv("CC")))
