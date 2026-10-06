@@ -57,6 +57,7 @@ func tlsinit(tlsg *uintptr, tlsbase *[_PTHREAD_KEYS_MAX]uintptr) {
 	for i, x := range tlsbase {
 		if x == magic {
 			*tlsg = uintptr(i * goarch.PtrSize)
+			forgoDarwinTLSKey = uintptr(k) + 1
 			g0_pthread_setspecific(k, 0)
 			return
 		}

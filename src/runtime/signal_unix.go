@@ -133,6 +133,7 @@ func initsig(preinit bool) {
 		// We don't need to use atomic operations here because
 		// there shouldn't be any other goroutines running yet.
 		fwdSig[i] = getsig(i)
+		forgoSaveSig(i)
 
 		if !sigInstallGoHandler(i) {
 			// Even if we are not installing a signal handler,
@@ -204,6 +205,7 @@ func sigenable(sig uint32) {
 		<-maskUpdatedChan
 		if atomic.Cas(&handlingSig[sig], 0, 1) {
 			atomic.Storeuintptr(&fwdSig[sig], getsig(sig))
+			forgoSaveSig(sig)
 			setsig(sig, abi.FuncPCABIInternal(sighandler))
 		}
 	}
@@ -299,6 +301,7 @@ func setProcessCPUProfilerTimer(hz int32) {
 				h = _SIG_IGN
 			}
 			atomic.Storeuintptr(&fwdSig[_SIGPROF], h)
+			forgoSaveSig(_SIGPROF)
 			setsig(_SIGPROF, abi.FuncPCABIInternal(sighandler))
 		}
 

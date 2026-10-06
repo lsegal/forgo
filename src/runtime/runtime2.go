@@ -659,6 +659,7 @@ type m struct {
 	isExtraInC      bool          // m is an extra m that does not have any Go frames
 	isExtraInSig    bool          // m is an extra m in a signal handler
 	freeWait        atomic.Uint32 // Whether it is safe to free g0 and delete m (one of freeMRef, freeMStack, freeMWait)
+	forgoExited     atomic.Bool   // the library is being unloaded and this m has left Go code for good
 	needextram      bool
 	g0StackAccurate bool // whether the g0 stack has accurate bounds
 	traceback       uint8

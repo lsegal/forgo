@@ -27,6 +27,7 @@ const (
 //go:cgo_import_dynamic runtime._CreateWaitableTimerExW CreateWaitableTimerExW%4 "kernel32.dll"
 //go:cgo_import_dynamic runtime._DuplicateHandle DuplicateHandle%7 "kernel32.dll"
 //go:cgo_import_dynamic runtime._ExitProcess ExitProcess%1 "kernel32.dll"
+//go:cgo_import_dynamic runtime._ExitThread ExitThread%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._FreeEnvironmentStringsW FreeEnvironmentStringsW%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._GetConsoleMode GetConsoleMode%2 "kernel32.dll"
 //go:cgo_import_dynamic runtime._GetCurrentThreadId GetCurrentThreadId%0 "kernel32.dll"
@@ -46,6 +47,8 @@ const (
 //go:cgo_import_dynamic runtime._QueryPerformanceCounter QueryPerformanceCounter%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._QueryPerformanceFrequency QueryPerformanceFrequency%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._RaiseFailFastException RaiseFailFastException%3 "kernel32.dll"
+//go:cgo_import_dynamic runtime._RemoveVectoredContinueHandler RemoveVectoredContinueHandler%1 "kernel32.dll"
+//go:cgo_import_dynamic runtime._RemoveVectoredExceptionHandler RemoveVectoredExceptionHandler%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._ResumeThread ResumeThread%1 "kernel32.dll"
 //go:cgo_import_dynamic runtime._RtlLookupFunctionEntry RtlLookupFunctionEntry%3 "kernel32.dll"
 //go:cgo_import_dynamic runtime._RtlVirtualUnwind  RtlVirtualUnwind%8 "kernel32.dll"
@@ -85,6 +88,7 @@ var (
 	_CreateWaitableTimerExW,
 	_DuplicateHandle,
 	_ExitProcess,
+	_ExitThread,
 	_FreeEnvironmentStringsW,
 	_GetConsoleMode,
 	_GetCurrentThreadId,
@@ -104,6 +108,8 @@ var (
 	_QueryPerformanceCounter,
 	_QueryPerformanceFrequency,
 	_RaiseFailFastException,
+	_RemoveVectoredContinueHandler,
+	_RemoveVectoredExceptionHandler,
 	_ResumeThread,
 	_RtlLookupFunctionEntry,
 	_RtlVirtualUnwind,
@@ -327,6 +333,8 @@ func monitorSuspendResume() {
 	handle := uintptr(0)
 	stdcall(powerRegisterSuspendResumeNotification, _DEVICE_NOTIFY_CALLBACK,
 		uintptr(unsafe.Pointer(&params)), uintptr(unsafe.Pointer(&handle)))
+	forgoPowerHandle = handle
+	forgoPowerUnregister = windowsFindfunc(powrprof, []byte("PowerUnregisterSuspendResumeNotification\000"))
 }
 
 func getCPUCount() int32 {
@@ -536,6 +544,7 @@ func goenvs() {
 	var fn any = ctrlHandler
 	ctrlHandlerPC := compileCallback(*efaceOf(&fn), true)
 	stdcall(_SetConsoleCtrlHandler, ctrlHandlerPC, 1)
+	forgoCtrlHandlerPC = ctrlHandlerPC
 
 	monitorSuspendResume()
 }

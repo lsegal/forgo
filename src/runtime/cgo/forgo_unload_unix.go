@@ -28,4 +28,3 @@ var _cgo_forgo_join = &x_cgo_forgo_join
 //go:linkname _cgo_forgo_m0_exit _cgo_forgo_m0_exit
 var x_cgo_forgo_m0_exit byte
 var _cgo_forgo_m0_exit = &x_cgo_forgo_m0_exit
-
