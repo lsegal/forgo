@@ -55,6 +55,7 @@ a:hover { color: var(--color-accent-600); }
       <a href="#json" style="font-size:15px;line-height:28px;text-decoration:none">comptime/json</a>
       <a href="#consts" style="font-size:15px;line-height:28px;text-decoration:none">Non-scalar consts</a>
       <a href="#hotreload" style="font-size:15px;line-height:28px;text-decoration:none">Hot reload</a>
+      <a href="#plugins" style="font-size:15px;line-height:28px;text-decoration:none">c-shared plugins</a>
       <a href="#editors" style="font-size:15px;line-height:28px;text-decoration:none">Editors</a>
       <a href="#versioning" style="font-size:15px;line-height:28px;text-decoration:none">Versioning</a>
       <a href="#building" style="font-size:15px;line-height:28px;text-decoration:none">Building from source</a>
@@ -297,6 +298,24 @@ GEN1 tick 105</pre>
       <li style="margin-bottom:14px">Each reload consumes a slice of the reserved region; after a few hundred reloads the program must be restarted. It says so when that happens.</li>
       <li style="margin-bottom:14px">A reload links the whole program, so it costs about as long as a link, not as long as a build from scratch — under a second to a couple of seconds for a small program on a native filesystem.</li>
       <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">--watch</code> runs the package with default build flags; other build flags passed alongside it are not yet forwarded to the watched build.</li>
+    </ul>
+  </section>
+
+  <section id="plugins" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Several Go runtimes in one process — c-shared plugins</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Plugin hosts load every plugin into one process: a DAW loading VST3/CLAP plugins, Python loading extension modules. Each <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-buildmode=c-shared</code> library carries its own Go runtime, and upstream Go does not support two of them side by side (golang/go#65050). forgo libraries can share a process with each other, with several instances of the same plugin, and with copies of one plugin loaded from two paths.</p>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">Each library keeps a fully separate heap, garbage collector, scheduler, and set of goroutines, and the libraries only meet through the C ABI. Each runtime keeps <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">g</code> in its own thread-local slot, and no Go symbol is exported, so neither runtime can bind to the other's copy. Signal handlers chain: the library loaded last passes a signal on when the thread is not running its own Go code. forgo also does that for the preemption (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">SIGURG</code>) and profiling (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">SIGPROF</code>) signals. Without it, the last library swallows the earlier library's preemption requests, and the earlier runtime's next garbage collection hangs.</p>
+    <h3 id="plugin-rules" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Rules for plugin authors</h3>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">Pass only C data between libraries. Never hand a Go pointer, func value, channel, or interface to another library.</li>
+      <li style="margin-bottom:14px">All instances of a plugin loaded from one file share one library image and one runtime, so package-level variables are shared by every instance. Keep per-instance state behind a handle such as a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">runtime/cgo.Handle</code>.</li>
+      <li style="margin-bottom:14px">Expect several host threads to call in at once, and expect an instance to move between threads.</li>
+      <li>A c-shared library cannot be unloaded yet. On Linux <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">dlclose</code> keeps it loaded, and a later <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">dlopen</code> gets the same runtime back. If it starts goroutines, stop them from the host's deinit callback.</li>
+    </ul>
+    <h3 id="plugin-limits" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Limits</h3>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">darwin/amd64 is not covered: every Go runtime there stores <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">g</code> in the same Apple-reserved TLS slot, which is the golang/go#65050 crash. forgo does not currently build for darwin/amd64, linux/arm64, or windows/arm64.</li>
+      <li>A library built by upstream Go does not forward preemption signals, so one loaded after a forgo library can still swallow the forgo library's preemption requests. Load it first when you control the order.</li>
     </ul>
   </section>
 

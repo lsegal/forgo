@@ -368,6 +368,18 @@ The hooks these need in upstream files are all single lines, marked by a
 call to a `fgohot*` function (`main.go`, `data.go`, `lib.go`, `symtab.go`,
 `typelink.go`, `fips140.go`, `pe.go`).
 
+Several Go runtimes in one process (c-shared plugins loaded by one host):
+
+- `src/runtime/forgo_multiruntime_unix.go` — forwards the preemption and
+  profiling signals another runtime sent to its own threads, hooked into
+  `sigtrampgo` in `signal_unix.go` with one line.
+- `src/cmd/cgo/internal/testcshared/forgo_multiruntime_test.go` and
+  `testdata/multiruntime/` — the C host and plugin libraries that exercise
+  it. When writing c-shared plugin code, follow the author rules in
+  README.md's "Several Go runtimes in one process": only C data crosses a
+  library boundary, and per-instance state lives behind a handle, not in
+  package globals.
+
 These are all either new files (untouched by upstream merges) or single-line
 hooks into existing files. Follow that same pattern if you're adding a new
 forgo feature: put the logic in a new file, and touch existing upstream

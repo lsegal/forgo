@@ -135,6 +135,32 @@ jobs:
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           forgo test cmd/compile/internal/syntax/... cmd/compile/internal/forgo/...
 
+      # Several Go runtimes in one process (c-shared plugins). The cgo test
+      # harness runs `go` from GOROOT/bin, so give it the forgo binary under
+      # that name.
+      - name: Multi-runtime c-shared tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          cp bin/forgo bin/go
+          forgo test -count=1 -v -run TestMultiRuntime cmd/cgo/internal/testcshared
+
+      - name: Multi-runtime c-shared tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          Copy-Item bin\forgo.exe bin\go.exe
+          forgo test -count=1 -v -run TestMultiRuntime cmd/cgo/internal/testcshared
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       # Exercises the published install.{sh,ps1} release assets for real
       # against the latest release, so broken bootstrap URLs and installer
       # download/extract bugs fail CI instead of being discovered by a user.
