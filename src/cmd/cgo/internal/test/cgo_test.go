@@ -93,6 +93,7 @@ func TestNamedEnum(t *testing.T)                { testNamedEnum(t) }
 func TestCastToEnum(t *testing.T)               { testCastToEnum(t) }
 func TestErrno(t *testing.T)                    { testErrno(t) }
 func TestFpVar(t *testing.T)                    { testFpVar(t) }
+func TestForgoSyntax(t *testing.T)               { testForgoSyntax(t) }
 func TestGCC68255(t *testing.T)                 { testGCC68255(t) }
 func TestHandle(t *testing.T)                   { testHandle(t) }
 func TestHelpers(t *testing.T)                  { testHelpers(t) }

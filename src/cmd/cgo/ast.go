@@ -426,6 +426,8 @@ func (f *File) walk(x any, context astContext, visit func(*File, any, astContext
 	case *ast.KeyValueExpr:
 		f.walk(&n.Key, ctxExpr, visit)
 		f.walk(&n.Value, ctxExpr, visit)
+	case *ast.TryExpr:
+		f.walk(&n.X, ctxExpr, visit)
 
 	case *ast.ArrayType:
 		f.walk(&n.Len, ctxExpr, visit)
@@ -474,6 +476,11 @@ func (f *File) walk(x any, context astContext, visit func(*File, any, astContext
 		f.walk(n.Call, ctxDefer, visit)
 	case *ast.ReturnStmt:
 		f.walk(n.Results, ctxExpr, visit)
+	case *ast.ThrowStmt:
+		f.walk(&n.X, ctxExpr, visit)
+	case *ast.PostfixIfStmt:
+		f.walk(n.Stmt, ctxStmt, visit)
+		f.walk(&n.Cond, ctxExpr, visit)
 	case *ast.BranchStmt:
 	case *ast.BlockStmt:
 		f.walk(n.List, context, visit)
