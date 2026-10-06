@@ -40,14 +40,14 @@ func sehtramp()
 func sigresume()
 
 func initExceptionHandler() {
-	stdcall(_AddVectoredExceptionHandler, 1, abi.FuncPCABI0(exceptiontramp))
+	forgoExceptionHandlers[0] = stdcall(_AddVectoredExceptionHandler, 1, abi.FuncPCABI0(exceptiontramp))
 	if GOARCH == "386" {
 		// use SetUnhandledExceptionFilter for windows-386.
 		// note: SetUnhandledExceptionFilter handler won't be called, if debugging.
 		stdcall(_SetUnhandledExceptionFilter, abi.FuncPCABI0(lastcontinuetramp))
 	} else {
-		stdcall(_AddVectoredContinueHandler, 1, abi.FuncPCABI0(firstcontinuetramp))
-		stdcall(_AddVectoredContinueHandler, 0, abi.FuncPCABI0(lastcontinuetramp))
+		forgoExceptionHandlers[1] = stdcall(_AddVectoredContinueHandler, 1, abi.FuncPCABI0(firstcontinuetramp))
+		forgoExceptionHandlers[2] = stdcall(_AddVectoredContinueHandler, 0, abi.FuncPCABI0(lastcontinuetramp))
 	}
 }
 

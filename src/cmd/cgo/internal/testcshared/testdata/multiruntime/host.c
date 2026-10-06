@@ -16,7 +16,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <tlhelp32.h>
 #else
+#include <dirent.h>
 #include <dlfcn.h>
 #include <pthread.h>
 #include <setjmp.h>
@@ -24,6 +26,9 @@
 #include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include <mach/mach.h>
 #endif
 
 typedef int (*work_fn)(int);
@@ -35,6 +40,7 @@ typedef int (*work2_fn)(int, int);
 
 struct lib {
 	const char* path;
+	void* handle;
 	work_fn work;
 	setpeer_fn setpeer;
 	bounce_fn bounce;
@@ -45,6 +51,9 @@ struct lib {
 	work2_fn process;
 	work_fn destroyinstance;
 	int_fn liveinstances;
+	int_fn generation;
+	void_fn startbackground;
+	void_fn blockinc;
 	work_fn notifysignal;
 	work_fn resetsignal;
 	int_fn signalcount;
@@ -76,6 +85,7 @@ static void load(struct lib* l) {
 	if (h == NULL) {
 		fail("LoadLibrary", l->path);
 	}
+	l->handle = h;
 #define LOOKUP(field, name) l->field = lookup(h, name)
 	LOOKUP(work, "Work");
 	LOOKUP(setpeer, "SetPeer");
@@ -87,6 +97,9 @@ static void load(struct lib* l) {
 	LOOKUP(process, "Process");
 	LOOKUP(destroyinstance, "DestroyInstance");
 	LOOKUP(liveinstances, "LiveInstances");
+	LOOKUP(generation, "Generation");
+	LOOKUP(startbackground, "StartBackground");
+	LOOKUP(blockinc, "BlockInC");
 	LOOKUP(notifysignal, "NotifySignal");
 	LOOKUP(resetsignal, "ResetSignal");
 	LOOKUP(signalcount, "SignalCount");
@@ -111,7 +124,7 @@ static void close_ref(void* h) {
 	FreeLibrary((HMODULE)h);
 }
 
-typedef HANDLE thread_t;
+typedef HANDLE hthread_t;
 
 static DWORD WINAPI thread_start(LPVOID arg) {
 	((void (*)(long))((void**)arg)[0])((long)(size_t)((void**)arg)[1]);
@@ -119,7 +132,7 @@ static DWORD WINAPI thread_start(LPVOID arg) {
 	return 0;
 }
 
-static void start_thread(thread_t* t, void (*fn)(long), long arg) {
+static void start_thread(hthread_t* t, void (*fn)(long), long arg) {
 	void** a = malloc(2 * sizeof(void*));
 	a[0] = (void*)fn;
 	a[1] = (void*)(size_t)arg;
@@ -129,9 +142,38 @@ static void start_thread(thread_t* t, void (*fn)(long), long arg) {
 	}
 }
 
-static void join_thread(thread_t t) {
+static void join_thread(hthread_t t) {
 	WaitForSingleObject(t, INFINITE);
 	CloseHandle(t);
+}
+
+static void unload(struct lib* l) {
+	if (!FreeLibrary((HMODULE)l->handle)) {
+		fail("FreeLibrary", l->path);
+	}
+	l->handle = NULL;
+}
+
+static int is_loaded(const char* path) {
+	return GetModuleHandleA(path) != NULL;
+}
+
+static int thread_count(void) {
+	HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+	THREADENTRY32 te;
+	DWORD pid = GetCurrentProcessId();
+	int n = 0;
+
+	te.dwSize = sizeof te;
+	if (snap != INVALID_HANDLE_VALUE && Thread32First(snap, &te)) {
+		do {
+			if (te.th32OwnerProcessID == pid) {
+				n++;
+			}
+		} while (Thread32Next(snap, &te));
+	}
+	CloseHandle(snap);
+	return n;
 }
 
 #else
@@ -152,6 +194,7 @@ static void load(struct lib* l) {
 	if (h == NULL) {
 		fail("dlopen", dlerror());
 	}
+	l->handle = h;
 #define LOOKUP(field, name) l->field = lookup(h, name)
 	LOOKUP(work, "Work");
 	LOOKUP(setpeer, "SetPeer");
@@ -163,6 +206,9 @@ static void load(struct lib* l) {
 	LOOKUP(process, "Process");
 	LOOKUP(destroyinstance, "DestroyInstance");
 	LOOKUP(liveinstances, "LiveInstances");
+	LOOKUP(generation, "Generation");
+	LOOKUP(startbackground, "StartBackground");
+	LOOKUP(blockinc, "BlockInC");
 	LOOKUP(notifysignal, "NotifySignal");
 	LOOKUP(resetsignal, "ResetSignal");
 	LOOKUP(signalcount, "SignalCount");
@@ -187,7 +233,7 @@ static void close_ref(void* h) {
 	dlclose(h);
 }
 
-typedef pthread_t thread_t;
+typedef pthread_t hthread_t;
 
 static void* thread_start(void* arg) {
 	((void (*)(long))((void**)arg)[0])((long)(size_t)((void**)arg)[1]);
@@ -195,7 +241,7 @@ static void* thread_start(void* arg) {
 	return NULL;
 }
 
-static void start_thread(thread_t* t, void (*fn)(long), long arg) {
+static void start_thread(hthread_t* t, void (*fn)(long), long arg) {
 	void** a = malloc(2 * sizeof(void*));
 	a[0] = (void*)fn;
 	a[1] = (void*)(size_t)arg;
@@ -204,13 +250,80 @@ static void start_thread(thread_t* t, void (*fn)(long), long arg) {
 	}
 }
 
-static void join_thread(thread_t t) {
+static void join_thread(hthread_t t) {
 	pthread_join(t, NULL);
+}
+
+static void unload(struct lib* l) {
+	if (dlclose(l->handle) != 0) {
+		fail("dlclose", dlerror());
+	}
+	l->handle = NULL;
+}
+
+static int is_loaded(const char* path) {
+	void* h = dlopen(path, RTLD_NOW | RTLD_NOLOAD);
+
+	if (h == NULL) {
+		return 0;
+	}
+	dlclose(h);
+	return 1;
+}
+
+static int thread_count(void) {
+#if defined(__APPLE__)
+	thread_act_array_t threads;
+	mach_msg_type_number_t n;
+
+	if (task_threads(mach_task_self(), &threads, &n) != KERN_SUCCESS) {
+		fail("task_threads", NULL);
+	}
+	vm_deallocate(mach_task_self(), (vm_address_t)threads, n * sizeof threads[0]);
+	return (int)n;
+#else
+	DIR* d = opendir("/proc/self/task");
+	struct dirent* e;
+	int n = 0;
+
+	if (d == NULL) {
+		return -1;
+	}
+	while ((e = readdir(d)) != NULL) {
+		if (e->d_name[0] != '.') {
+			n++;
+		}
+	}
+	closedir(d);
+	return n;
+#endif
 }
 
 #endif
 
 #define NTHREADS 8
+
+// mapping_count reports how many memory mappings the process has, or -1
+// where that is not easy to find out.
+static int mapping_count(void) {
+#if defined(__linux__)
+	FILE* f = fopen("/proc/self/maps", "r");
+	int c, n = 0;
+
+	if (f == NULL) {
+		return -1;
+	}
+	while ((c = fgetc(f)) != EOF) {
+		if (c == '\n') {
+			n++;
+		}
+	}
+	fclose(f);
+	return n;
+#else
+	return -1;
+#endif
+}
 
 // stress: every thread calls into both runtimes in turn, and each call
 // allocates and forces collections in the runtime it lands in.
@@ -307,8 +420,83 @@ static void busy_thread(long which) {
 	}
 }
 
+// unload_thread uses both runtimes while one of them is about to be
+// unloaded.
+static void unload_thread(long id) {
+	int i;
+
+	for (i = 0; i < 50; i++) {
+		libs[(i + id) % 2].work(i % 32 + 1);
+	}
+}
+
+#define NRELOADS 100
+
+// run_unload loads, uses and unloads library A NRELOADS times while library
+// B stays loaded and busy, then checks that nothing piled up and that B
+// still works. B is loaded first, so A's signal handler is the top of the
+// chain whenever A is unloaded.
+static void run_unload(void) {
+	hthread_t busy, t[4];
+	int i, j, threads0 = 0, maps0 = 0, n;
+
+	load(&libs[1]);
+	libs[1].work(1);
+	busy_stop = 0;
+	start_thread(&busy, busy_thread, 1);
+	for (i = 0; i < NRELOADS; i++) {
+		load(&libs[0]);
+		if ((n = libs[0].generation()) != 1) {
+			fprintf(stderr, "FAIL: reload %d: library kept its state across an unload (generation %d)\n", i, n);
+			exit(1);
+		}
+		libs[0].startbackground();
+		for (j = 0; j < 4; j++) {
+			start_thread(&t[j], unload_thread, j);
+		}
+		for (j = 0; j < 4; j++) {
+			join_thread(t[j]);
+		}
+		if (libs[0].fault() != 1) {
+			fail("nil dereference was not recovered as a runtime error", NULL);
+		}
+		unload(&libs[0]);
+		if (is_loaded(libs[0].path)) {
+			fail("library is still loaded after unloading it", libs[0].path);
+		}
+		if (i == 0) {
+			threads0 = thread_count();
+			maps0 = mapping_count();
+		}
+	}
+	busy_stop = 1;
+	join_thread(busy);
+
+	// Each load starts several threads and maps a heap. Without the
+	// teardown they would pile up; allow for B growing a little.
+	n = thread_count();
+	if (n > threads0 + 16) {
+		fprintf(stderr, "FAIL: %d threads after %d reloads, %d after the first\n", n, NRELOADS, threads0);
+		exit(1);
+	}
+	n = mapping_count();
+	if (maps0 > 0 && n > maps0 + 64) {
+		fprintf(stderr, "FAIL: %d mappings after %d reloads, %d after the first\n", n, NRELOADS, maps0);
+		exit(1);
+	}
+
+	// B still handles its own faults and preempts its own goroutines.
+	if (libs[1].fault() != 1) {
+		fail("nil dereference was not recovered as a runtime error", libs[1].path);
+	}
+	libs[1].startspin();
+	for (i = 0; i < 5; i++) {
+		libs[1].gc();
+	}
+}
+
 static void run_threads(void (*fn)(long)) {
-	thread_t t[NTHREADS];
+	hthread_t t[NTHREADS];
 	long i;
 
 	for (i = 0; i < NTHREADS; i++) {
@@ -599,6 +787,31 @@ int main(int argc, char** argv) {
 	}
 #endif
 
+	if (strcmp(mode, "unload") == 0) {
+		run_unload();
+		printf("PASS\n");
+		return 0;
+	}
+	if (strcmp(mode, "unloadblocked") == 0) {
+		// A goroutine that never returns from C makes unloading
+		// impossible; the runtime must refuse with a fatal error rather
+		// than let the library disappear under it.
+		load(&libs[0]);
+		libs[0].blockinc();
+		unload(&libs[0]);
+		fail("unloading with a goroutine blocked in C succeeded", NULL);
+	}
+	if (strcmp(mode, "exitblocked") == 0) {
+		// Exiting is not unloading: the same goroutine must not stop
+		// the process from exiting normally.
+		load(&libs[0]);
+		libs[0].startbackground();
+		libs[0].blockinc();
+		printf("PASS\n");
+		fflush(stdout);
+		exit(0);
+	}
+
 	load(&libs[0]);
 	if (strcmp(mode, "upstream") == 0) {
 		// golang/go#65050: call the first library while the second
@@ -623,7 +836,7 @@ int main(int argc, char** argv) {
 		// A nil dereference in one runtime is recovered there while the
 		// other runtime is busy on another thread, in both directions.
 		for (w = 0; w < 2; w++) {
-			thread_t t;
+			hthread_t t;
 
 			busy_stop = 0;
 			start_thread(&t, busy_thread, 1 - w);
@@ -639,7 +852,7 @@ int main(int argc, char** argv) {
 		// An unrecovered panic or fault in A, while B is busy on another
 		// thread, ends the process with a crash report from A alone. The
 		// test checks the report.
-		thread_t t;
+		hthread_t t;
 
 		libs[0].park();
 		libs[1].park();

@@ -28,16 +28,21 @@ import (
 //go:cgo_import_dynamic runtime._CreateFileMappingW CreateFileMappingW%6 "kernel32.dll"
 //go:cgo_import_dynamic runtime._MapViewOfFile MapViewOfFile%5 "kernel32.dll"
 //go:cgo_import_dynamic runtime._GetCurrentProcessId GetCurrentProcessId%0 "kernel32.dll"
+//go:cgo_import_dynamic runtime._UnmapViewOfFile UnmapViewOfFile%1 "kernel32.dll"
 
 var (
 	_CreateFileMappingW,
 	_MapViewOfFile,
-	_GetCurrentProcessId stdFunction
+	_GetCurrentProcessId,
+	_UnmapViewOfFile stdFunction
 )
 
 const (
 	forgoCtrlMaxRuntimes = 64
 	forgoFileMapWrite    = 0x0002
+	// forgoCtrlUnloaded marks the slot of a runtime whose library was
+	// unloaded. Delivery skips it, and a new runtime may take it over.
+	forgoCtrlUnloaded = 1
 )
 
 var (
@@ -46,6 +51,8 @@ var (
 	forgoCtrlSlots *[forgoCtrlMaxRuntimes]uintptr
 	// forgoCtrlSelf is this runtime's own delivery callback.
 	forgoCtrlSelf uintptr
+	// forgoCtrlMapping is the handle of the mapping behind forgoCtrlSlots.
+	forgoCtrlMapping uintptr
 )
 
 // forgoCtrlRegister adds this runtime to the process's list. It is called
@@ -67,21 +74,43 @@ func forgoCtrlRegister() {
 	if h == 0 {
 		return
 	}
-	// The handle stays open for the life of the process, like the mapping.
+	// The handle stays open while the library is loaded; see
+	// forgoCtrlUnregister.
 	p := stdcall(_MapViewOfFile, h, forgoFileMapWrite, 0, 0, size)
 	if p == 0 {
+		stdcall(_CloseHandle, h)
 		return
 	}
 	var fn any = forgoCtrlDeliver
 	self := compileCallback(*efaceOf(&fn), true)
 	slots := (*[forgoCtrlMaxRuntimes]uintptr)(unsafe.Pointer(p))
 	for i := range slots {
-		if atomic.Casuintptr(&slots[i], 0, self) {
+		if atomic.Casuintptr(&slots[i], 0, self) || atomic.Casuintptr(&slots[i], forgoCtrlUnloaded, self) {
 			forgoCtrlSelf = self
 			forgoCtrlSlots = slots
+			forgoCtrlMapping = h
 			return
 		}
 	}
+	stdcall(_UnmapViewOfFile, p)
+	stdcall(_CloseHandle, h)
+}
+
+// forgoCtrlUnregister takes this runtime out of the process's list when its
+// library is unloaded, so no other runtime calls into its code again.
+func forgoCtrlUnregister() {
+	slots := forgoCtrlSlots
+	if slots == nil {
+		return
+	}
+	for i := range slots {
+		if atomic.Casuintptr(&slots[i], forgoCtrlSelf, forgoCtrlUnloaded) {
+			break
+		}
+	}
+	forgoCtrlSlots = nil
+	stdcall(_UnmapViewOfFile, uintptr(unsafe.Pointer(slots)))
+	stdcall(_CloseHandle, forgoCtrlMapping)
 }
 
 // forgoCtrlDeliver is the callback another runtime calls to deliver signal s
@@ -107,6 +136,9 @@ func forgoCtrlSend(s uint32) bool {
 			pc := atomic.Loaduintptr(&slots[i])
 			if pc == 0 {
 				break
+			}
+			if pc == forgoCtrlUnloaded {
+				continue
 			}
 			if pc != forgoCtrlSelf && stdcall(stdFunction(unsafe.Pointer(pc)), uintptr(s)) != 0 {
 				ok = true

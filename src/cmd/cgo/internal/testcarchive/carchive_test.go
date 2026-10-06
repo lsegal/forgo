@@ -178,7 +178,11 @@ func testMain(m *testing.M) int {
 }
 
 func goEnv(key string) string {
-	out, err := exec.Command("go", "env", key).Output()
+	goTool, err := testenv.GoTool()
+	if err != nil {
+		log.Panicf("go env %s failed: %v", key, err)
+	}
+	out, err := exec.Command(goTool, "env", key).Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			fmt.Fprintf(os.Stderr, "%s", ee.Stderr)
@@ -489,15 +493,15 @@ func TestInstall(t *testing.T) {
 	testInstall(t, "./testp1"+exeSuffix,
 		filepath.Join(libgodir, libgoa),
 		filepath.Join(libgodir, "libgo.h"),
-		"go", "install", "-buildmode=c-archive", "./libgo")
+		testenv.GoToolPath(t), "install", "-buildmode=c-archive", "./libgo")
 
 	// Test building libgo other than installing it.
 	// Header files are now present.
 	testInstall(t, "./testp2"+exeSuffix, "libgo.a", "libgo.h",
-		"go", "build", "-buildmode=c-archive", filepath.Join(".", "libgo", "libgo.go"))
+		testenv.GoToolPath(t), "build", "-buildmode=c-archive", filepath.Join(".", "libgo", "libgo.go"))
 
 	testInstall(t, "./testp3"+exeSuffix, "libgo.a", "libgo.h",
-		"go", "build", "-buildmode=c-archive", "-o", "libgo.a", "./libgo")
+		testenv.GoToolPath(t), "build", "-buildmode=c-archive", "-o", "libgo.a", "./libgo")
 }
 
 func TestEarlySignalHandler(t *testing.T) {
@@ -1156,7 +1160,7 @@ func TestCachedInstall(t *testing.T) {
 
 	h := filepath.Join(libgodir, "libgo.h")
 
-	buildcmd := []string{"go", "install", "-buildmode=c-archive", "./libgo"}
+	buildcmd := []string{testenv.GoToolPath(t), "install", "-buildmode=c-archive", "./libgo"}
 
 	cmd := exec.Command(buildcmd[0], buildcmd[1:]...)
 	cmd.Env = append(cmd.Environ(), "GO111MODULE=off") // 'go install' only works in GOPATH mode

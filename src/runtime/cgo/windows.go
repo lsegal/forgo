@@ -37,3 +37,12 @@ var _cgo_bindm unsafe.Pointer
 
 //go:linkname _cgo_getstackbound _cgo_getstackbound
 var _cgo_getstackbound unsafe.Pointer
+
+// Enables unloading the library; see gcc_libinit_windows.c and
+// runtime/forgo_unload.go.
+
+//go:cgo_import_static x_cgo_forgo_lib_init
+//go:linkname x_cgo_forgo_lib_init x_cgo_forgo_lib_init
+//go:linkname _cgo_forgo_lib_init _cgo_forgo_lib_init
+var x_cgo_forgo_lib_init byte
+var _cgo_forgo_lib_init = &x_cgo_forgo_lib_init

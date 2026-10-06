@@ -8,10 +8,19 @@ package main
 typedef int (*bounce_fn)(int);
 
 static int call_peer(void *fn, int n) { return ((bounce_fn)fn)(n); }
+
+#ifdef _WIN32
+#include <windows.h>
+static void block_in_c(void) { for (;;) Sleep(1000); }
+#else
+#include <unistd.h>
+static void block_in_c(void) { for (;;) sleep(1000); }
+#endif
 */
 import "C"
 
 import (
+	"time"
 	"unsafe"
 
 	"testcshared/multiruntime/mr"
@@ -64,6 +73,21 @@ func DestroyInstance(id C.int) C.int {
 
 //export LiveInstances
 func LiveInstances() C.int { return C.int(mr.LiveInstances()) }
+
+//export Generation
+func Generation() C.int { return C.int(mr.Generation()) }
+
+//export StartBackground
+func StartBackground() { mr.StartBackground() }
+
+// BlockInC starts a goroutine that stays in a C call forever, which makes
+// unloading the library impossible.
+//
+//export BlockInC
+func BlockInC() {
+	go C.block_in_c()
+	time.Sleep(10 * time.Millisecond)
+}
 
 //export NotifySignal
 func NotifySignal(sig C.int) { mr.NotifySignal(int(sig)) }

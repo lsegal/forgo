@@ -38,8 +38,8 @@ func TestMultiRuntime(t *testing.T) {
 	}
 	liba := filepath.Join(dir, "liba"+ext)
 	libb := filepath.Join(dir, "libb"+ext)
-	run(t, nil, "go", "build", "-buildmode=c-shared", "-o", liba, "./multiruntime/liba")
-	run(t, nil, "go", "build", "-buildmode=c-shared", "-o", libb, "./multiruntime/libb")
+	run(t, nil, testenv.GoToolPath(t), "build", "-buildmode=c-shared", "-o", liba, "./multiruntime/liba")
+	run(t, nil, testenv.GoToolPath(t), "build", "-buildmode=c-shared", "-o", libb, "./multiruntime/libb")
 	// The same library under a second path is a second runtime built from
 	// identical code, as when a host loads both the VST2 and the VST3 build
 	// of one plugin.
@@ -94,6 +94,25 @@ func TestMultiRuntime(t *testing.T) {
 			runMultiRuntimeHost(t, []string{"MULTIRUNTIME_RTLD_GLOBAL=1"}, host, "stress", liba, libb)
 		})
 	}
+	if unloadSupported() {
+		// Load, use and unload one library 100 times next to a second
+		// library that stays loaded.
+		for _, p := range pairs {
+			t.Run(p.name+"/unload", func(t *testing.T) {
+				runMultiRuntimeHost(t, nil, host, "unload", p.a, p.b)
+			})
+		}
+		t.Run("UnloadBlocked", func(t *testing.T) {
+			out, err := exec.Command(host, "unloadblocked", liba, libb).CombinedOutput()
+			const want = "unloading a Go library while goroutines are blocked in system calls or C code"
+			if err == nil || !strings.Contains(string(out), want) {
+				t.Fatalf("%s unloadblocked: %v, want a fatal error %q\n%s", host, err, want, out)
+			}
+		})
+		t.Run("ExitBlocked", func(t *testing.T) {
+			runMultiRuntimeHost(t, nil, host, "exitblocked", liba, libb)
+		})
+	}
 	// An unrecovered panic or fault in one library ends the process with
 	// that library's crash report alone, in both directions and whatever
 	// GOTRACEBACK asks for.
@@ -120,6 +139,16 @@ func TestMultiRuntime(t *testing.T) {
 			runMultiRuntimeHost(t, nil, host, "upstream", liba, liba2)
 		}
 	})
+}
+
+// unloadSupported reports whether forgo c-shared libraries can be unloaded
+// on this platform; keep in sync with runtime.forgoUnloadable.
+func unloadSupported() bool {
+	switch GOOS {
+	case "linux", "windows", "darwin":
+		return GOARCH == "amd64" || GOARCH == "arm64"
+	}
+	return false
 }
 
 // runMultiRuntimeHost runs the host in mode and fails the test unless it

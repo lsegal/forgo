@@ -435,6 +435,10 @@ TEXT runtime·tlsinit(SB),NOSPLIT|NOFRAME,$0
 	JNE	fail
 	MOVQ	$0, 0(CX)(GS)
 	MOVQ	CX, runtime·tls_g(SB)
+	// Record the key, plus one, for the library destructor to delete.
+	MOVQ	0(SP), CX
+	INCQ	CX
+	MOVQ	CX, runtime·forgoDarwinTLSKey(SB)
 
 	MOVQ	BP, SP
 	POPQ	BP

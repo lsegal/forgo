@@ -8,6 +8,7 @@ package race
 
 import (
 	"bytes"
+	"internal/goroot"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -20,7 +21,7 @@ func TestIssue37485(t *testing.T) {
 		t.Fatalf("can't find syso files: %s", err)
 	}
 	for _, f := range files {
-		cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "nm", f)
+		cmd := exec.Command(goroot.GoCommand(runtime.GOROOT()), "tool", "nm", f)
 		res, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Errorf("nm of %s failed: %s", f, err)

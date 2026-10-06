@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	igoroot "internal/goroot"
 	"internal/testenv"
 	"io"
 	"io/fs"
@@ -201,7 +202,7 @@ func TestAllDependencies(t *testing.T) {
 					"GOWORK=off",
 				),
 			}
-			goBinCopy := filepath.Join(gorootCopyDir, "bin", "go")
+			goBinCopy := igoroot.GoCommand(gorootCopyDir)
 			r.run(t, goBinCopy, "mod", "tidy")   // See issue 43687.
 			r.run(t, goBinCopy, "mod", "verify") // Verify should be a no-op, but test it just in case.
 			r.run(t, goBinCopy, "mod", "vendor") // See issue 36852.
@@ -467,6 +468,12 @@ func findGorootModules(t *testing.T) []gorootModule {
 				// _ and . prefixed directories can be used for internal modules
 				// without a vendor directory that don't contribute to the build
 				// but might be used for example as code generators.
+				return filepath.SkipDir
+			}
+			if info.IsDir() && path == filepath.Join(testenv.GOROOT(t), "forgopls") {
+				// forgopls is forgo's standalone gopls extension, built on its own
+				// with golang.org/x/tools. It is not part of the std or cmd build,
+				// so it is not held to the vendoring rules for GOROOT modules.
 				return filepath.SkipDir
 			}
 			if info.IsDir() || info.Name() != "go.mod" {

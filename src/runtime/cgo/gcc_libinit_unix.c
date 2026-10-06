@@ -69,6 +69,8 @@ _cgo_wait_runtime_init_done(void) {
 		// instead. See also issue #15943.
 		pfn = __atomic_load_n(&cgo_context_function, __ATOMIC_CONSUME);
 
+		_cgo_forgo_note_loaded();
+
 		__atomic_store_n(&runtime_init_done, done, __ATOMIC_RELEASE);
 		pthread_mutex_unlock(&runtime_init_mu);
 	}
@@ -164,6 +166,17 @@ void x_cgo_call_symbolizer_function(struct cgoSymbolizerArg* arg) {
 	_cgo_tsan_acquire();
 	(*pfn)(arg);
 	_cgo_tsan_release();
+}
+
+// _cgo_forgo_delete_keys deletes the key that binds Ms to C threads, so
+// that threads exiting after the library is unloaded do not run
+// pthread_key_destructor. See gcc_forgo_unload_unix.c.
+void
+_cgo_forgo_delete_keys(void) {
+	if (x_cgo_pthread_key_created != 0) {
+		pthread_key_delete(pthread_g);
+		x_cgo_pthread_key_created = 0;
+	}
 }
 
 static void

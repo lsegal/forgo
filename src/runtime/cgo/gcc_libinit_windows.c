@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libcgo.h"
 
@@ -199,4 +200,61 @@ void x_cgo_call_symbolizer_function(struct cgoSymbolizerArg* arg) {
 	}
 
 	(*pfn)(arg);
+}
+
+// Unloading a c-shared library (FreeLibrary), forgo. See
+// runtime/forgo_unload.go for the whole sequence.
+
+// Keep in sync with forgoUnloadArg in runtime/forgo_unload.go.
+struct forgo_unload_arg {
+	uintptr_t ok;
+	uintptr_t *regions;
+	uintptr_t nregions;
+	uintptr_t regionsSize;
+	uintptr_t tlsKey;
+};
+
+static void (*forgo_unload_fn)(void*);
+
+// x_cgo_forgo_lib_init enables unloading. fn is the Go function that runs
+// the teardown.
+void
+x_cgo_forgo_lib_init(void *fn)
+{
+	forgo_unload_fn = (void (*)(void*))fn;
+}
+
+__attribute__((destructor))
+static void
+forgo_unload(void)
+{
+	BOOLEAN (WINAPI *shutdown)(void);
+	struct forgo_unload_arg a;
+	uintptr_t i;
+
+	if (forgo_unload_fn == NULL || x_crosscall2_ptr == NULL) {
+		return;
+	}
+	// At process exit the other threads are already gone; leave the
+	// runtime alone, as it always has been.
+	shutdown = (BOOLEAN (WINAPI *)(void))GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlDllShutdownInProgress");
+	if (shutdown != NULL && shutdown()) {
+		return;
+	}
+	_cgo_wait_runtime_init_done();
+
+	memset(&a, 0, sizeof a);
+	x_crosscall2_ptr(forgo_unload_fn, &a, sizeof a, 0);
+	if (!a.ok) {
+		return;
+	}
+	if (a.tlsKey != 0) {
+		TlsFree((DWORD)(a.tlsKey - 1));
+	}
+	for (i = 0; i < a.nregions; i++) {
+		VirtualFree((void*)a.regions[2*i], 0, MEM_RELEASE);
+	}
+	if (a.regions != NULL) {
+		VirtualFree(a.regions, 0, MEM_RELEASE);
+	}
 }

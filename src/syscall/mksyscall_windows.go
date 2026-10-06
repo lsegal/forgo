@@ -9,14 +9,14 @@ package main
 
 import (
 	"bytes"
+	"internal/goroot"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 )
 
 func main() {
-	goTool := filepath.Join(runtime.GOROOT(), "bin", "go")
+	goTool := goroot.GoCommand(runtime.GOROOT())
 
 	listCmd := exec.Command(goTool, "list", "-m")
 	listCmd.Env = append(os.Environ(), "GO111MODULE=on")

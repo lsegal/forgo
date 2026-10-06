@@ -227,6 +227,10 @@ TEXT runtime·wintls(SB),NOSPLIT,$0
 
 	MOVQ	AX, CX	// TLS index
 
+	// Remember it, plus one, so that unloading the library can free it.
+	LEAQ	1(AX), AX
+	MOVQ	AX, runtime·forgoTLSIndex(SB)
+
 	// Assert that slot is less than 64 so we can use _TEB->TlsSlots
 	CMPQ	CX, $64
 	JB	ok

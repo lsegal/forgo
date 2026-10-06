@@ -695,10 +695,8 @@ Rules for plugin authors:
   or an index into a table guarded by a mutex.
 - Expect several host threads to call into the library at once, and expect
   an instance to move between threads.
-- A c-shared library cannot be unloaded yet. On Linux it is linked with
-  `-z nodelete`, so `dlclose` keeps it loaded and a later `dlopen` gets the
-  same runtime back. Don't rely on the library being torn down. If it
-  starts goroutines, stop them from the host's deinit callback.
+- A library can be unloaded and loaded again; see "Unloading and
+  reloading" below for the goroutine rules.
 
 Limits:
 
@@ -706,10 +704,58 @@ Limits:
   Apple-reserved TLS slot `%gs:0x30` that every runtime shares. forgo uses a
   per-runtime `pthread_key` instead, whose offset from `%gs` is in
   `runtime.tls_g`. Debuggers that read `g` from `%gs:0x30` won't find it.
+- Unloading is supported on linux/amd64, linux/arm64, darwin/amd64,
+  darwin/arm64, windows/amd64 and windows/arm64. On other platforms a
+  library stays loaded after `dlclose`, as with upstream Go.
 - A library built by upstream Go does not forward preemption signals. If
   one is loaded after a forgo library, it can still swallow the forgo
   library's preemption requests. Load upstream-built libraries first when
   you control the order.
+
+#### Unloading and reloading
+
+Hosts unload a plugin (`dlclose`, `FreeLibrary`) when its last instance is
+removed, and may load it again later. Upstream Go libraries cannot be
+unloaded (golang/go#11100): on Linux they are linked with `-z nodelete`, and
+elsewhere the runtime's threads keep running code that has just been
+unmapped. forgo libraries shut their runtime down when they are unloaded,
+and the next load starts a fresh runtime with fresh package variables.
+
+When the host drops the last reference to the library, its destructor
+stops the world, ends every thread the runtime created and waits until they
+are gone, restores the signal handlers it installed (Unix) or removes its
+exception, console and power-event handlers (Windows), closes the network
+poller, and unmaps all the memory the runtime mapped. When the process
+exits instead, nothing changes: the runtime is left running, as before.
+
+Goroutine lifetime rules:
+
+- Goroutines still alive at unload are discarded where they stand. A
+  goroutine blocked on a channel, a lock, a timer, `time.Sleep`, or network
+  I/O is simply never resumed; its deferred calls do not run. Do any cleanup
+  (flushing files, closing connections) from the host's deinit callback,
+  through an `//export` function, before the host unloads the library.
+- A goroutine inside a blocking system call or a C call must return before
+  the unload. The runtime waits up to five seconds for it. If it is still
+  there, the unload is refused with the fatal error `unloading a Go library
+  while goroutines are blocked in system calls or C code`, because the
+  library's code is about to disappear under it. Stop such goroutines from
+  the deinit callback, for example by closing the file or pipe they read.
+- No host thread may be inside a call into the library while it is being
+  unloaded; that is a fatal error too.
+- Unload libraries in the reverse order of loading when you can. Signal
+  handlers form a chain, and a library can only take its handler out when
+  it is the one installed last. If a later library (or a crash reporter)
+  installed its handler on top, the unloaded library's handler is left in
+  the chain and a signal forwarded to it crashes the process.
+
+`TestMultiRuntime/*/unload` loads, uses and unloads one library 100 times
+in one process while a second library stays loaded and busy. Each reload
+must start with fresh package state, the library must really be gone after
+every unload, the thread count and (on Linux) the number of memory mappings
+must not grow, and the remaining library must still recover faults and
+preempt goroutines afterwards. `UnloadBlocked` and `ExitBlocked` check the
+refusal above and that exiting with such a goroutine still works.
 
 ### SIMD Mandelbrot benchmark
 
