@@ -232,5 +232,6 @@ func fgohotCheckStacks(pairs []uintptr) string {
 
 // fgohotWriteJump overwrites the first fgohotPatchLen bytes at old with an
 // unconditional jump to new. The caller must have stopped the world and made
-// the page writable. Implemented per architecture — see forgo_hot_amd64.go
-// and forgo_hot_arm64.go.
+// the page writable. Implemented per architecture — see forgo_hot_amd64.go,
+// forgo_hot_arm64_darwin.go, and forgo_hot_other.go for every platform
+// fgohotSupported rejects.
