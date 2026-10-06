@@ -373,6 +373,13 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
 - `src/runtime/forgo_multiruntime_unix.go` — forwards the preemption and
   profiling signals another runtime sent to its own threads, hooked into
   `sigtrampgo` in `signal_unix.go` with one line.
+- `src/runtime/forgo_unload*.go` and `src/runtime/cgo/gcc_forgo_unload_unix.c`
+  (plus `x_cgo_forgo_lib_init`/`forgo_unload` in `gcc_libinit_windows.c`) —
+  unloading a c-shared library: the library destructor stops the world,
+  ends every runtime thread, restores signal/exception handlers, and unmaps
+  the memory recorded by the `forgoMemAdd` hooks in `mem_*.go`. Hooks into
+  the scheduler call `forgoCheckExit` where Ms park. The linker drops
+  `-z nodelete` for c-shared on linux (`forgoCSharedUnloadable`).
 - `src/cmd/cgo/internal/testcshared/forgo_multiruntime_test.go` and
   `testdata/multiruntime/` — the C host and plugin libraries that exercise
   it. When writing c-shared plugin code, follow the author rules in
