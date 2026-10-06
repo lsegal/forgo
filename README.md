@@ -625,6 +625,50 @@ callbacks with recovered panics, recovered nil dereferences while the other
 runtime is busy, preemption of a spinning goroutine, a host `SIGSEGV`
 handler installed before the libraries, and the golang/go#65050 reproducer.
 
+Process-wide state. Some things a Go runtime sets belong to the whole
+process, so several runtimes share them:
+
+- `os/signal.Notify`: in a library, `Notify` takes a signal over from the
+  handler installed before it, so when two runtimes ask for the same signal,
+  the one that asked last gets it. When it calls `Reset` or `Stop`, the
+  signal goes back to the runtime below it. Upstream Go restored the handler
+  it had found even when another runtime had installed one on top since,
+  which took the signal away from that runtime. A forgo runtime leaves its
+  handler in place and passes signals through instead. `signal.Ignore`
+  still ignores the signal for the whole process.
+- `SIGPIPE`: a Go write to a closed pipe or socket fails with `EPIPE` in
+  whichever runtime made it. The handler chain passes the signal down to
+  the runtime running on that thread.
+- Open-file limit: a Go program raises its soft `RLIMIT_NOFILE` at startup
+  and puts the original back in the processes it starts. A forgo c-shared or
+  c-archive library leaves the limit to the host. A runtime loaded after
+  another one could not tell the raised limit from the host's own, and
+  would hand the raised limit to its child processes. A library that needs
+  many open files should raise the limit itself with `syscall.Setrlimit`.
+- Environment: each runtime copies the environment when it loads.
+  `os.Setenv` updates the C environment and the calling runtime's copy, but
+  not the copies of runtimes that are already loaded, just as when a C host
+  calls `setenv`. A `GODEBUG` change applies only to the runtime that made
+  it.
+- Exit: `os.Exit` in any runtime ends the process at once, running only that
+  runtime's exit hooks. The Go runtime registers no C `atexit` handlers.
+- Crash reports: an unrecovered panic or fault in one library prints that
+  library's goroutines only, whatever `GOTRACEBACK` says, while the other
+  runtimes keep running until the process exits.
+- Windows timer resolution: the runtime sleeps on high-resolution waitable
+  timers and leaves the system timer alone. On Windows versions without
+  them it falls back to `timeBeginPeriod`/`timeEndPeriod`, which Windows
+  counts per call, so one runtime cannot cancel another's request.
+- Windows console control events: every runtime registers a handler when it
+  loads, and Windows calls the newest first. A runtime that has called
+  `Notify` for the event keeps it, so as on Unix the library loaded last
+  that asked gets it. For a close, logoff, or shutdown event that runtime
+  then blocks until Windows ends the process, and earlier runtimes never see
+  the event.
+
+`TestMultiRuntime` covers the `Notify` hand-back, `SIGPIPE`, the open-file
+limit, and the crash reports.
+
 Rules for plugin authors:
 
 - Pass only C data between libraries. Never hand a Go pointer, func value,

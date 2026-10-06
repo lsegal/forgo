@@ -8,8 +8,13 @@
 package mr
 
 import (
+	"errors"
+	"os"
+	"os/signal"
 	"runtime"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -193,4 +198,61 @@ func StartBackground() {
 			time.Sleep(100 * time.Microsecond)
 		}
 	}()
+}
+
+var (
+	sigMu    sync.Mutex
+	sigChan  chan os.Signal
+	sigCount atomic.Int32
+)
+
+// NotifySignal starts delivering sig to this runtime through
+// os/signal.Notify and counting every delivery.
+func NotifySignal(sig int) {
+	sigMu.Lock()
+	defer sigMu.Unlock()
+	if sigChan == nil {
+		sigChan = make(chan os.Signal, 64)
+		go func() {
+			for range sigChan {
+				sigCount.Add(1)
+			}
+		}()
+	}
+	signal.Notify(sigChan, syscall.Signal(sig))
+}
+
+// ResetSignal undoes NotifySignal with os/signal.Reset.
+func ResetSignal(sig int) {
+	signal.Reset(syscall.Signal(sig))
+}
+
+// SignalCount returns how many signals NotifySignal has counted.
+func SignalCount() int { return int(sigCount.Load()) }
+
+// WriteClosedPipe writes to a pipe whose read end is closed and reports 1
+// when the write fails with EPIPE instead of killing the process.
+func WriteClosedPipe() int {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return 0
+	}
+	r.Close()
+	defer w.Close()
+	if _, err := w.Write([]byte("x")); errors.Is(err, syscall.EPIPE) {
+		return 1
+	}
+	return 0
+}
+
+// Crash panics without recovering, which ends the process with this
+// runtime's crash report.
+func Crash() {
+	panic("multiruntime: unrecovered panic")
+}
+
+// CrashFault dereferences a nil pointer without recovering.
+func CrashFault() {
+	var p *node
+	sink = len(p.tag)
 }

@@ -203,10 +203,11 @@ func sigenable(sig uint32) {
 		ensureSigM()
 		enableSigChan <- sig
 		<-maskUpdatedChan
-		if atomic.Cas(&handlingSig[sig], 0, 1) {
+		if atomic.Cas(&handlingSig[sig], 0, 1) && !forgoSigStillChained(sig) {
 			atomic.Storeuintptr(&fwdSig[sig], getsig(sig))
 			forgoSaveSig(sig)
 			setsig(sig, abi.FuncPCABIInternal(sighandler))
+			forgoSigInstalled(sig)
 		}
 	}
 }
@@ -235,6 +236,9 @@ func sigdisable(sig uint32) {
 		// we should remove the one we installed.
 		if !sigInstallGoHandler(sig) {
 			atomic.Store(&handlingSig[sig], 0)
+			if forgoSigKeepChained(sig) {
+				return
+			}
 			setsig(sig, atomic.Loaduintptr(&fwdSig[sig]))
 		}
 	}
@@ -257,6 +261,7 @@ func sigignore(sig uint32) {
 	if t.flags&_SigNotify != 0 {
 		atomic.Store(&handlingSig[sig], 0)
 		setsig(sig, _SIG_IGN)
+		forgoSigUnchained(sig)
 	}
 }
 
@@ -1375,6 +1380,9 @@ func unminitSignals() {
 	if getg().m.newSigstack {
 		st := stackt{ss_flags: _SS_DISABLE}
 		sigaltstack(&st, nil)
+		// The thread no longer uses gsignal; forgoUnload relies on
+		// this to tell which signal stacks other threads still use.
+		getg().m.newSigstack = false
 	} else {
 		// We got the signal stack from someone else. Restore
 		// the Go-allocated stack in case this M gets reused

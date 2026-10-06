@@ -28,6 +28,19 @@
 // this runtime is not running Go code on the thread, so the runtime that sent
 // them gets to handle them. Spurious SIGURG and SIGPROF are harmless by
 // design, so forwarding one that turns out to be stale is safe.
+//
+// os/signal.Notify also changes process-wide state. In a library, Notify
+// installs a Go handler for an asynchronous signal on top of whatever was
+// there and keeps the signal, so of several runtimes that ask for the same
+// signal, the one that asked last gets it, as it would from a C handler
+// installed before it. Reset and Stop used to put back the handler this
+// runtime found even when another runtime had since installed its own on top,
+// which silently took the signal away from that runtime. A runtime whose
+// handler is no longer on top now leaves it in place and just passes signals
+// through to the handler below, and the signal returns to it once the runtime
+// above calls Reset. Calling Notify again while its handler is still in the
+// chain reuses that place instead of installing a second handler, which
+// would forward to itself forever.
 
 package runtime
 
@@ -62,3 +75,48 @@ func forgoSigfwdForeign(sig uint32, info *siginfo, ctx unsafe.Pointer) {
 	}
 	sigfwd(fwdFn, sig, info, ctx)
 }
+
+// forgoSigHandler[sig] is the handler sigenable installed for sig on behalf
+// of os/signal.Notify, as getsig reports it, or 0 when this runtime has no
+// such handler in the process's chain for sig.
+var forgoSigHandler [_NSIG]uintptr
+
+// forgoSigInstalled records the handler sigenable just installed for sig.
+func forgoSigInstalled(sig uint32) {
+	atomic.Storeuintptr(&forgoSigHandler[sig], getsig(sig))
+}
+
+// forgoSigStillChained reports whether the handler this runtime installed
+// for sig is still in the process's chain, so that sigenable must not
+// install another one.
+func forgoSigStillChained(sig uint32) bool {
+	return atomic.Loaduintptr(&forgoSigHandler[sig]) != 0
+}
+
+// forgoSigKeepChained reports whether sigdisable must leave this runtime's
+// handler for sig in place because another handler has been installed on
+// top of it and forwards to it. Otherwise sigdisable restores the previous
+// handler and this runtime leaves the chain.
+func forgoSigKeepChained(sig uint32) bool {
+	h := atomic.Loaduintptr(&forgoSigHandler[sig])
+	if h != 0 && getsig(sig) != h {
+		return true
+	}
+	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
+	return false
+}
+
+// forgoSigUnchained records that sigignore replaced every handler for sig.
+func forgoSigUnchained(sig uint32) {
+	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
+}
+
+// syscall_forgoRuntimeIsLibrary reports whether this runtime was built into
+// a c-shared or c-archive library. A library leaves process-wide limits,
+// such as the open-file limit a Go program raises at startup, to its host:
+// a runtime loaded after another one would otherwise record the limit the
+// first runtime raised as the host's original and hand that to its child
+// processes.
+//
+//go:linkname syscall_forgoRuntimeIsLibrary syscall.forgoRuntimeIsLibrary
+func syscall_forgoRuntimeIsLibrary() bool { return isarchive || islibrary }
