@@ -344,6 +344,12 @@ Users install a release via `install/install.sh` (Linux/macOS) or
   calls in `const` initializers.
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
   `?` token/operator and `//fgo:` pragma parsing.
+- `src/cmd/vendor/golang.org/x/tools` — `go vet`/`go fix` walk the
+  `go/ast` nodes for `?`, `throw`, and postfix `if` through patched
+  copies of `go/ast/{inspector,edge,astutil}`, `go/cfg`,
+  `refactor/satisfy`, and the `unreachable` pass, marked `// forgo`.
+  `go mod vendor` would drop these patches; reapply them after
+  re-vendoring. `cmd/vet/testdata/forgo` covers them.
 
 Hot reload (`forgo run --watch`) lives in four places:
 

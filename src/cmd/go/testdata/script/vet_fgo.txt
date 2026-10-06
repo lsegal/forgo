@@ -1,0 +1,51 @@
+# forgo: vet analyzes .fgo files, including their forgo syntax
+# (postfix if, throw, and ?), instead of reporting no files.
+
+go vet m/clean
+! stderr .
+
+! go vet m/bad
+stderr 'bad\.fgo:6:\d+: fmt\.Printf format %d has arg s of wrong type string'
+
+# go test runs vet on .fgo files too.
+go test m/clean
+stdout '^ok'
+
+-- go.mod --
+module m
+
+go 1.27
+-- clean/clean.fgo --
+package clean
+
+import (
+	"errors"
+	"strconv"
+)
+
+var errEmpty = errors.New("empty")
+
+func F(s string) (n int, err error) {
+	throw errEmpty if s == ""
+	throw "too long" if len(s) > 100
+	n = strconv.Atoi(s)?
+	return
+}
+-- clean/clean_test.go --
+package clean
+
+import "testing"
+
+func TestF(t *testing.T) {
+	if n, err := F("12"); n != 12 || err != nil {
+		t.Fatal(n, err)
+	}
+}
+-- bad/bad.fgo --
+package bad
+
+import "fmt"
+
+func F(s string) {
+	fmt.Printf("%d\n", s) if s != ""
+}
