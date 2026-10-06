@@ -28,6 +28,10 @@ func TestGoToolLocation(t *testing.T) {
 	// is correct then testenv.GoTool() should be identical to ../../../bin/go.
 
 	relWant := "../../../bin/go" + exeSuffix
+	if _, err := os.Stat(relWant); err != nil {
+		// forgo: make.bash installs the go command as bin/forgo.
+		relWant = "../../../bin/forgo" + exeSuffix
+	}
 	absWant, err := filepath.Abs(relWant)
 	if err != nil {
 		t.Fatal(err)
