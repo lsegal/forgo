@@ -91,6 +91,11 @@ func TestMultiRuntime(t *testing.T) {
 	// GOTRACEBACK asks for.
 	for _, mode := range []string{"crash", "crashfault"} {
 		for _, tb := range []string{"all", "crash"} {
+			if tb == "crash" && GOOS == "windows" {
+				// The crash setting hands the fault to Windows Error
+				// Reporting, which may wait for a user.
+				continue
+			}
 			for _, dir := range []struct{ name, a, b, own, other string }{
 				{"AB", liba, libb, "parkedInLibA", "parkedInLibB"},
 				{"BA", libb, liba, "parkedInLibB", "parkedInLibA"},
