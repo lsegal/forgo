@@ -13,6 +13,7 @@ import (
 
 //go:cgo_import_dynamic libc_dlopen dlopen "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_dlsym dlsym "/usr/lib/libSystem.B.dylib"
+//go:cgo_import_dynamic libc_mach_vm_remap mach_vm_remap "/usr/lib/libSystem.B.dylib"
 
 // fgohotPatchLen is the number of bytes fgohotPatch overwrites at the entry
 // point of a function it redirects: LDR X16, #8 ; BR X16 ; <8 byte target>.
@@ -94,3 +95,22 @@ func fgohot_dlopen_trampoline()
 func fgohot_dlsym_trampoline()
 
 //go:cgo_import_dynamic libc_sys_icache_invalidate sys_icache_invalidate "/usr/lib/libSystem.B.dylib"
+
+// fgohotRemap atomically replaces target with a private copy of the mapping
+// at source. Both addresses and size must be page aligned.
+//
+//go:linkname fgohotRemap runtime/fgohot.rtremap
+func fgohotRemap(target, source, size uintptr) int32 {
+	targetAddress := uint64(target)
+	var current, maximum int32
+	args := struct {
+		target  *uint64
+		size    uintptr
+		source  uintptr
+		current *int32
+		maximum *int32
+	}{&targetAddress, size, source, &current, &maximum}
+	return int32(libcCall(unsafe.Pointer(abi.FuncPCABI0(mach_vm_remap_trampoline)), unsafe.Pointer(&args)))
+}
+
+func mach_vm_remap_trampoline()
