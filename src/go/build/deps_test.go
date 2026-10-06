@@ -641,7 +641,10 @@ var depsRules = `
 	FMT, hash/maphash
 	< container/hash;
 
-	hash/maphash, container/heap, go/constant, go/parser, internal/buildcfg, internal/goversion, internal/types/errors
+	FMT, encoding/json, go/ast, go/constant
+	< internal/forgo;
+
+	hash/maphash, container/heap, go/constant, go/parser, internal/buildcfg, internal/forgo, internal/goversion, internal/types/errors
 	< go/types;
 
 	DEBUG, go/build, go/types, text/scanner, crypto/sha256

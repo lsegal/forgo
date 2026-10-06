@@ -577,7 +577,10 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			break
 		}
 		if lit, ok := s.X.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-			break // sugar for errors.New(X); X itself needs no further check
+			// sugar for errors.New(X); X itself needs no further check,
+			// but the lowered call uses the file's "errors" import.
+			forgoUseErrorsImport(check, s) // see forgo.go
+			break
 		}
 		var x operand
 		check.expr(nil, &x, s.X)

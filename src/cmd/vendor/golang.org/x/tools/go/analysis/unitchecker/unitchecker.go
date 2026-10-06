@@ -38,6 +38,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"internal/forgo" // forgo
 	"io"
 	"log"
 	"os"
@@ -336,6 +337,14 @@ func run(fset *token.FileSet, cfg *Config, analyzers []*analysis.Analyzer) ([]re
 			return nil, err
 		}
 		files = append(files, f)
+	}
+	// forgo: expand //fgo:macro calls before type checking, as the
+	// compiler does. go/types folds //fgo:comptime constants itself.
+	if err := forgo.ExpandMacros(fset, files); err != nil {
+		if cfg.SucceedOnTypecheckFailure {
+			err = nil
+		}
+		return nil, err
 	}
 	tc := &types.Config{
 		Importer:  makeTypesImporter(cfg, fset),

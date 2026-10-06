@@ -1,0 +1,87 @@
+# forgo: vet folds //fgo:comptime constants and expands //fgo:macro calls
+# the way the compiler does, instead of reporting "is not constant".
+
+go vet m/clean
+! stderr .
+
+# go test runs vet on comptime packages too.
+go test m/clean
+stdout '^ok'
+
+# Analyzers see the expanded macro, with the argument's own position.
+! go vet m/bad
+stderr 'bad\.fgo:15:\d+: fmt\.Printf format %d has arg s of wrong type string'
+
+# A comptime evaluation failure is reported, not ignored.
+! go vet m/badcomptime
+stderr 'compile-time evaluation failed: .*missing\.txt'
+
+-- go.mod --
+module m
+
+go 1.27
+-- clean/clean.fgo --
+package clean
+
+import (
+	"comptime/embed"
+	"strings"
+)
+
+//fgo:comptime
+func square(n int) int {
+	return n * n
+}
+
+const nine = square(3)
+
+const greeting = embed.ReadFile("greeting.txt")
+
+var buf [nine]byte
+
+//fgo:macro
+func twice(x Node) Node {
+	return Quote(func() {
+		Splice(x) + Splice(x)
+	})
+}
+
+func F() int {
+	return twice(len(buf)) + len(strings.TrimSpace(greeting))
+}
+-- clean/greeting.txt --
+hello
+-- clean/clean_test.go --
+package clean
+
+import "testing"
+
+func TestF(t *testing.T) {
+	if n := F(); n != 23 {
+		t.Fatal(n)
+	}
+}
+-- bad/bad.fgo --
+package bad
+
+import "fmt"
+
+//fgo:macro
+func show(format, arg Node) Node {
+	return Quote(func() {
+		fmt.Printf(Splice(format), Splice(arg))
+	})
+}
+
+func F(s string) {
+	show("%s\n", s)
+	show(
+		"%d\n",
+		s)
+}
+-- badcomptime/bad.fgo --
+package badcomptime
+
+import "comptime/embed"
+
+const missing = embed.ReadFile("missing.txt")
