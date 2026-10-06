@@ -1186,11 +1186,6 @@ func sigfwdgo(sig uint32, info *siginfo, ctx unsafe.Pointer) bool {
 		if fwdFn == _SIG_IGN || (fwdFn == _SIG_DFL && flags&_SigIgn != 0) {
 			return true
 		}
-		// A copy of a Notify signal forwarded by another runtime has
-		// nowhere else to go.
-		if fwdFn == _SIG_DFL && forgoSigForwardedCopy(sig) {
-			return true
-		}
 		// We are not handling the signal and there is no other handler to forward to.
 		// Crash with the default behavior.
 		if fwdFn == _SIG_DFL {

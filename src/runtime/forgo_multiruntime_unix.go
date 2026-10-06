@@ -29,18 +29,18 @@
 // them gets to handle them. Spurious SIGURG and SIGPROF are harmless by
 // design, so forwarding one that turns out to be stale is safe.
 //
-// os/signal.Notify has the same problem. In a library, Notify installs a Go
-// handler for an asynchronous signal on top of whatever was there, and that
-// handler kept the signal to itself, so when two runtimes asked for the same
-// signal only the one that asked last ever got it. A handler installed for
-// Notify now also passes every signal on to the handler below it, so every
-// runtime that asked for it, and a host handler installed before them, gets
-// it. Reset and Stop used to put back the handler this runtime found, even
-// when another runtime had since installed its own on top, which silently
-// removed the other runtime's handler; a runtime that is no longer on top now
-// stays in the chain and just passes signals through. Calling Notify again
-// while still in the chain reuses that place instead of installing a second
-// handler that would forward to itself.
+// os/signal.Notify also changes process-wide state. In a library, Notify
+// installs a Go handler for an asynchronous signal on top of whatever was
+// there and keeps the signal, so of several runtimes that ask for the same
+// signal, the one that asked last gets it, as it would from a C handler
+// installed before it. Reset and Stop used to put back the handler this
+// runtime found even when another runtime had since installed its own on top,
+// which silently took the signal away from that runtime. A runtime whose
+// handler is no longer on top now leaves it in place and just passes signals
+// through to the handler below, and the signal returns to it once the runtime
+// above calls Reset. Calling Notify again while its handler is still in the
+// chain reuses that place instead of installing a second handler, which
+// would forward to itself forever.
 
 package runtime
 
@@ -51,27 +51,21 @@ import (
 
 // forgoSigfwdForeign forwards sigPreempt and SIGPROF to the previously
 // installed handler when they arrive on a thread that is not executing this
-// runtime's Go code, and signals this runtime handles for os/signal.Notify
-// wherever they arrive. It is called from sigtrampgo after sigfwdgo has decided
+// runtime's Go code. It is called from sigtrampgo after sigfwdgo has decided
 // that this runtime handles the signal; this runtime's own handling still
 // runs afterwards.
 //
 //go:nosplit
 //go:nowritebarrierrec
 func forgoSigfwdForeign(sig uint32, info *siginfo, ctx unsafe.Pointer) {
-	if !isarchive && !islibrary || sig >= _NSIG {
+	if !isarchive && !islibrary {
+		return
+	}
+	if sig != sigPreempt && sig != _SIGPROF {
 		return
 	}
 	fwdFn := atomic.Loaduintptr(&fwdSig[sig])
 	if fwdFn == _SIG_DFL || fwdFn == _SIG_IGN {
-		return
-	}
-	if sig != sigPreempt && sig != _SIGPROF {
-		// A signal this runtime only handles for os/signal.Notify goes
-		// to the handlers below as well, wherever it arrives.
-		if atomic.Loaduintptr(&forgoSigHandler[sig]) != 0 {
-			sigfwd(fwdFn, sig, info, ctx)
-		}
 		return
 	}
 	gp := sigFetchG(&sigctxt{info, ctx})
@@ -104,7 +98,8 @@ func forgoSigStillChained(sig uint32) bool {
 // top of it and forwards to it. Otherwise sigdisable restores the previous
 // handler and this runtime leaves the chain.
 func forgoSigKeepChained(sig uint32) bool {
-	if forgoSigForwardedCopy(sig) {
+	h := atomic.Loaduintptr(&forgoSigHandler[sig])
+	if h != 0 && getsig(sig) != h {
 		return true
 	}
 	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
@@ -114,18 +109,6 @@ func forgoSigKeepChained(sig uint32) bool {
 // forgoSigUnchained records that sigignore replaced every handler for sig.
 func forgoSigUnchained(sig uint32) {
 	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
-}
-
-// forgoSigForwardedCopy reports whether this runtime's handler for sig is in
-// the chain below another handler. A signal that reaches it while this
-// runtime is not handling sig was forwarded by that other handler, which
-// already handled it, so it must not get the default action.
-//
-//go:nosplit
-//go:nowritebarrierrec
-func forgoSigForwardedCopy(sig uint32) bool {
-	h := atomic.Loaduintptr(&forgoSigHandler[sig])
-	return h != 0 && getsig(sig) != h
 }
 
 // syscall_forgoRuntimeIsLibrary reports whether this runtime was built into

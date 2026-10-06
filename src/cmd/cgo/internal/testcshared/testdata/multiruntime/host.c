@@ -354,12 +354,12 @@ static void sleep_ms(int ms) {
 	nanosleep(&ts, NULL);
 }
 
-// notify: both runtimes call os/signal.Notify for SIGUSR1, and each one
-// must get every SIGUSR1 sent to the process, however their handlers are
-// stacked, while the other one calls Notify and Reset. With withhost, the
-// host installed its own SIGUSR1 handler first, and it must keep getting
-// the signal too; otherwise the default action, which kills the process,
-// sits below both runtimes.
+// notify: both runtimes call os/signal.Notify for SIGUSR1. The one that
+// called it last gets the signal, as it would from a C handler installed
+// before it, and the signal must go back to the other runtime, and then to
+// the host, as they call Reset in any order. With withhost, the host
+// installed its own SIGUSR1 handler first; otherwise the default action,
+// which kills the process, sits below both runtimes.
 static volatile sig_atomic_t hostusr1;
 static int want[3];
 
@@ -404,22 +404,25 @@ static void run_notify(int withhost) {
 	for (i = 0; i < 2; i++) {
 		libs[i].notifysignal(SIGUSR1);
 	}
-	for (i = 0; i < 10; i++) {
-		usr1_round(1, 1, withhost);
+	for (i = 0; i < 5; i++) {
+		usr1_round(0, 1, 0);
 	}
 	// A's Reset must not uninstall B's handler, which sits on top of A's.
 	libs[0].resetsignal(SIGUSR1);
 	for (i = 0; i < 5; i++) {
-		usr1_round(0, 1, withhost);
+		usr1_round(0, 1, 0);
 	}
 	// A calling Notify again must not chain A's handler to itself.
 	libs[0].notifysignal(SIGUSR1);
 	for (i = 0; i < 5; i++) {
-		usr1_round(1, 1, withhost);
+		usr1_round(0, 1, 0);
 	}
-	// Resetting both, top first, restores the host's original handling.
+	// B's Reset hands the signal back to A.
 	libs[1].resetsignal(SIGUSR1);
-	usr1_round(1, 0, withhost);
+	for (i = 0; i < 5; i++) {
+		usr1_round(1, 0, 0);
+	}
+	// A's Reset restores the host's original handling.
 	libs[0].resetsignal(SIGUSR1);
 	if (sigaction(SIGUSR1, NULL, &sa) != 0) {
 		fail("sigaction", NULL);
