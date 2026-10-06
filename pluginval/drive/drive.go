@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Drive is a pluginval test plugin: a c-shared library whose effect is a
-// tanh soft clipper, with its parameter setting the drive from 1x to 10x.
+// Drive is a pluginval test plugin: a VST3 module, built as a c-shared
+// library, whose effect is a tanh soft clipper, with its parameter setting
+// the drive from 1x to 10x.
 package main
 
 import "C"
 
 import (
 	"math"
-	"unsafe"
 
 	"forgo.dev/pluginval/internal/goplugin"
+	"forgo.dev/pluginval/internal/vst3"
 )
 
 func drive(x, param float32) float32 {
@@ -20,18 +21,14 @@ func drive(x, param float32) float32 {
 	return float32(math.Tanh(k*float64(x)) / math.Tanh(k))
 }
 
-//export ForgoPluginNew
-func ForgoPluginNew() C.int { return C.int(goplugin.New(drive)) }
-
-//export ForgoPluginFree
-func ForgoPluginFree(id C.int) { goplugin.Free(int32(id)) }
-
-//export ForgoPluginProcess
-func ForgoPluginProcess(id C.int, in, out unsafe.Pointer, nch, n C.int, param C.float) C.int {
-	if !goplugin.Process(int32(id), in, out, int32(nch), int32(n), float32(param)) {
-		return 0
-	}
-	return 1
+func init() {
+	vst3.SetFactory(vst3.NewFactory("forgo", "https://github.com/lsegal/forgo", &vst3.Class{
+		CID:          vst3.UID(0x6F72676F, 0x47617061, 0x696E0001, 0x00000002),
+		Name:         "Forgo Go Drive",
+		Param:        "Drive",
+		DefaultParam: 0.5,
+		New:          func() vst3.Processor { return goplugin.New(drive) },
+	}))
 }
 
 func main() {}

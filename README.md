@@ -625,8 +625,8 @@ callbacks with recovered panics, recovered nil dereferences while the other
 runtime is busy, preemption of a spinning goroutine, a host `SIGSEGV`
 handler installed before the libraries, and the golang/go#65050 reproducer.
 [`pluginval/`](pluginval/README.md) repeats the multi-runtime cases in a
-real plugin host: it validates Go VST3 plugins with Tracktion's pluginval at
-its highest strictness, with three Go runtimes in one process.
+real plugin host: it validates pure-Go VST3 plugins with Tracktion's pluginval
+at its highest strictness, with four Go runtimes in one process.
 
 Process-wide state. Some things a Go runtime sets belong to the whole
 process, so several runtimes share them:
@@ -704,9 +704,9 @@ Limits:
   Apple-reserved TLS slot `%gs:0x30` that every runtime shares. forgo uses a
   per-runtime `pthread_key` instead, whose offset from `%gs` is in
   `runtime.tls_g`. Debuggers that read `g` from `%gs:0x30` won't find it.
-- Unloading is supported on linux/amd64, linux/arm64, darwin/arm64,
-  windows/amd64 and windows/arm64. On other platforms a library stays
-  loaded after `dlclose`, as with upstream Go.
+- Unloading is supported on linux/amd64, linux/arm64, darwin/amd64,
+  darwin/arm64, windows/amd64 and windows/arm64. On other platforms a
+  library stays loaded after `dlclose`, as with upstream Go.
 - A library built by upstream Go does not forward preemption signals. If
   one is loaded after a forgo library, it can still swallow the forgo
   library's preemption requests. Load upstream-built libraries first when

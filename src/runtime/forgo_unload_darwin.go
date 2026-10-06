@@ -28,7 +28,7 @@ func forgoClosePollerOS() {
 }
 
 // forgoDarwinTLSKey is the pthread key that holds g, plus one; set by
-// tlsinit on darwin/arm64. The destructor deletes it once Go code is done.
+// tlsinit. The destructor deletes it once Go code is done.
 var forgoDarwinTLSKey uintptr
 
 func forgoTLSKey() uintptr { return forgoDarwinTLSKey }
