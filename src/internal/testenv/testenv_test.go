@@ -28,6 +28,10 @@ func TestGoToolLocation(t *testing.T) {
 	// is correct then testenv.GoTool() should be identical to ../../../bin/go.
 
 	relWant := "../../../bin/go" + exeSuffix
+	if _, err := os.Stat(relWant); err != nil {
+		// forgo: make.bash installs the go command as bin/forgo.
+		relWant = "../../../bin/forgo" + exeSuffix
+	}
 	absWant, err := filepath.Abs(relWant)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +121,7 @@ func TestHasGoBuild(t *testing.T) {
 		hasExec = true
 	})
 	t.Run("MustHaveExecPath", func(t *testing.T) {
-		testenv.MustHaveExecPath(t, "go")
+		testenv.MustHaveExecPath(t, testenv.GoToolPath(t))
 		hasExecGo = true
 	})
 	if !hasExec {
@@ -132,7 +136,7 @@ func TestHasGoBuild(t *testing.T) {
 	if err := os.WriteFile(mainGo, []byte("package main\nfunc main() {}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := testenv.Command(t, "go", "build", "-o", os.DevNull, mainGo)
+	cmd := testenv.Command(t, testenv.GoToolPath(t), "build", "-o", os.DevNull, mainGo)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %v\n%s", cmd, err, out)

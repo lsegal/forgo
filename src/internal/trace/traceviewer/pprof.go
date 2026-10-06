@@ -9,12 +9,12 @@ package traceviewer
 import (
 	"bufio"
 	"fmt"
+	"internal/goroot"
 	"internal/profile"
 	"internal/trace"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"time"
 )
@@ -139,11 +139,7 @@ func BuildProfile(prof []ProfileRecord) *profile.Profile {
 }
 
 func goCmd() string {
-	var exeSuffix string
-	if runtime.GOOS == "windows" {
-		exeSuffix = ".exe"
-	}
-	path := filepath.Join(runtime.GOROOT(), "bin", "go"+exeSuffix)
+	path := goroot.GoCommand(runtime.GOROOT())
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}

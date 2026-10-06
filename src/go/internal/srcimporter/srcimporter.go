@@ -13,6 +13,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"internal/goroot"
 	"io"
 	"os"
 	"os/exec"
@@ -207,7 +208,7 @@ func (p *Importer) cgo(bp *build.Package) (*ast.File, error) {
 
 	goCmd := "go"
 	if p.ctxt.GOROOT != "" {
-		goCmd = filepath.Join(p.ctxt.GOROOT, "bin", "go")
+		goCmd = goroot.GoCommand(p.ctxt.GOROOT)
 	}
 	args := []string{goCmd, "tool", "cgo", "-objdir", tmpdir}
 	if bp.Goroot {

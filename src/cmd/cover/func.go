@@ -15,6 +15,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"internal/goroot"
 	"io"
 	"os"
 	"os/exec"
@@ -199,7 +200,7 @@ func findPkgs(profiles []*cover.Profile) (map[string]*Pkg, error) {
 
 	// Note: usually run as "go tool cover" in which case $GOROOT is set,
 	// in which case runtime.GOROOT() does exactly what we want.
-	goTool := filepath.Join(runtime.GOROOT(), "bin/go")
+	goTool := goroot.GoCommand(runtime.GOROOT())
 	cmd := exec.Command(goTool, append([]string{"list", "-e", "-json"}, list...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
