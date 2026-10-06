@@ -376,7 +376,10 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
 - `src/runtime/forgo_unload*.go` and `src/runtime/cgo/gcc_forgo_unload_unix.c`
   (plus `x_cgo_forgo_lib_init`/`forgo_unload` in `gcc_libinit_windows.c`) —
   unloading a c-shared library: the library destructor stops the world,
-  ends every runtime thread, restores signal/exception handlers, and unmaps
+  ends every runtime thread, restores signal/exception handlers (on Unix
+  installed through a forwarding stub mapped outside the library, hooked
+  into `setsig` with one line, so a handler chained on top keeps working
+  after the unload), and unmaps
   the memory recorded by the `forgoMemAdd` hooks in `mem_*.go`. Hooks into
   the scheduler call `forgoCheckExit` where Ms park. The linker drops
   `-z nodelete` for c-shared on linux (`forgoCSharedUnloadable`).

@@ -229,11 +229,13 @@ func forgoLibInit() {
 	}
 }
 
-// forgoReleaseSignalStack stops the unloading thread from using the signal
-// stack its extra M gave it, which is about to be unmapped.
+// forgoReleaseSignalStack keeps the signal stack the unloading thread's
+// extra M gave it mapped, as for every other host thread. Another runtime
+// that the thread called into may have found it installed and use it as
+// its own, so it can be neither unmapped nor disabled.
 func forgoReleaseSignalStack(mp *m) {
-	if mp.newSigstack {
-		unminitSignals()
-		mp.newSigstack = false
+	if mp.newSigstack && mp.gsignal != nil {
+		s := mp.gsignal.stack
+		forgoMemRemove(unsafe.Pointer(s.lo), s.hi-s.lo)
 	}
 }

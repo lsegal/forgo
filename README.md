@@ -743,11 +743,19 @@ Goroutine lifetime rules:
   the deinit callback, for example by closing the file or pipe they read.
 - No host thread may be inside a call into the library while it is being
   unloaded; that is a fatal error too.
-- Unload libraries in the reverse order of loading when you can. Signal
-  handlers form a chain, and a library can only take its handler out when
-  it is the one installed last. If a later library (or a crash reporter)
-  installed its handler on top, the unloaded library's handler is left in
-  the chain and a signal forwarded to it crashes the process.
+- Libraries can be unloaded in any order. Signal handlers form a chain: a
+  library loaded later (or a crash reporter) saves the handler below it and
+  forwards signals to it. On Unix a forgo library therefore installs its
+  handler through a small forwarding stub mapped outside the library. While
+  the library is loaded the stub forwards to its runtime; at unload it is
+  pointed at the handler that was installed before the library's (or at the
+  default or ignore action), so the handlers above keep working. The stub
+  then stays mapped, two pages per such unload. Where the process cannot
+  map executable memory, such as under a hardened runtime without the
+  entitlement for unsigned executable memory, the library installs its
+  handler directly, as before, and must be unloaded in the reverse order of
+  loading: a handler left in the chain after its library is gone crashes
+  the process when a signal is forwarded to it.
 
 `TestMultiRuntime/*/unload` loads, uses and unloads one library 100 times
 in one process while a second library stays loaded and busy. Each reload
@@ -756,6 +764,10 @@ every unload, the thread count and (on Linux) the number of memory mappings
 must not grow, and the remaining library must still recover faults and
 preempt goroutines afterwards. `UnloadBlocked` and `ExitBlocked` check the
 refusal above and that exiting with such a goroutine still works.
+`*/unloadbelow` loads A, then B, unloads A while B's handler sits on top of
+A's, and checks that B still recovers faults and preempts goroutines and
+that a host `SIGSEGV` handler installed before A still gets faults in C
+code.
 
 ### SIMD Mandelbrot benchmark
 
