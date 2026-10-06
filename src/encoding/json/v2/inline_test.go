@@ -7,6 +7,7 @@
 package json
 
 import (
+	"internal/testenv"
 	"os"
 	"os/exec"
 	"strings"
@@ -87,7 +88,7 @@ func TestInline(t *testing.T) {
 	}
 
 	for pkg, fncs := range pkgs {
-		cmd := exec.Command("go", "build", "-gcflags=-m", pkg)
+		cmd := exec.Command(testenv.GoToolPath(t), "build", "-gcflags=-m", pkg)
 		b, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("exec.Command error: %v\n\n%s", err, b)

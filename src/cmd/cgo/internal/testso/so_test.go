@@ -46,7 +46,7 @@ func testSO(t *testing.T, dir string) {
 		log.Panic(err)
 	}
 
-	cmd := exec.Command("go", "env", "CC", "GOGCCFLAGS")
+	cmd := exec.Command(testenv.GoToolPath(t), "env", "CC", "GOGCCFLAGS")
 	cmd.Dir = modRoot
 	cmd.Stderr = new(strings.Builder)
 	cmd.Env = append(os.Environ(), "GOPATH="+GOPATH)

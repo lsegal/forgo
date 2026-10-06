@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"go/build"
+	"internal/goroot"
 	"internal/platform"
 	"internal/testenv"
 	"io"
@@ -66,7 +67,7 @@ func goCmd(t *testing.T, args ...string) string {
 		newargs = append(newargs, "-x", "-ldflags=-v")
 	}
 	newargs = append(newargs, args[1:]...)
-	c := exec.Command(filepath.Join(oldGOROOT, "bin", "go"), newargs...)
+	c := exec.Command(goroot.GoCommand(oldGOROOT), newargs...)
 	stderr := new(strings.Builder)
 	c.Stderr = stderr
 
@@ -764,7 +765,7 @@ func requireGccgo(t *testing.T) {
 		t.Skipf("gccgo too old (%s)", strings.TrimSpace(string(output)))
 	}
 
-	gomod, err := exec.Command("go", "env", "GOMOD").Output()
+	gomod, err := exec.Command(testenv.GoToolPath(t), "env", "GOMOD").Output()
 	if err != nil {
 		t.Fatalf("go env GOMOD: %v", err)
 	}
@@ -1176,9 +1177,9 @@ func TestStd(t *testing.T) {
 	// Use a temporary pkgdir to not interfere with other tests, and not write to GOROOT.
 	// Cannot use goCmd as it runs with cloned GOROOT which is incomplete.
 	runWithEnv(t, "building std", []string{"GOROOT=" + oldGOROOT, "GOEXPERIMENT=nosimd"},
-		filepath.Join(oldGOROOT, "bin", "go"), "install", "-buildmode=shared", "-pkgdir="+tmpDir, "std")
+		goroot.GoCommand(oldGOROOT), "install", "-buildmode=shared", "-pkgdir="+tmpDir, "std")
 
 	// Issue #58966.
 	runWithEnv(t, "testing issue #58966", []string{"GOROOT=" + oldGOROOT, "GOEXPERIMENT=nosimd"},
-		filepath.Join(oldGOROOT, "bin", "go"), "run", "-linkshared", "-pkgdir="+tmpDir, "./issue58966/main.go")
+		goroot.GoCommand(oldGOROOT), "run", "-linkshared", "-pkgdir="+tmpDir, "./issue58966/main.go")
 }

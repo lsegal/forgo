@@ -10,6 +10,7 @@ import (
 	"cmd/internal/script"
 	"context"
 	"fmt"
+	igoroot "internal/goroot"
 	"internal/testenv"
 	"internal/txtar"
 	"io/fs"
@@ -129,9 +130,9 @@ func NewEngine(t *testing.T, repls []ToolReplacement) (*script.Engine, []string)
 	}
 
 	// Add in commands for "go" and "cc".
-	testgo := filepath.Join(tgr, "bin", "go")
+	testgo := igoroot.GoCommand(tgr)
 	gocmd := script.Program(testgo, interrupt, gracePeriod)
-	addcmd("go", gocmd)
+	addcmd("go", goProgram{gocmd})
 	addcmd("cc", scriptCC(cmdExec, goEnv("CC")))
 
 	// Add various helpful conditions related to builds and toolchain use.
@@ -330,6 +331,19 @@ func tempEnvName() string {
 }
 
 // scriptCC runs the platform C compiler.
+// goProgram is the script "go" command. forgo's make.bash installs the go
+// command as bin/forgo, which script.Program would describe as the 'forgo'
+// program, so goProgram keeps describing it as the 'go' program.
+type goProgram struct {
+	script.Cmd
+}
+
+func (c goProgram) Usage() *script.CmdUsage {
+	usage := *c.Cmd.Usage()
+	usage.Summary = "run the 'go' program provided by the script host"
+	return &usage
+}
+
 func scriptCC(cmdExec script.Cmd, ccexe string) script.Cmd {
 	return script.Command(
 		script.CmdUsage{

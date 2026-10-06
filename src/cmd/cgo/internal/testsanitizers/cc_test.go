@@ -68,8 +68,13 @@ var env struct {
 // goEnv returns the output of $(go env) as a map.
 func goEnv(key string) (string, error) {
 	env.Once.Do(func() {
+		var goTool string
+		goTool, env.err = testenv.GoTool()
+		if env.err != nil {
+			return
+		}
 		var out []byte
-		out, env.err = exec.Command("go", "env", "-json").Output()
+		out, env.err = exec.Command(goTool, "env", "-json").Output()
 		if env.err != nil {
 			return
 		}
@@ -444,7 +449,11 @@ func (c *config) goCmd(subcommand string, args ...string) *exec.Cmd {
 // "GOEXPERIMENT=$experiments go $subcommand $args" with appropriate
 // additional flags and CGO-related environment variables.
 func (c *config) goCmdWithExperiments(subcommand string, args []string, experiments []string) *exec.Cmd {
-	cmd := exec.Command("go", subcommand)
+	goTool, err := testenv.GoTool()
+	if err != nil {
+		panic(err)
+	}
+	cmd := exec.Command(goTool, subcommand)
 	cmd.Args = append(cmd.Args, c.goFlags...)
 	cmd.Args = append(cmd.Args, args...)
 	replaceEnv(cmd, "CGO_CFLAGS", strings.Join(c.cFlags, " "))

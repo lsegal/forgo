@@ -63,7 +63,7 @@ func incNonDefaults(t *testing.T) map[string]bool {
 	// Tried a more sophisticated search in go list looking for
 	// imports containing "internal/godebug", but that turned
 	// up a bug in go list instead. #66218
-	out, err := exec.Command("go", "list", "-f={{.Dir}}", "std", "cmd").CombinedOutput()
+	out, err := exec.Command(testenv.GoToolPath(t), "list", "-f={{.Dir}}", "std", "cmd").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
