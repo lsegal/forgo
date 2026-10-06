@@ -36,6 +36,14 @@ func (check *Checker) isTerminating(s ast.Stmt, label string) bool {
 	case *ast.ReturnStmt:
 		return true
 
+	case *ast.ThrowStmt:
+		// forgo: throw lowers to a return.
+		return true
+
+	case *ast.PostfixIfStmt:
+		// forgo: STMT if COND lowers to `if COND { STMT }`, which has no
+		// else branch, so it is never terminating.
+
 	case *ast.BranchStmt:
 		if s.Tok == token.GOTO || s.Tok == token.FALLTHROUGH {
 			return true
@@ -114,8 +122,12 @@ func hasBreak(s ast.Stmt, label string, implicit bool) bool {
 
 	case *ast.BadStmt, *ast.DeclStmt, *ast.EmptyStmt, *ast.ExprStmt,
 		*ast.SendStmt, *ast.IncDecStmt, *ast.AssignStmt, *ast.GoStmt,
-		*ast.DeferStmt, *ast.ReturnStmt:
+		*ast.DeferStmt, *ast.ReturnStmt, *ast.ThrowStmt:
 		// no chance
+
+	case *ast.PostfixIfStmt:
+		// forgo: STMT if COND
+		return hasBreak(s.Stmt, label, implicit)
 
 	case *ast.LabeledStmt:
 		return hasBreak(s.Stmt, label, implicit)

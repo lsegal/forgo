@@ -342,14 +342,22 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/noder/forgo_macro.go` — macro expansion pass.
 - `src/cmd/compile/internal/types2/forgo.go` — folds `//fgo:comptime`
   calls in `const` initializers.
+- `src/internal/forgo/` — a `go/ast` port of the comptime/macro
+  interpreter and the macro expansion pass, for `go/types` and `go vet`.
+  Keep it in sync with `cmd/compile/internal/forgo/`.
+- `src/go/types/forgo.go` — the `go/types` copy of `types2/forgo.go`.
+  `go/types` also folds field/index access on composite constants and
+  treats `throw "..."` as a use of the file's `"errors"` import.
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
   `?` token/operator and `//fgo:` pragma parsing.
 - `src/cmd/vendor/golang.org/x/tools` — `go vet`/`go fix` walk the
   `go/ast` nodes for `?`, `throw`, and postfix `if` through patched
   copies of `go/ast/{inspector,edge,astutil}`, `go/cfg`,
-  `refactor/satisfy`, and the `unreachable` pass, marked `// forgo`.
-  `go mod vendor` would drop these patches; reapply them after
-  re-vendoring. `cmd/vet/testdata/forgo` covers them.
+  `refactor/satisfy`, and the `unreachable` and `httpresponse` passes,
+  marked `// forgo`. `go/analysis/unitchecker` expands `//fgo:macro`
+  calls with `internal/forgo` before type checking. `go mod vendor` would
+  drop these patches; reapply them after re-vendoring.
+  `cmd/vet/testdata/forgo` and `cmd/vet/testdata/comptime` cover them.
 
 Hot reload (`forgo run --watch`) lives in four places:
 

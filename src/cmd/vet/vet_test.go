@@ -59,6 +59,7 @@ func TestVet(t *testing.T) {
 		"buildtag",
 		"cgo",
 		"composite",
+		"comptime",
 		"copylock",
 		"deadcode",
 		"directive",
