@@ -588,6 +588,72 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 - `--watch` runs the package with default build flags; other build flags
   passed alongside it are not yet forwarded to the watched build.
 
+### Several Go runtimes in one process — c-shared plugins
+
+Plugin hosts load every plugin into one process: a DAW loading VST3/CLAP
+plugins, Python loading extension modules. A `-buildmode=c-shared` library
+carries its own Go runtime, so two Go plugins mean two Go runtimes side by
+side, and upstream Go does not support that (golang/go#65050). forgo
+libraries can share a process with each other, with several instances of
+the same plugin, and with copies of one plugin loaded from two paths (a
+VST2 and a VST3 build of the same effect).
+
+Each library keeps a fully separate runtime: its own heap, garbage
+collector, scheduler, and goroutines. The libraries only meet through the
+C ABI, the same way the host talks to them:
+
+- The `g` register of each runtime lives in its own thread-local slot
+  (per-module ELF TLS on Linux, a `pthread_key` on Apple Silicon, `TlsAlloc`
+  on Windows), so on any thread each runtime only sees its own goroutine,
+  and callbacks can nest host → A → C → B → C → A on one thread.
+- No Go symbol is exported from the library. ELF output is linked with
+  `-Bsymbolic`, Mach-O uses two-level namespaces, and PE exports only the
+  `//export` set, so neither runtime's references can bind to the other's
+  copy, even when the host loads with `RTLD_GLOBAL`.
+- Signal handlers chain: the library loaded last handles a signal first and
+  passes it on when the thread is not running its own Go code. Upstream Go
+  only does that for faults. forgo also forwards the preemption (`SIGURG`)
+  and profiling (`SIGPROF`) signals each runtime sends to its own threads.
+  Without that, the library loaded last swallows the earlier library's
+  preemption requests. The earlier runtime then can never stop a goroutine
+  in a tight loop, and its next garbage collection hangs the process.
+
+`TestMultiRuntime` in `src/cmd/cgo/internal/testcshared` checks all of this.
+It runs two different libraries and two copies of one library from 8 host
+threads with forced GCs, many instances of one plugin, nested cross-library
+callbacks with recovered panics, recovered nil dereferences while the other
+runtime is busy, preemption of a spinning goroutine, a host `SIGSEGV`
+handler installed before the libraries, and the golang/go#65050 reproducer.
+
+Rules for plugin authors:
+
+- Pass only C data between libraries. Never hand a Go pointer, func value,
+  channel, or interface to another library. The other runtime cannot scan
+  or unwind it.
+- All instances of a plugin loaded from one file share one library image and
+  one runtime, however many times the host opens it. Package-level
+  variables are therefore shared by every instance. Keep per-instance state
+  in an object the host holds a handle to, such as a `runtime/cgo.Handle`
+  or an index into a table guarded by a mutex.
+- Expect several host threads to call into the library at once, and expect
+  an instance to move between threads.
+- A c-shared library cannot be unloaded yet. On Linux it is linked with
+  `-z nodelete`, so `dlclose` keeps it loaded and a later `dlopen` gets the
+  same runtime back. Don't rely on the library being torn down. If it
+  starts goroutines, stop them from the host's deinit callback.
+
+Limits:
+
+- darwin/amd64 (Intel Macs and Rosetta) is not covered. Every Go runtime
+  there stores `g` in the same Apple-reserved TLS slot (`%gs:0x30`), so two
+  runtimes see each other's goroutines; this is the crash in
+  golang/go#65050. forgo does not currently build for darwin/amd64,
+  linux/arm64, or windows/arm64 at all.
+- A library built by upstream Go does not forward preemption signals. If
+  one is loaded after a forgo library, it can still swallow the forgo
+  library's preemption requests. Load upstream-built libraries first when
+  you control the order.
+
 ### SIMD Mandelbrot benchmark
 
 [`examples/mandelbrot`](examples/mandelbrot) is an allocation-free Mandelbrot

@@ -433,6 +433,7 @@ func sigtrampgo(sig uint32, info *siginfo, ctx unsafe.Pointer) {
 	if sigfwdgo(sig, info, ctx) {
 		return
 	}
+	forgoSigfwdForeign(sig, info, ctx)
 	c := &sigctxt{info, ctx}
 	gp := sigFetchG(c)
 	setg(gp)
