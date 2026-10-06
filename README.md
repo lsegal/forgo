@@ -625,8 +625,8 @@ callbacks with recovered panics, recovered nil dereferences while the other
 runtime is busy, preemption of a spinning goroutine, a host `SIGSEGV`
 handler installed before the libraries, and the golang/go#65050 reproducer.
 [`pluginval/`](pluginval/README.md) repeats the multi-runtime cases in a
-real plugin host: it validates Go VST3 plugins with Tracktion's pluginval at
-its highest strictness, with three Go runtimes in one process.
+real plugin host: it validates pure-Go VST3 plugins with Tracktion's pluginval
+at its highest strictness, with four Go runtimes in one process.
 
 Process-wide state. Some things a Go runtime sets belong to the whole
 process, so several runtimes share them:

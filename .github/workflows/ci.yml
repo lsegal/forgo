@@ -219,8 +219,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # The same multi-runtime cases in a real plugin host: pluginval
-      # validates a VST3 module whose plugin classes run on three Go
-      # runtimes in one process. See pluginval/README.md.
+      # validates pure-Go VST3 modules, alone and with four Go runtimes in
+      # one process. See pluginval/README.md.
       - name: pluginval multi-runtime VST3 validation
         shell: bash
         timeout-minutes: 30

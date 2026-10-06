@@ -2,19 +2,17 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package goplugin is the Go side of the pluginval test plugins: a table
-// of effect instances that the VST3 shim drives through each library's
-// exported functions. Every instance keeps its runtime busy, both on the
-// host's audio thread and in a worker goroutine of its own, so pluginval's
-// tests run while several Go runtimes allocate and collect garbage at once.
+// Package goplugin is the audio processing of the pluginval test plugins:
+// effect instances that the plugins' VST3 components drive. Every instance
+// keeps its runtime busy, both on the host's audio thread and in a worker
+// goroutine of its own, so pluginval's tests run while several Go runtimes
+// allocate and collect garbage at once.
 package goplugin
 
 import (
 	"math"
 	"runtime"
-	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // An Effect maps one input sample to one output sample. param is the
@@ -24,7 +22,8 @@ type Effect func(x, param float32) float32
 // gcEvery is how many processed blocks pass between forced collections.
 const gcEvery = 32
 
-type instance struct {
+// An Instance runs an effect. Its methods implement vst3.Processor.
+type Instance struct {
 	effect Effect
 	blocks int
 
@@ -36,76 +35,47 @@ type instance struct {
 	done   chan struct{}
 }
 
-var (
-	mu        sync.Mutex
-	instances = map[int32]*instance{}
-	nextID    int32
+// sink keeps the worker's garbage reachable for a moment so the
+// collector has real work.
+var sink atomic.Pointer[[]float32]
 
-	// sink keeps the worker's garbage reachable for a moment so the
-	// collector has real work.
-	sink atomic.Pointer[[]float32]
-)
-
-// New creates an instance running effect and returns its handle.
-func New(effect Effect) int32 {
-	in := &instance{effect: effect, done: make(chan struct{})}
+// New creates an instance running effect and starts its worker.
+func New(effect Effect) *Instance {
+	in := &Instance{effect: effect, done: make(chan struct{})}
 	go in.analyze()
-	mu.Lock()
-	defer mu.Unlock()
-	nextID++
-	instances[nextID] = in
-	return nextID
+	return in
 }
 
-// Free stops the instance's worker and forgets it. Unknown handles
-// are ignored.
-func Free(id int32) {
-	mu.Lock()
-	in := instances[id]
-	delete(instances, id)
-	mu.Unlock()
-	if in == nil {
-		return
-	}
+// Close stops the instance's worker.
+func (in *Instance) Close() {
 	in.stop.Store(true)
 	<-in.done
 }
 
-// Process runs the instance's effect over nch channels of n samples,
-// reading in and writing out (which may alias). It copies each channel
-// into a fresh Go slice first and forces a collection every gcEvery
-// blocks, so the runtime is allocating and collecting on the host's
-// audio thread. It hands the block to the instance's worker. It returns
-// false for an unknown handle.
-func Process(id int32, in, out unsafe.Pointer, nch, n int32, param float32) bool {
-	mu.Lock()
-	inst := instances[id]
-	mu.Unlock()
-	if inst == nil {
-		return false
-	}
-	ins := unsafe.Slice((**float32)(in), nch)
-	outs := unsafe.Slice((**float32)(out), nch)
-	for c := range ins {
-		src := unsafe.Slice(ins[c], n)
-		dst := unsafe.Slice(outs[c], n)
-		buf := make([]float32, n)
+// Process runs the instance's effect over the channels of in, writing
+// out (which may share buffers with in). It copies each channel into a
+// fresh Go slice first and forces a collection every gcEvery blocks, so
+// the runtime is allocating and collecting on the host's audio thread.
+// It hands the block to the instance's worker.
+func (in *Instance) Process(ins, outs [][]float32, param float32) {
+	for c, src := range ins {
+		dst := outs[c]
+		buf := make([]float32, len(src))
 		copy(buf, src)
 		for i, x := range buf {
-			dst[i] = flush(inst.effect(x, param))
+			dst[i] = flush(in.effect(x, param))
 		}
 		if c == 0 {
-			inst.latest.Store(&buf)
-			inst.seq.Add(1)
+			in.latest.Store(&buf)
+			in.seq.Add(1)
 		}
 	}
 	// One audio thread drives an instance at a time, so blocks needs no
 	// lock.
-	inst.blocks++
-	if inst.blocks%gcEvery == 0 {
+	in.blocks++
+	if in.blocks%gcEvery == 0 {
 		runtime.GC()
 	}
-	return true
 }
 
 // flush zeroes subnormal and non-finite samples, which pluginval rejects.
@@ -124,7 +94,7 @@ func flush(y float32) float32 {
 // A collection can only stop it by signalling its thread (asynchronous
 // preemption), which needs the signal routing that lets a runtime loaded
 // before another one still preempt its own goroutines (#5).
-func (in *instance) analyze() {
+func (in *Instance) analyze() {
 	defer close(in.done)
 	var seen uint64
 	for {
