@@ -192,6 +192,29 @@ jobs:
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           forgo test cmd/compile/internal/syntax/... cmd/compile/internal/forgo/...
 
+      # cgo on files that use forgo syntax alongside import "C". teststdio
+      # builds its programs with `forgo run`, which doesn't vet them.
+      - name: cgo forgo-syntax tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          forgo test -count=1 -v cmd/cgo/internal/teststdio
+
+      - name: cgo forgo-syntax tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          forgo test -count=1 -v cmd/cgo/internal/teststdio
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       # Several Go runtimes in one process (c-shared plugins). The cgo test
       # harness runs `go` from GOROOT/bin, so give it the forgo binary under
       # that name.

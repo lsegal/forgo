@@ -54,6 +54,7 @@ func TestTestRun(t *testing.T) {
 	for _, file := range [...]string{
 		"chain.go",
 		"fib.go",
+		"forgo.go",
 		"hello.go",
 	} {
 		wantFile := strings.Replace(file, ".go", ".out", 1)
