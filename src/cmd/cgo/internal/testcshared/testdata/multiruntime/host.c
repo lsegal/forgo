@@ -21,6 +21,9 @@
 #include <pthread.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <sys/resource.h>
+#include <time.h>
+#include <unistd.h>
 #endif
 
 typedef int (*work_fn)(int);
@@ -42,6 +45,13 @@ struct lib {
 	work2_fn process;
 	work_fn destroyinstance;
 	int_fn liveinstances;
+	work_fn notifysignal;
+	work_fn resetsignal;
+	int_fn signalcount;
+	int_fn writeclosedpipe;
+	void_fn crash;
+	void_fn crashfault;
+	void_fn park;
 };
 
 static struct lib libs[2];
@@ -77,6 +87,13 @@ static void load(struct lib* l) {
 	LOOKUP(process, "Process");
 	LOOKUP(destroyinstance, "DestroyInstance");
 	LOOKUP(liveinstances, "LiveInstances");
+	LOOKUP(notifysignal, "NotifySignal");
+	LOOKUP(resetsignal, "ResetSignal");
+	LOOKUP(signalcount, "SignalCount");
+	LOOKUP(writeclosedpipe, "WriteClosedPipe");
+	LOOKUP(crash, "Crash");
+	LOOKUP(crashfault, "CrashFault");
+	LOOKUP(park, "Park");
 #undef LOOKUP
 }
 
@@ -146,6 +163,13 @@ static void load(struct lib* l) {
 	LOOKUP(process, "Process");
 	LOOKUP(destroyinstance, "DestroyInstance");
 	LOOKUP(liveinstances, "LiveInstances");
+	LOOKUP(notifysignal, "NotifySignal");
+	LOOKUP(resetsignal, "ResetSignal");
+	LOOKUP(signalcount, "SignalCount");
+	LOOKUP(writeclosedpipe, "WriteClosedPipe");
+	LOOKUP(crash, "Crash");
+	LOOKUP(crashfault, "CrashFault");
+	LOOKUP(park, "Park");
 #undef LOOKUP
 }
 
@@ -323,6 +347,149 @@ static void host_fault(void) {
 		fail("C fault did not fault", NULL);
 	}
 }
+
+static void sleep_ms(int ms) {
+	struct timespec ts = {ms / 1000, (ms % 1000) * 1000000L};
+
+	nanosleep(&ts, NULL);
+}
+
+// notify: both runtimes call os/signal.Notify for SIGUSR1. The one that
+// called it last gets the signal, as it would from a C handler installed
+// before it, and the signal must go back to the other runtime, and then to
+// the host, as they call Reset in any order. With withhost, the host
+// installed its own SIGUSR1 handler first; otherwise the default action,
+// which kills the process, sits below both runtimes.
+static volatile sig_atomic_t hostusr1;
+static int want[3];
+
+static void host_usr1(int sig) {
+	hostusr1++;
+}
+
+static int usr1_counts(int i) {
+	return i < 2 ? libs[i].signalcount() : (int)hostusr1;
+}
+
+// usr1_round sends SIGUSR1 to the process and waits until exactly the
+// listeners marked in got (A, B, host) have seen it.
+static void usr1_round(int gotA, int gotB, int gotHost) {
+	int i, ms;
+
+	want[0] += gotA;
+	want[1] += gotB;
+	want[2] += gotHost;
+	kill(getpid(), SIGUSR1);
+	for (ms = 0; ms < 10000; ms++) {
+		if (usr1_counts(0) >= want[0] && usr1_counts(1) >= want[1] && usr1_counts(2) >= want[2]) {
+			break;
+		}
+		sleep_ms(1);
+	}
+	// Give a delivery that should not happen time to show up.
+	sleep_ms(20);
+	for (i = 0; i < 3; i++) {
+		if (usr1_counts(i) != want[i]) {
+			fprintf(stderr, "FAIL: SIGUSR1 seen by A, B, host = %d, %d, %d; want %d, %d, %d\n",
+				usr1_counts(0), usr1_counts(1), usr1_counts(2), want[0], want[1], want[2]);
+			exit(1);
+		}
+	}
+}
+
+static void run_notify(int withhost) {
+	struct sigaction sa;
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		libs[i].notifysignal(SIGUSR1);
+	}
+	for (i = 0; i < 5; i++) {
+		usr1_round(0, 1, 0);
+	}
+	// A's Reset must not uninstall B's handler, which sits on top of A's.
+	libs[0].resetsignal(SIGUSR1);
+	for (i = 0; i < 5; i++) {
+		usr1_round(0, 1, 0);
+	}
+	// A calling Notify again must not chain A's handler to itself.
+	libs[0].notifysignal(SIGUSR1);
+	for (i = 0; i < 5; i++) {
+		usr1_round(0, 1, 0);
+	}
+	// B's Reset hands the signal back to A.
+	libs[1].resetsignal(SIGUSR1);
+	for (i = 0; i < 5; i++) {
+		usr1_round(1, 0, 0);
+	}
+	// A's Reset restores the host's original handling.
+	libs[0].resetsignal(SIGUSR1);
+	if (sigaction(SIGUSR1, NULL, &sa) != 0) {
+		fail("sigaction", NULL);
+	}
+	if (sa.sa_handler != (withhost ? host_usr1 : SIG_DFL)) {
+		fail("SIGUSR1 handler not restored after both runtimes reset it", NULL);
+	}
+	if (withhost) {
+		usr1_round(0, 0, 1);
+	}
+}
+
+static void install_host_usr1(void) {
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof sa);
+	sa.sa_handler = host_usr1;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGUSR1, &sa, NULL) != 0) {
+		fail("sigaction", NULL);
+	}
+}
+
+// sigpipe: a Go write to a closed pipe fails with EPIPE in whichever
+// runtime makes it, though the SIGPIPE it raises reaches the handler of
+// the library loaded last first.
+static void sigpipe_thread(long id) {
+	int i;
+
+	for (i = 0; i < 100; i++) {
+		if (libs[(i + id) % 2].writeclosedpipe() != 1) {
+			fail("write to a closed pipe did not fail with EPIPE", libs[(i + id) % 2].path);
+		}
+	}
+}
+
+// rlimit_before lowers the soft open-file limit so that a runtime raising
+// it would show; rlimit_after checks that loading the libraries left it
+// alone.
+static struct rlimit rlim_before;
+
+static void rlimit_before(void) {
+	if (getrlimit(RLIMIT_NOFILE, &rlim_before) != 0) {
+		fail("getrlimit", NULL);
+	}
+	if (rlim_before.rlim_max != RLIM_INFINITY && rlim_before.rlim_max < 64) {
+		fail("hard open-file limit too low to test", NULL);
+	}
+	rlim_before.rlim_cur = 64;
+	if (setrlimit(RLIMIT_NOFILE, &rlim_before) != 0) {
+		fail("setrlimit", NULL);
+	}
+}
+
+static void rlimit_after(void) {
+	struct rlimit lim;
+
+	if (getrlimit(RLIMIT_NOFILE, &lim) != 0) {
+		fail("getrlimit", NULL);
+	}
+	if (lim.rlim_cur != rlim_before.rlim_cur || lim.rlim_max != rlim_before.rlim_max) {
+		fprintf(stderr, "FAIL: open-file limit changed from %llu/%llu to %llu/%llu\n",
+			(unsigned long long)rlim_before.rlim_cur, (unsigned long long)rlim_before.rlim_max,
+			(unsigned long long)lim.rlim_cur, (unsigned long long)lim.rlim_max);
+		exit(1);
+	}
+}
 #endif
 
 int main(int argc, char** argv) {
@@ -340,6 +507,12 @@ int main(int argc, char** argv) {
 #ifndef _WIN32
 	if (strcmp(mode, "hostsig") == 0) {
 		install_host_handler();
+	}
+	if (strcmp(mode, "notifyhost") == 0) {
+		install_host_usr1();
+	}
+	if (strcmp(mode, "rlimit") == 0) {
+		rlimit_before();
 	}
 #endif
 
@@ -379,6 +552,23 @@ int main(int argc, char** argv) {
 			busy_stop = 1;
 			join_thread(t);
 		}
+	} else if (strcmp(mode, "crash") == 0 || strcmp(mode, "crashfault") == 0) {
+		// An unrecovered panic or fault in A, while B is busy on another
+		// thread, ends the process with a crash report from A alone. The
+		// test checks the report.
+		thread_t t;
+
+		libs[0].park();
+		libs[1].park();
+		busy_stop = 0;
+		start_thread(&t, busy_thread, 1);
+		libs[1].work(64);
+		if (strcmp(mode, "crash") == 0) {
+			libs[0].crash();
+		} else {
+			libs[0].crashfault();
+		}
+		fail("library did not crash", NULL);
 	} else if (strcmp(mode, "preempt") == 0) {
 		// Library B was loaded last, so its signal handler runs first;
 		// A's preemption requests must still reach A, or a collection
@@ -407,6 +597,15 @@ int main(int argc, char** argv) {
 			fprintf(stderr, "FAIL: host handler saw %d faults, want 21\n", (int)hostfaults);
 			return 1;
 		}
+	} else if (strcmp(mode, "notify") == 0 || strcmp(mode, "notifyhost") == 0) {
+		run_notify(strcmp(mode, "notifyhost") == 0);
+	} else if (strcmp(mode, "sigpipe") == 0) {
+		run_threads(sigpipe_thread);
+	} else if (strcmp(mode, "rlimit") == 0) {
+		for (i = 0; i < 2; i++) {
+			libs[i].work(8);
+		}
+		rlimit_after();
 #endif
 	} else {
 		fail("unknown mode", mode);

@@ -372,7 +372,12 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
 
 - `src/runtime/forgo_multiruntime_unix.go` — forwards the preemption and
   profiling signals another runtime sent to its own threads, hooked into
-  `sigtrampgo` in `signal_unix.go` with one line.
+  `sigtrampgo` in `signal_unix.go` with one line. It also keeps
+  `os/signal.Reset` from removing a handler another runtime installed on top
+  (hooks in `sigenable`, `sigdisable`, and `sigignore`), and tells `syscall`
+  whether it is in a library.
+- `src/syscall/forgo_rlimit.go` — a library leaves the open-file limit to
+  the host; one condition in `rlimit.go`'s `init`.
 - `src/cmd/cgo/internal/testcshared/forgo_multiruntime_test.go` and
   `testdata/multiruntime/` — the C host and plugin libraries that exercise
   it. When writing c-shared plugin code, follow the author rules in
