@@ -59,9 +59,11 @@ x_cgo_forgo_isgosighandler(uintptr_t *arg)
 	uintptr_t (*get)(void);
 
 	arg[1] = 0;
-	if (dladdr == NULL || dlopen == NULL || dlsym == NULL || dlclose == NULL) {
+#ifndef __APPLE__
+	if (&dladdr == NULL || &dlopen == NULL || &dlsym == NULL || &dlclose == NULL) {
 		return;
 	}
+#endif
 	_cgo_tsan_acquire();
 	if (dladdr((void*)arg[0], &info) == 0 || info.dli_fname == NULL) {
 		goto out;

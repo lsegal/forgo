@@ -6,8 +6,9 @@
 
 package runtime
 
-// These platforms do not hand Notify signals down to other runtimes: runtime/cgo
-// never fills in _cgo_forgo_isgosighandler, so no signal is ever marked.
+// These platforms do not hand Notify signals down to other runtimes:
+// runtime/cgo never fills in _cgo_forgo_isgosighandler there, so no signal
+// is ever marked.
 
 //go:nosplit
 func forgoSigMarked(info *siginfo) bool { return false }

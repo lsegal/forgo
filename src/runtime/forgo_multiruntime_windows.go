@@ -102,14 +102,16 @@ func forgoCtrlSend(s uint32) bool {
 	if slots == nil {
 		return ok
 	}
-	for i := range slots {
-		pc := atomic.Loaduintptr(&slots[i])
-		if pc == 0 {
-			break
+	systemstack(func() {
+		for i := range slots {
+			pc := atomic.Loaduintptr(&slots[i])
+			if pc == 0 {
+				break
+			}
+			if pc != forgoCtrlSelf && stdcall(stdFunction(unsafe.Pointer(pc)), uintptr(s)) != 0 {
+				ok = true
+			}
 		}
-		if pc != forgoCtrlSelf && stdcall(stdFunction(unsafe.Pointer(pc)), uintptr(s)) != 0 {
-			ok = true
-		}
-	}
+	})
 	return ok
 }
