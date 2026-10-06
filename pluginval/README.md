@@ -34,6 +34,11 @@ pointers. `internal/vst3` implements the parts these plugins need:
   `getState`/`setState`. The component is also its own edit controller.
 - `factory.go`: the module's `GetPluginFactory`, and `ModuleFactory` for
   calling another module's factory.
+- `pin_windows.go`: pins the module in the process. pluginval unloads a
+  module after scanning it and loads it again to test it, and a Go
+  `c-shared` library cannot be unloaded (#10). ELF libraries are linked
+  with `-z nodelete` and macOS keeps them loaded, but Windows would unmap
+  the runtime's code under its running threads.
 
 ## What is tested
 
