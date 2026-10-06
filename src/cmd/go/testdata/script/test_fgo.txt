@@ -1,0 +1,58 @@
+# forgo: _test.fgo files are test files, and external test files when
+# they declare the _test package, rather than ordinary package sources.
+
+sleep 2s # The module index ignores packages with files newer than 2 seconds.
+
+go list -f '{{.GoFiles}} {{.TestGoFiles}} {{.XTestGoFiles}}' m/p
+stdout '^\[p.fgo\] \[p_test.fgo\] \[p_x_test.fgo\]$'
+
+go list -test -deps -f '{{.ImportPath}}' m/p
+stdout '^m/p_test \[m/p.test\]$'
+
+[short] skip 'runs go test'
+
+go test -v m/p
+stdout '^--- PASS: TestInternal'
+stdout '^--- PASS: TestExternal'
+stdout '^ok'
+! stdout 'no test files'
+
+# Coverage instruments p.fgo but not the test files.
+go test -cover m/p
+stdout 'coverage: 100.0% of statements'
+
+-- go.mod --
+module m
+
+go 1.27
+-- p/p.fgo --
+package p
+
+import "strconv"
+
+func Double(s string) (n int, err error) {
+	n = strconv.Atoi(s)?
+	return 2 * n, nil
+}
+-- p/p_test.fgo --
+package p
+
+import "testing"
+
+func TestInternal(t *testing.T) {
+	_, err := Double("x")
+	t.Fatal("no error for x") if err == nil
+}
+-- p/p_x_test.fgo --
+package p_test
+
+import (
+	"testing"
+
+	"m/p"
+)
+
+func TestExternal(t *testing.T) {
+	n, err := p.Double("21")
+	t.Fatalf("Double(21) = %d, %v", n, err) if n != 42 || err != nil
+}
