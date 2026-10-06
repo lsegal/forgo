@@ -1709,6 +1709,7 @@ func stopTheWorldWithSema(reason stwReason) worldStop {
 				noteclear(&sched.stopnote)
 				break
 			}
+			forgoStopSyscallPs()
 			preemptall()
 		}
 	}
