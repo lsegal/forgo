@@ -465,6 +465,16 @@ func childrenOf(n ast.Node) []ast.Node {
 			tok(n.Lparen, len("(")),
 			tok(n.Rparen, len(")")))
 
+	// forgo syntax nodes.
+	case *ast.PostfixIfStmt:
+		children = append(children, tok(n.If, len("if")))
+
+	case *ast.ThrowStmt:
+		children = append(children, tok(n.Throw, len("throw")))
+
+	case *ast.TryExpr:
+		children = append(children, tok(n.Question, len("?")))
+
 	case *ast.TypeSpec:
 		// TODO(adonovan): TypeSpec.{Doc,Comment}?
 
@@ -652,6 +662,14 @@ func NodeDescription(n ast.Node) string {
 		return fmt.Sprintf("unary %s operation", n.Op)
 	case *ast.ValueSpec:
 		return "value specification"
+
+	// forgo syntax nodes.
+	case *ast.PostfixIfStmt:
+		return "postfix if statement"
+	case *ast.ThrowStmt:
+		return "throw statement"
+	case *ast.TryExpr:
+		return "error propagation (?) expression"
 
 	}
 	panic(fmt.Sprintf("unexpected node type: %T", n))

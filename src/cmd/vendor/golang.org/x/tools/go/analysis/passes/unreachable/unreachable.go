@@ -88,8 +88,12 @@ func (d *deadState) findLabels(stmt ast.Stmt) {
 		*ast.GoStmt,
 		*ast.IncDecStmt,
 		*ast.ReturnStmt,
-		*ast.SendStmt:
+		*ast.SendStmt,
+		*ast.ThrowStmt: // forgo
 		// no statements inside
+
+	case *ast.PostfixIfStmt: // forgo
+		d.findLabels(x.Stmt)
 
 	case *ast.BlockStmt:
 		for _, stmt := range x.List {
@@ -278,6 +282,14 @@ func (d *deadState) findDead(stmt ast.Stmt) {
 
 	case *ast.ReturnStmt:
 		d.reachable = false
+
+	case *ast.ThrowStmt: // forgo
+		d.reachable = false
+
+	case *ast.PostfixIfStmt: // forgo
+		d.findDead(x.Stmt)
+		// might not have executed the statement
+		d.reachable = true
 
 	case *ast.SelectStmt:
 		// NOTE: Unlike switch and type switch below, we don't care

@@ -108,6 +108,12 @@ const (
 	KindSwitchCaseBody  // body of CaseClause
 	KindSwitchDone      // block after {Type.}SwitchStmt
 	KindSwitchNextCase  // secondary expression of a multi-expression CaseClause
+
+	// forgo syntax nodes.
+	KindPostfixIfThen // then block of PostfixIfStmt
+	KindPostfixIfDone // block after PostfixIfStmt
+	KindTryReturn     // error-return block of a statement containing a TryExpr
+	KindTryDone       // block after a statement containing a TryExpr
 )
 
 func (kind BlockKind) String() string {
@@ -132,6 +138,10 @@ func (kind BlockKind) String() string {
 		KindSwitchCaseBody:  "SwitchCaseBody",
 		KindSwitchDone:      "SwitchDone",
 		KindSwitchNextCase:  "SwitchNextCase",
+		KindPostfixIfThen:   "PostfixIfThen",
+		KindPostfixIfDone:   "PostfixIfDone",
+		KindTryReturn:       "TryReturn",
+		KindTryDone:         "TryDone",
 	}[kind]
 }
 
