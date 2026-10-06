@@ -206,7 +206,7 @@ x_cgo_forgo_m0_exit(void *unused __attribute__((unused)))
 //	   once the handler that forwarded it returns.
 // The code ends with an 8-byte literal holding the table's address.
 
-#if (defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__))) || (defined(__APPLE__) && defined(__aarch64__))
+#if (defined(__linux__) || defined(__APPLE__)) && (defined(__x86_64__) || defined(__aarch64__))
 
 // struct forgo_sigstub_table is filled in by the runtime.
 // Keep in sync with forgoSigStubTable in runtime/forgo_unload_unix.go.
