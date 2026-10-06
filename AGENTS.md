@@ -399,6 +399,11 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
 - `src/runtime/cgo/gcc_forgo_multiruntime.c` — tells another forgo runtime's
   signal handler from a C one with `dladdr`/`dlopen`/`dlsym` (weak outside
   macOS) and exports `_forgo_cgo_sighandler` for that check.
+- `src/runtime/forgo_stw.go` — a stop-the-world re-takes the Ps of
+  goroutines that entered a system call after it began, hooked into
+  `stopTheWorldWithSema`'s wait loop with one line. Otherwise a host thread
+  that returned from its last call into Go just then kept its P and the stop
+  never finished.
 - `src/runtime/forgo_multiruntime_windows.go` — a per-process registry of
   runtimes (named file mapping keyed by PID) through which the console
   control handler delivers events to every runtime; hooked into `ctrlHandler`
