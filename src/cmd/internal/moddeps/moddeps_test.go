@@ -470,6 +470,12 @@ func findGorootModules(t *testing.T) []gorootModule {
 				// but might be used for example as code generators.
 				return filepath.SkipDir
 			}
+			if info.IsDir() && path == filepath.Join(testenv.GOROOT(t), "forgopls") {
+				// forgopls is forgo's standalone gopls extension, built on its own
+				// with golang.org/x/tools. It is not part of the std or cmd build,
+				// so it is not held to the vendoring rules for GOROOT modules.
+				return filepath.SkipDir
+			}
 			if info.IsDir() || info.Name() != "go.mod" {
 				return nil
 			}
