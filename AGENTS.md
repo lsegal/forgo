@@ -384,6 +384,9 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
   README.md's "Several Go runtimes in one process": only C data crosses a
   library boundary, and per-instance state lives behind a handle, not in
   package globals.
+- `pluginval/` — the same cases in a real plugin host: Go VST3 plugins
+  validated with pluginval by `pluginval/run.sh`, which CI runs. See
+  `pluginval/README.md`.
 
 These are all either new files (untouched by upstream merges) or single-line
 hooks into existing files. Follow that same pattern if you're adding a new

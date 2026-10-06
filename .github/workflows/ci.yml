@@ -177,6 +177,16 @@ jobs:
           forgo test -count=1 -v -run TestMultiRuntime cmd/cgo/internal/testcshared
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # The same multi-runtime cases in a real plugin host: pluginval
+      # validates a VST3 module whose plugin classes run on three Go
+      # runtimes in one process. See pluginval/README.md.
+      - name: pluginval multi-runtime VST3 validation
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          ./pluginval/run.sh
+
       # Exercises the published install.{sh,ps1} release assets for real
       # against the latest release, so broken bootstrap URLs and installer
       # download/extract bugs fail CI instead of being discovered by a user.
