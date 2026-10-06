@@ -2584,6 +2584,14 @@ func prefixof(ctxt *obj.Link, a *obj.Addr) int {
 		return 0x26
 
 	case REG_TLS:
+		if isDarwinAMD64(ctxt) {
+			// On darwin/amd64 the register holds the offset of the
+			// g slot from GS (runtime.tls_g), so
+			//     MOV off(CX)(TLS*1), AX
+			// becomes
+			//     mov %gs:off(%rcx), %rax
+			return 0x65 // GS
+		}
 		if ctxt.Flag_shared && ctxt.Headtype != objabi.Hwindows {
 			// When building for inclusion into a shared library, an instruction of the form
 			//     MOV off(CX)(TLS*1), AX
@@ -3737,7 +3745,7 @@ func (ab *AsmBuf) asmandsz(ctxt *obj.Link, cursym *obj.LSym, p *obj.Prog, a *obj
 
 	if REG_AX <= base && base <= REG_R15 {
 		if a.Index == REG_TLS && !ctxt.Flag_shared && !isAndroid &&
-			ctxt.Headtype != objabi.Hwindows {
+			ctxt.Headtype != objabi.Hwindows && !isDarwinAMD64(ctxt) {
 			rel = obj.Reloc{}
 			rel.Type = objabi.R_TLS_LE
 			rel.Siz = 4

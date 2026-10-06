@@ -28,9 +28,6 @@ func g0_pthread_setspecific(k pthreadkey, value uintptr) int32 {
 }
 func pthread_setspecific_trampoline()
 
-//go:cgo_import_dynamic libc_pthread_key_create pthread_key_create "/usr/lib/libSystem.B.dylib"
-//go:cgo_import_dynamic libc_pthread_setspecific pthread_setspecific "/usr/lib/libSystem.B.dylib"
-
 // tlsinit allocates a thread-local storage slot for g.
 //
 // It finds the first available slot using pthread_key_create and uses
