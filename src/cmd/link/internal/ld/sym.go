@@ -100,16 +100,12 @@ func (ctxt *Link) computeTLSOffset() {
 			log.Fatalf("unknown thread-local storage offset for darwin/%s", ctxt.Arch.Name)
 
 			/*
-			 * For x86, Apple has reserved a slot in the TLS for Go. See issue 23617.
-			 * That slot is at offset 0x30 on amd64.
-			 * The slot will hold the G pointer.
-			 * These constants should match those in runtime/sys_darwin_amd64.s
-			 * and runtime/cgo/gcc_darwin_amd64.c.
+			 * The runtime allocates a pthread key for g at startup and
+			 * stores its offset from GS (amd64) or TPIDRRO_EL0 (arm64) in
+			 * runtime.tls_g, so each Go runtime in a process has its own
+			 * slot. The compiler and assembler never emit TLS relocations.
 			 */
-		case sys.AMD64:
-			ctxt.Tlsoffset = 0x30
-
-		case sys.ARM64:
+		case sys.AMD64, sys.ARM64:
 			ctxt.Tlsoffset = 0 // dummy value, not needed
 		}
 	}

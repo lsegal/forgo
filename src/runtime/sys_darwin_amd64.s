@@ -396,6 +396,54 @@ noerr:
 	MOVL	DX, 16(BX)
 	RET
 
+// tlsinit allocates a pthread key to hold g and stores the key's
+// offset from GS in runtime·tls_g, so that each Go runtime loaded
+// into a process (such as several c-shared libraries) has its own g
+// slot instead of sharing the one Apple reserves for Go. It does
+// nothing if tls_g is already set.
+//
+// Like tlsinit on darwin/arm64, this runs before g is usable, so it
+// calls libc directly rather than through asmcgocall. It follows the
+// C calling convention for clobbered registers.
+TEXT runtime·tlsinit(SB),NOSPLIT|NOFRAME,$0
+	MOVQ	runtime·tls_g(SB), AX
+	TESTQ	AX, AX
+	JNZ	done
+
+	PUSHQ	BP
+	MOVQ	SP, BP
+	SUBQ	$16, SP
+	ANDQ	$~15, SP	// alignment for C code
+
+	MOVQ	SP, DI		// arg 1: &key
+	XORL	SI, SI		// arg 2: no destructor
+	CALL	libc_pthread_key_create(SB)
+	TESTL	AX, AX
+	JNZ	fail
+
+	// Check that the key's value lives at GS+key*8, as tlsinit on
+	// darwin/arm64 does by searching the TLS block for a magic value.
+	MOVQ	0(SP), DI	// arg 1: key
+	MOVQ	$0xc476c475c47957, SI	// arg 2: magic
+	CALL	libc_pthread_setspecific(SB)
+	TESTL	AX, AX
+	JNZ	fail
+	MOVQ	0(SP), CX
+	SHLQ	$3, CX
+	MOVQ	$0xc476c475c47957, AX
+	CMPQ	AX, 0(CX)(GS)
+	JNE	fail
+	MOVQ	$0, 0(CX)(GS)
+	MOVQ	CX, runtime·tls_g(SB)
+
+	MOVQ	BP, SP
+	POPQ	BP
+done:
+	RET
+fail:
+	CALL	runtime·abort(SB)
+	RET
+
 // mstart_stub is the first function executed on a new thread started by pthread_create.
 // It just does some low-level setup and then calls mstart.
 // Note: called with the C calling convention.
@@ -409,8 +457,8 @@ TEXT runtime·mstart_stub(SB),NOSPLIT|NOFRAME,$0
 	MOVQ	m_g0(DI), DX // g
 
 	// Initialize TLS entry.
-	// See cmd/link/internal/ld/sym.go:computeTLSOffset.
-	MOVQ	DX, 0x30(GS)
+	get_tls(CX)
+	MOVQ	DX, g(CX)
 
 	CALL	runtime·mstart(SB)
 

@@ -603,8 +603,8 @@ collector, scheduler, and goroutines. The libraries only meet through the
 C ABI, the same way the host talks to them:
 
 - The `g` register of each runtime lives in its own thread-local slot
-  (per-module ELF TLS on Linux, a `pthread_key` on Apple Silicon, `TlsAlloc`
-  on Windows), so on any thread each runtime only sees its own goroutine,
+  (per-module ELF TLS on Linux, a `pthread_key` on macOS, `TlsAlloc` on
+  Windows), so on any thread each runtime only sees its own goroutine,
   and callbacks can nest host → A → C → B → C → A on one thread.
 - No Go symbol is exported from the library. ELF output is linked with
   `-Bsymbolic`, Mach-O uses two-level namespaces, and PE exports only the
@@ -686,11 +686,10 @@ Rules for plugin authors:
 
 Limits:
 
-- darwin/amd64 (Intel Macs and Rosetta) is not covered. Every Go runtime
-  there stores `g` in the same Apple-reserved TLS slot (`%gs:0x30`), so two
-  runtimes see each other's goroutines; this is the crash in
-  golang/go#65050. forgo does not currently build for darwin/amd64,
-  linux/arm64, or windows/arm64 at all.
+- On darwin/amd64 (Intel Macs and Rosetta), upstream Go keeps `g` in the
+  Apple-reserved TLS slot `%gs:0x30` that every runtime shares. forgo uses a
+  per-runtime `pthread_key` instead, whose offset from `%gs` is in
+  `runtime.tls_g`. Debuggers that read `g` from `%gs:0x30` won't find it.
 - Unloading is supported on linux/amd64, linux/arm64, darwin/arm64,
   windows/amd64 and windows/arm64. On other platforms a library stays
   loaded after `dlclose`, as with upstream Go.
