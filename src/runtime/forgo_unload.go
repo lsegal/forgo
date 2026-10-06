@@ -146,14 +146,25 @@ func forgoUnload(a *forgoUnloadArg) {
 // network poller, so that they see forgoUnloading.
 func forgoWakeAll() {
 	lock(&sched.lock)
+	// Take idle Ms off the idle list so that nothing else wakes them too.
+	for mget() != nil {
+	}
 	for mp := allm; mp != nil; mp = mp.alllink {
 		if !mp.isextra && !mp.forgoExited.Load() {
 			forgoNoteWake(&mp.park)
 		}
 	}
-	forgoNoteWake(&sched.sysmonnote)
+	if sched.sysmonwait.Load() {
+		sched.sysmonwait.Store(false)
+		notewakeup(&sched.sysmonnote)
+	}
 	unlock(&sched.lock)
-	forgoNoteWake(&newmHandoff.wake)
+	lock(&newmHandoff.lock)
+	if newmHandoff.waiting {
+		newmHandoff.waiting = false
+		notewakeup(&newmHandoff.wake)
+	}
+	unlock(&newmHandoff.lock)
 	forgoWakeSignalReceiver()
 	if netpollinited() {
 		netpollBreak()

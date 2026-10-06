@@ -58,8 +58,12 @@ func forgoJoinThreads() {
 	asmcgocall(_cgo_forgo_join, nil)
 }
 
+// forgoWakeSignalReceiver wakes signal_recv, which sleeps in a system
+// call, the same way sigsend does.
 func forgoWakeSignalReceiver() {
-	forgoNoteWake(&sig.note)
+	if sig.state.CompareAndSwap(sigReceiving, sigIdle) {
+		notewakeup(&sig.note)
+	}
 }
 
 func forgoThreadExitOS(mp *m) {

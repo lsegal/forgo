@@ -163,3 +163,34 @@ func LiveInstances() int {
 	defer instMu.Unlock()
 	return len(instances)
 }
+
+var generation int
+
+// Generation counts calls since the library was loaded. A freshly loaded
+// copy starts again from 1, which shows that unloading really dropped the
+// old one.
+func Generation() int {
+	mu.Lock()
+	defer mu.Unlock()
+	generation++
+	return generation
+}
+
+// StartBackground starts goroutines that are parked when the library is
+// unloaded: one waiting on a channel, one on a ticker, and one that
+// allocates in a loop.
+func StartBackground() {
+	never := make(chan int)
+	go func() { <-never }()
+	go func() {
+		t := time.NewTicker(time.Millisecond)
+		for range t.C {
+		}
+	}()
+	go func() {
+		for {
+			Work(16, 1)
+			time.Sleep(100 * time.Microsecond)
+		}
+	}()
+}

@@ -85,12 +85,43 @@ func TestMultiRuntime(t *testing.T) {
 			runMultiRuntimeHost(t, []string{"MULTIRUNTIME_RTLD_GLOBAL=1"}, host, "stress", liba, libb)
 		})
 	}
+	if unloadSupported() {
+		// Load, use and unload one library 100 times next to a second
+		// library that stays loaded.
+		for _, p := range pairs {
+			t.Run(p.name+"/unload", func(t *testing.T) {
+				runMultiRuntimeHost(t, nil, host, "unload", p.a, p.b)
+			})
+		}
+		t.Run("UnloadBlocked", func(t *testing.T) {
+			out, err := exec.Command(host, "unloadblocked", liba, libb).CombinedOutput()
+			const want = "unloading a Go library while goroutines are blocked in system calls or C code"
+			if err == nil || !strings.Contains(string(out), want) {
+				t.Fatalf("%s unloadblocked: %v, want a fatal error %q\n%s", host, err, want, out)
+			}
+		})
+		t.Run("ExitBlocked", func(t *testing.T) {
+			runMultiRuntimeHost(t, nil, host, "exitblocked", liba, libb)
+		})
+	}
 	// golang/go#65050 crashed intermittently, so run its shape repeatedly.
 	t.Run("Upstream65050", func(t *testing.T) {
 		for i := 0; i < 50; i++ {
 			runMultiRuntimeHost(t, nil, host, "upstream", liba, liba2)
 		}
 	})
+}
+
+// unloadSupported reports whether forgo c-shared libraries can be unloaded
+// on this platform; keep in sync with runtime.forgoUnloadable.
+func unloadSupported() bool {
+	switch GOOS {
+	case "linux", "windows":
+		return GOARCH == "amd64" || GOARCH == "arm64"
+	case "darwin":
+		return GOARCH == "arm64"
+	}
+	return false
 }
 
 // runMultiRuntimeHost runs the host in mode and fails the test unless it
