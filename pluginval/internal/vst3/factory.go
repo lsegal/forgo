@@ -127,38 +127,53 @@ func OpenFactory(getPluginFactory unsafe.Pointer) (*ModuleFactory, error) {
 	p := callP(getPluginFactory)
 	throw errors.New("GetPluginFactory returned nil") if p == nil
 	m := &ModuleFactory{p: p}
-	var p2 unsafe.Pointer
-	if callIPPP(p, mQueryInterface, unsafe.Pointer(&iidIPluginFactory2), unsafe.Pointer(&p2)) == ResultOK {
-		m.p2 = p2
+	iid, p2 := cnew[TUID](), cnew[unsafe.Pointer]()
+	defer cfree(iid)
+	defer cfree(p2)
+	*iid = iidIPluginFactory2
+	if callIPPP(p, mQueryInterface, unsafe.Pointer(iid), unsafe.Pointer(p2)) == ResultOK {
+		m.p2 = *p2
 	}
 	return m, nil
 }
+
+// Calls into another module pass it only C memory, so that no Go
+// pointer crosses into it.
 
 // Classes lists the module's classes.
 func (m *ModuleFactory) Classes() []ClassInfo2 {
 	n := callIP(m.p, mCountClasses)
 	infos := make([]ClassInfo2, 0, n)
+	info := cnew[ClassInfo2]()
+	defer cfree(info)
+	c := cnew[ClassInfo]()
+	defer cfree(c)
 	for i := range n {
-		var info ClassInfo2
 		if m.p2 != nil {
-			if callIPIP(m.p2, mGetClassInfo2, i, unsafe.Pointer(&info)) != ResultOK {
+			*info = ClassInfo2{}
+			if callIPIP(m.p2, mGetClassInfo2, i, unsafe.Pointer(info)) != ResultOK {
 				continue
 			}
-		} else {
-			var c ClassInfo
-			if callIPIP(m.p, mGetClassInfo, i, unsafe.Pointer(&c)) != ResultOK {
-				continue
-			}
-			info.CID, info.Cardinality, info.Category, info.Name = c.CID, c.Cardinality, c.Category, c.Name
+			infos = append(infos, *info)
+			continue
 		}
-		infos = append(infos, info)
+		*c = ClassInfo{}
+		if callIPIP(m.p, mGetClassInfo, i, unsafe.Pointer(c)) != ResultOK {
+			continue
+		}
+		infos = append(infos, ClassInfo2{CID: c.CID, Cardinality: c.Cardinality, Category: c.Category, Name: c.Name})
 	}
 	return infos
 }
 
 // CreateInstance creates one of the module's classes.
 func (m *ModuleFactory) CreateInstance(cid, iid *TUID) (unsafe.Pointer, Result) {
-	var obj unsafe.Pointer
-	r := callIPPPP(m.p, mCreateInstance, unsafe.Pointer(cid), unsafe.Pointer(iid), unsafe.Pointer(&obj))
-	return obj, r
+	args := cnew[struct {
+		cid, iid TUID
+		obj      unsafe.Pointer
+	}]()
+	defer cfree(args)
+	args.cid, args.iid = *cid, *iid
+	r := callIPPPP(m.p, mCreateInstance, unsafe.Pointer(&args.cid), unsafe.Pointer(&args.iid), unsafe.Pointer(&args.obj))
+	return args.obj, r
 }

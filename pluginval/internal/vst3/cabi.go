@@ -144,6 +144,17 @@ func newView(vtbl unsafe.Pointer, h uint64) unsafe.Pointer {
 
 func freeView(p unsafe.Pointer) { C.free(p) }
 
+// cnew allocates a zeroed T with malloc, for passing to another module
+// without handing it a Go pointer. Free it with cfree.
+func cnew[T any]() *T {
+	var zero T
+	p := (*T)(C.malloc(C.size_t(unsafe.Sizeof(zero))))
+	*p = zero
+	return p
+}
+
+func cfree[T any](p *T) { C.free(unsafe.Pointer(p)) }
+
 func handleOf(self unsafe.Pointer) uint64 { return (*view)(self).handle }
 
 // method returns the function at index i of a foreign object's table.
