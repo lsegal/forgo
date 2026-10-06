@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"internal/cfg"
 	"internal/goarch"
+	"internal/goroot"
 	"internal/platform"
 	"os"
 	"os/exec"
@@ -270,6 +271,14 @@ func GoTool() (string, error) {
 }
 
 var goTool = sync.OnceValues(func() (string, error) {
+	// forgo: make.bash installs the go command as bin/forgo, so it is not
+	// found as "go" on the PATH that cmd/go sets up for tests. Prefer the
+	// GOROOT's own go command over whatever "go" is on PATH.
+	if gorootDir, err := findGOROOT(); err == nil {
+		if path, err := exec.LookPath(goroot.GoCommand(gorootDir)); err == nil {
+			return path, nil
+		}
+	}
 	return exec.LookPath("go")
 })
 

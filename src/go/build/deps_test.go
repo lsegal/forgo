@@ -823,6 +823,7 @@ var depsRules = `
 	internal/profile,
 	internal/trace,
 	internal/trace/traceviewer/format,
+	internal/goroot,
 	net/http
 	< internal/trace/traceviewer;
 
