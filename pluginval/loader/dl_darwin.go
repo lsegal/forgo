@@ -5,7 +5,9 @@
 package main
 
 const (
-	rtldNow   = 0x2
-	rtldLocal = 0x4
-	libExt    = ".dylib"
+	rtldNow      = 0x2
+	rtldLocal    = 0x4
+	rtldNoload   = 0x10
+	rtldNodelete = 0x80
+	libExt       = ".dylib"
 )

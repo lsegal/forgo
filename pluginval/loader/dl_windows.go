@@ -18,6 +18,7 @@ var (
 )
 
 const (
+	getModuleHandleExFlagPin               = 0x1
 	getModuleHandleExFlagUnchangedRefcount = 0x2
 	getModuleHandleExFlagFromAddress       = 0x4
 )
@@ -36,6 +37,21 @@ func dlsym(h unsafe.Pointer, name string) (unsafe.Pointer, error) {
 		return nil, err
 	}
 	return unsafe.Pointer(p), nil
+}
+
+// pin keeps the already loaded library at path loaded until the process
+// exits.
+func pin(path string) error {
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	var h syscall.Handle
+	r, _, err := procGetModuleHandleEx.Call(getModuleHandleExFlagPin, uintptr(unsafe.Pointer(p)), uintptr(unsafe.Pointer(&h)))
+	if r == 0 {
+		return err
+	}
+	return nil
 }
 
 // modulePath returns the path of the library that holds address pc.

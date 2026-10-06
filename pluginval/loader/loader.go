@@ -16,8 +16,14 @@
 // loaded with RTLD_LOCAL (LoadLibrary on Windows), in the order of the
 // libraries array. Each class forwards to its library's own
 // GetPluginFactory, so the host calls straight into that library's Go
-// code. The libraries are never unloaded: a Go c-shared library cannot
-// be.
+// code.
+//
+// The libraries are never unloaded, so the loader must not be either. A
+// host may unload a module once it has listed its classes, as pluginval
+// does between scanning a module and testing it. The libraries' signal
+// handlers sit on top of the loader's and forward to it, and forgo
+// libraries can only be unloaded in reverse load order. So before it loads
+// them, the loader pins itself in the process.
 package main
 
 import (
@@ -55,11 +61,15 @@ type loader struct {
 
 func (l *loader) load() {
 	l.once.Do(func() {
-		dir, err := moduleDir()
+		self, err := modulePath(reflect.ValueOf(openModule).Pointer())
+		if err == nil {
+			err = pin(self)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "loader: %v\n", err)
 			return
 		}
+		dir := filepath.Dir(self)
 		for _, lib := range libraries {
 			path := filepath.Join(dir, lib.file+libExt)
 			f, err := openModule(path)
@@ -105,13 +115,6 @@ func openModule(path string) (f *vst3.ModuleFactory, err error) {
 	h := dlopen(path)?
 	sym := dlsym(h, "GetPluginFactory")?
 	f = vst3.OpenFactory(sym)?
-	return
-}
-
-// moduleDir returns the directory of the loader's own binary.
-func moduleDir() (dir string, err error) {
-	path := modulePath(reflect.ValueOf(moduleDir).Pointer())?
-	dir = filepath.Dir(path)
 	return
 }
 

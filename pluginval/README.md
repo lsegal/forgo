@@ -34,11 +34,6 @@ pointers. `internal/vst3` implements the parts these plugins need:
   `getState`/`setState`. The component is also its own edit controller.
 - `factory.go`: the module's `GetPluginFactory`, and `ModuleFactory` for
   calling another module's factory.
-- `pin_windows.go`: pins the module in the process. pluginval unloads a
-  module after scanning it and loads it again to test it, and a Go
-  `c-shared` library cannot be unloaded (#10). ELF libraries are linked
-  with `-z nodelete` and macOS keeps them loaded, but Windows would unmap
-  the runtime's code under its running threads.
 
 ## What is tested
 
@@ -79,6 +74,12 @@ but it tests every class in that file one after another in the same
 process. The pluginval 1.0.4 command line always validates in process. So
 each class is validated while four Go runtimes are resident in the
 process.
+
+pluginval unloads a module after scanning it and loads it again to test
+it. gain and drive are unloaded and reloaded that way (see "Unloading and
+reloading" in the top-level README). The loader pins itself in the process
+before it loads the libraries instead: their signal handlers sit on top of
+its own, and forgo libraries can only be unloaded in reverse load order.
 
 For each class, pluginval opens the plugin cold and warm. It then runs its
 whole test suite on one instance, which includes processing at several

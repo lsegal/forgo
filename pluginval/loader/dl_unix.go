@@ -33,9 +33,20 @@ func dlError() error {
 }
 
 func dlopen(path string) (unsafe.Pointer, error) {
+	return dlopenFlags(path, rtldNow|rtldLocal)
+}
+
+// pin keeps the already loaded library at path loaded until the process
+// exits.
+func pin(path string) error {
+	_, err := dlopenFlags(path, rtldNow|rtldLocal|rtldNoload|rtldNodelete)
+	return err
+}
+
+func dlopenFlags(path string, flags C.int) (unsafe.Pointer, error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
-	h := C.dlopen(cpath, rtldNow|rtldLocal)
+	h := C.dlopen(cpath, flags)
 	if h == nil {
 		return nil, dlError()
 	}
