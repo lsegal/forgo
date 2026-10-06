@@ -493,6 +493,7 @@ func setsig(i uint32, fn uintptr) {
 			fn = abi.FuncPCABI0(sigtramp)
 		}
 	}
+	fn = forgoSigStubFn(i, fn)
 	sa.sa_handler = fn
 	sigaction(i, &sa, nil)
 }

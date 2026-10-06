@@ -4,12 +4,19 @@
 
 package runtime
 
+import "unsafe"
+
 type forgoSigaction = usigactiont
 
 //go:nosplit
 //go:nowritebarrierrec
 func forgoGetSigaction(sig uint32, sa *usigactiont) {
 	sigaction(sig, nil, sa)
+}
+
+// forgoSigactionHandler returns the handler sa installs.
+func forgoSigactionHandler(sa *usigactiont) uintptr {
+	return *(*uintptr)(unsafe.Pointer(&sa.__sigaction_u))
 }
 
 func forgoSetSigaction(sig uint32, sa *usigactiont) {

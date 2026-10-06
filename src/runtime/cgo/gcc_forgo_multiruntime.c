@@ -30,6 +30,8 @@
 // for os/signal.Notify, or 0 before it has installed one.
 static uintptr_t forgo_sighandler;
 
+extern uintptr_t _cgo_forgo_sigstub_owner(uintptr_t);
+
 // _forgo_cgo_sighandler is how another runtime reads forgo_sighandler. It
 // is the only symbol this file exports, and it is only ever called through
 // dlsym on this module's own handle.
@@ -65,8 +67,15 @@ x_cgo_forgo_isgosighandler(uintptr_t *arg)
 	}
 #endif
 	_cgo_tsan_acquire();
-	if (dladdr((void*)arg[0], &info) == 0 || info.dli_fname == NULL) {
-		goto out;
+	h = (void*)arg[0];
+	if (dladdr(h, &info) == 0 || info.dli_fname == NULL) {
+		// A runtime that can be unloaded installs its handler through a
+		// stub outside its module (see gcc_forgo_unload_unix.c); look
+		// the module up by the handler behind the stub instead.
+		h = (void*)_cgo_forgo_sigstub_owner(arg[0]);
+		if (h == NULL || dladdr(h, &info) == 0 || info.dli_fname == NULL) {
+			goto out;
+		}
 	}
 	h = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
 	if (h == NULL) {

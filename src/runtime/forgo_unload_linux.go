@@ -12,6 +12,11 @@ func forgoGetSigaction(sig uint32, sa *sigactiont) {
 	sigaction(sig, nil, sa)
 }
 
+// forgoSigactionHandler returns the handler sa installs.
+func forgoSigactionHandler(sa *sigactiont) uintptr {
+	return sa.sa_handler
+}
+
 func forgoSetSigaction(sig uint32, sa *sigactiont) {
 	sigaction(sig, sa, nil)
 }

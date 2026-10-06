@@ -403,6 +403,7 @@ func setsig(i uint32, fn uintptr) {
 			fn = abi.FuncPCABI0(sigtramp)
 		}
 	}
+	fn = forgoSigStubFn(i, fn)
 	*(*uintptr)(unsafe.Pointer(&sa.__sigaction_u)) = fn
 	sigaction(i, &sa, nil)
 }
