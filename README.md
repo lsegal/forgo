@@ -704,9 +704,9 @@ Limits:
   Apple-reserved TLS slot `%gs:0x30` that every runtime shares. forgo uses a
   per-runtime `pthread_key` instead, whose offset from `%gs` is in
   `runtime.tls_g`. Debuggers that read `g` from `%gs:0x30` won't find it.
-- Unloading is supported on linux/amd64, linux/arm64, darwin/arm64,
-  windows/amd64 and windows/arm64. On other platforms a library stays
-  loaded after `dlclose`, as with upstream Go.
+- Unloading is supported on linux/amd64, linux/arm64, darwin/amd64,
+  darwin/arm64, windows/amd64 and windows/arm64. On other platforms a
+  library stays loaded after `dlclose`, as with upstream Go.
 - A library built by upstream Go does not forward preemption signals. If
   one is loaded after a forgo library, it can still swallow the forgo
   library's preemption requests. Load upstream-built libraries first when

@@ -59,10 +59,8 @@ func forgoUnloadable() bool {
 		return false
 	}
 	switch GOOS {
-	case "linux", "windows":
+	case "linux", "windows", "darwin":
 		return GOARCH == "amd64" || GOARCH == "arm64"
-	case "darwin":
-		return GOARCH == "arm64"
 	}
 	return false
 }

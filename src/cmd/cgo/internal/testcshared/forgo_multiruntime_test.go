@@ -145,10 +145,8 @@ func TestMultiRuntime(t *testing.T) {
 // on this platform; keep in sync with runtime.forgoUnloadable.
 func unloadSupported() bool {
 	switch GOOS {
-	case "linux", "windows":
+	case "linux", "windows", "darwin":
 		return GOARCH == "amd64" || GOARCH == "arm64"
-	case "darwin":
-		return GOARCH == "arm64"
 	}
 	return false
 }
