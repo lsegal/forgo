@@ -62,11 +62,22 @@ func CanUse1InsnTLS(ctxt *obj.Link) bool {
 	switch ctxt.Headtype {
 	case objabi.Hplan9, objabi.Hwindows:
 		return false
+	case objabi.Hdarwin:
+		// darwin/amd64 uses a global variable for the tls offset,
+		// so that each Go runtime in a process has its own g slot.
+		return false
 	case objabi.Hlinux, objabi.Hfreebsd:
 		return !ctxt.Flag_shared
 	}
 
 	return true
+}
+
+// isDarwinAMD64 reports whether ctxt targets darwin/amd64, where
+// runtime.tls_g holds the offset from GS of a pthread key allocated
+// at startup rather than the fixed slot Apple reserves for Go.
+func isDarwinAMD64(ctxt *obj.Link) bool {
+	return ctxt.Headtype == objabi.Hdarwin && ctxt.Arch.Family == sys.AMD64
 }
 
 func progedit(ctxt *obj.Link, p *obj.Prog, newprog obj.ProgAlloc) {
@@ -159,11 +170,12 @@ func progedit(ctxt *obj.Link, p *obj.Prog, newprog obj.ProgAlloc) {
 		}
 	}
 
-	// Android and Windows use a tls offset determined at runtime. Rewrite
+	// Android, Windows and darwin/amd64 use a tls offset determined at
+	// runtime. Rewrite
 	//	MOVQ TLS, BX
 	// to
 	//	MOVQ runtime.tls_g(SB), BX
-	if (isAndroid || ctxt.Headtype == objabi.Hwindows) &&
+	if (isAndroid || ctxt.Headtype == objabi.Hwindows || isDarwinAMD64(ctxt)) &&
 		(p.As == AMOVQ || p.As == AMOVL) && p.From.Type == obj.TYPE_REG && p.From.Reg == REG_TLS && p.To.Type == obj.TYPE_REG && REG_AX <= p.To.Reg && p.To.Reg <= REG_R15 {
 		p.From.Type = obj.TYPE_MEM
 		p.From.Name = obj.NAME_EXTERN
