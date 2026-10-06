@@ -32,6 +32,7 @@ func sysAllocOS(n uintptr, vmaName string) unsafe.Pointer {
 		return nil
 	}
 	setVMAName(p, n, vmaName)
+	forgoMemAdd(p, n)
 	return p
 }
 
@@ -152,6 +153,7 @@ func sysHugePageCollapseOS(v unsafe.Pointer, n uintptr) {
 //
 //go:nosplit
 func sysFreeOS(v unsafe.Pointer, n uintptr) {
+	forgoMemRemove(v, n)
 	munmap(v, n)
 }
 
@@ -166,6 +168,7 @@ func sysReserveOS(v unsafe.Pointer, n uintptr, vmaName string) unsafe.Pointer {
 		return nil
 	}
 	setVMAName(p, n, vmaName)
+	forgoMemAdd(p, n)
 	return p
 }
 

@@ -59,5 +59,6 @@ threadentry(void *v)
 	}
 
 	crosscall1(ts.fn, setg_gcc, ts.g);
+	_cgo_forgo_thread_done();
 	return NULL;
 }

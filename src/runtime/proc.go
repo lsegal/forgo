@@ -1478,6 +1478,7 @@ const (
 	stwForTestReadMemStatsSlow                      // "ReadMemStatsSlow (test)"
 	stwForTestPageCachePagesLeaked                  // "PageCachePagesLeaked (test)"
 	stwForTestResetDebugLog                         // "ResetDebugLog (test)"
+	stwForgoUnload                                  // "unload"
 )
 
 func (r stwReason) String() string {
@@ -1509,6 +1510,7 @@ var stwReasonStrings = [...]string{
 	stwForTestReadMemStatsSlow:     "ReadMemStatsSlow (test)",
 	stwForTestPageCachePagesLeaked: "PageCachePagesLeaked (test)",
 	stwForTestResetDebugLog:        "ResetDebugLog (test)",
+	stwForgoUnload:                 "unload",
 }
 
 // worldStop provides context from the stop-the-world required by the
@@ -1900,6 +1902,11 @@ func mstart0() {
 	gp.stackguard1 = gp.stackguard0
 	mstart1()
 
+	if forgoUnloading.Load() {
+		forgoThreadExit()
+		return
+	}
+
 	// Exit this thread.
 	if mStackIsSystemAllocated() {
 		// Windows, Solaris, illumos, Darwin, AIX and Plan 9 always system-allocate
@@ -1982,8 +1989,10 @@ func mPark() {
 	if goexperiment.RuntimeSecret {
 		eraseSecretsSignalStk()
 	}
+	forgoCheckExit()
 	notesleep(&gp.m.park)
 	noteclear(&gp.m.park)
+	forgoCheckExit()
 }
 
 // mexit tears down and exits the current thread.
@@ -2873,6 +2882,10 @@ var newmHandoff struct {
 //
 //go:nowritebarrierrec
 func newm(fn func(), pp *p, id int64) {
+	if forgoUnloading.Load() {
+		// The library is being unloaded; start no more threads.
+		return
+	}
 	// allocm adds a new M to allm, but they do not start until created by
 	// the OS in newm1 or the template thread.
 	//
@@ -2999,6 +3012,7 @@ func templateThread() {
 		noteclear(&newmHandoff.wake)
 		unlock(&newmHandoff.lock)
 		notesleep(&newmHandoff.wake)
+		forgoCheckExit()
 	}
 }
 
@@ -6555,6 +6569,7 @@ func sysmon() {
 			delay = 10 * 1000
 		}
 		usleep(delay)
+		forgoCheckExit()
 
 		// sysmon should not enter deep sleep if schedtrace is enabled so that
 		// it can print that information at the right time.
@@ -6594,6 +6609,7 @@ func sysmon() {
 					if shouldRelax {
 						osRelax(false)
 					}
+					forgoCheckExit()
 					lock(&sched.lock)
 					sched.sysmonwait.Store(false)
 					noteclear(&sched.sysmonnote)

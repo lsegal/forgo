@@ -133,6 +133,7 @@ func initsig(preinit bool) {
 		// We don't need to use atomic operations here because
 		// there shouldn't be any other goroutines running yet.
 		fwdSig[i] = getsig(i)
+		forgoSaveSig(i)
 
 		if !sigInstallGoHandler(i) {
 			// Even if we are not installing a signal handler,
@@ -204,6 +205,7 @@ func sigenable(sig uint32) {
 		<-maskUpdatedChan
 		if atomic.Cas(&handlingSig[sig], 0, 1) && !forgoSigStillChained(sig) {
 			atomic.Storeuintptr(&fwdSig[sig], getsig(sig))
+			forgoSaveSig(sig)
 			setsig(sig, abi.FuncPCABIInternal(sighandler))
 			forgoSigInstalled(sig)
 		}
@@ -304,6 +306,7 @@ func setProcessCPUProfilerTimer(hz int32) {
 				h = _SIG_IGN
 			}
 			atomic.Storeuintptr(&fwdSig[_SIGPROF], h)
+			forgoSaveSig(_SIGPROF)
 			setsig(_SIGPROF, abi.FuncPCABIInternal(sighandler))
 		}
 
@@ -1377,6 +1380,9 @@ func unminitSignals() {
 	if getg().m.newSigstack {
 		st := stackt{ss_flags: _SS_DISABLE}
 		sigaltstack(&st, nil)
+		// The thread no longer uses gsignal; forgoUnload relies on
+		// this to tell which signal stacks other threads still use.
+		getg().m.newSigstack = false
 	} else {
 		// We got the signal stack from someone else. Restore
 		// the Go-allocated stack in case this M gets reused

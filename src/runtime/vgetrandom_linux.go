@@ -57,6 +57,7 @@ func vgetrandomGetState() uintptr {
 			return 0
 		}
 		setVMAName(p, allocSize, "getrandom states")
+		forgoMemAdd(p, allocSize)
 		newBlock := uintptr(p)
 		if vgetrandomAlloc.states == nil {
 			vgetrandomAlloc.states = make([]uintptr, 0, num)

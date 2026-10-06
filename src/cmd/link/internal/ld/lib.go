@@ -1684,8 +1684,13 @@ func (ctxt *Link) hostlink() {
 				argv = addASLRargs(argv, *flagAslr)
 			} else {
 				// Pass -z nodelete to mark the shared library as
-				// non-closeable: a dlclose will do nothing.
-				argv = append(argv, "-Wl,-z,nodelete")
+				// non-closeable: a dlclose will do nothing. forgo's
+				// runtime shuts itself down when it is unloaded on
+				// linux/amd64 and linux/arm64 (see
+				// runtime/forgo_unload.go), so those may be closed.
+				if !forgoCSharedUnloadable(ctxt) {
+					argv = append(argv, "-Wl,-z,nodelete")
+				}
 				// Only pass Bsymbolic on non-Windows.
 				argv = append(argv, "-Wl,-Bsymbolic")
 			}
@@ -3203,4 +3208,10 @@ func (ctxt *Link) isLLD() bool {
 		}
 	}
 	return false
+}
+
+// forgoCSharedUnloadable reports whether a c-shared library for this target
+// can be unloaded; keep in sync with runtime.forgoUnloadable.
+func forgoCSharedUnloadable(ctxt *Link) bool {
+	return buildcfg.GOOS == "linux" && (ctxt.Arch.Family == sys.AMD64 || ctxt.Arch.Family == sys.ARM64)
 }

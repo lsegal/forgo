@@ -164,6 +164,10 @@ TEXT runtime·wintls(SB),NOSPLIT,$0
 	BL	(R0)
 	ADD	$16, RSP
 
+	// Remember it, plus one, so that unloading the library can free it.
+	ADD	$1, R0, R1
+	MOVD	R1, runtime·forgoTLSIndex(SB)
+
 	// Assert that slot is less than 64 so we can use _TEB->TlsSlots
 	CMP	$64, R0
 	BLT	ok

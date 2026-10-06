@@ -36,6 +36,8 @@ func libInit() {
 		fn = unsafe.Pointer(abi.FuncPCABIInternal(rt0_lib_go))
 	}
 
+	forgoLibInit()
+
 	// Asynchronous initialization.
 	// Prefer creating a thread via cgo if it is available.
 	if _cgo_sys_thread_create != nil {
