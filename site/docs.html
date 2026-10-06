@@ -327,7 +327,7 @@ GEN1 tick 105</pre>
     <h3 id="plugin-limits" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Limits</h3>
     <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
       <li style="margin-bottom:14px">darwin/amd64 is not covered: every Go runtime there stores <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">g</code> in the same Apple-reserved TLS slot, which is the golang/go#65050 crash. forgo does not currently build for darwin/amd64, linux/arm64, or windows/arm64.</li>
-      <li style="margin-bottom:14px">Unloading is supported on linux/amd64, linux/arm64, darwin/arm64, windows/amd64 and windows/arm64. Elsewhere a library stays loaded after <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">dlclose</code>, as with upstream Go.</li>
+      <li style="margin-bottom:14px">Unloading is supported on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 and windows/arm64. Elsewhere a library stays loaded after <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">dlclose</code>, as with upstream Go.</li>
       <li>A library built by upstream Go does not forward preemption signals, so one loaded after a forgo library can still swallow the forgo library's preemption requests. Load it first when you control the order.</li>
     </ul>
   </section>
