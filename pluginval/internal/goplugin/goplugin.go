@@ -5,8 +5,8 @@
 // Package goplugin is the Go side of the pluginval test plugins: a table
 // of effect instances that the VST3 shim drives through each library's
 // exported functions. Every instance keeps its runtime busy, both on the
-// host's audio thread and in a goroutine of its own, so pluginval's tests
-// run while several Go runtimes allocate and collect garbage at once.
+// host's audio thread and in a worker goroutine of its own, so pluginval's
+// tests run while several Go runtimes allocate and collect garbage at once.
 package goplugin
 
 import (
@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 )
 
@@ -28,7 +27,12 @@ const gcEvery = 32
 type instance struct {
 	effect Effect
 	blocks int
-	stop   chan struct{}
+
+	// Process publishes each block to the worker goroutine through
+	// latest and seq.
+	latest atomic.Pointer[[]float32]
+	seq    atomic.Uint64
+	stop   atomic.Bool
 	done   chan struct{}
 }
 
@@ -37,15 +41,15 @@ var (
 	instances = map[int32]*instance{}
 	nextID    int32
 
-	// sink keeps churn's garbage reachable for a moment so the
+	// sink keeps the worker's garbage reachable for a moment so the
 	// collector has real work.
-	sink atomic.Pointer[[][]byte]
+	sink atomic.Pointer[[]float32]
 )
 
 // New creates an instance running effect and returns its handle.
 func New(effect Effect) int32 {
-	in := &instance{effect: effect, stop: make(chan struct{}), done: make(chan struct{})}
-	go in.churn()
+	in := &instance{effect: effect, done: make(chan struct{})}
+	go in.analyze()
 	mu.Lock()
 	defer mu.Unlock()
 	nextID++
@@ -53,7 +57,7 @@ func New(effect Effect) int32 {
 	return nextID
 }
 
-// Free stops the instance's goroutine and forgets it. Unknown handles
+// Free stops the instance's worker and forgets it. Unknown handles
 // are ignored.
 func Free(id int32) {
 	mu.Lock()
@@ -63,7 +67,7 @@ func Free(id int32) {
 	if in == nil {
 		return
 	}
-	close(in.stop)
+	in.stop.Store(true)
 	<-in.done
 }
 
@@ -71,7 +75,8 @@ func Free(id int32) {
 // reading in and writing out (which may alias). It copies each channel
 // into a fresh Go slice first and forces a collection every gcEvery
 // blocks, so the runtime is allocating and collecting on the host's
-// audio thread. It returns false for an unknown handle.
+// audio thread. It hands the block to the instance's worker. It returns
+// false for an unknown handle.
 func Process(id int32, in, out unsafe.Pointer, nch, n int32, param float32) bool {
 	mu.Lock()
 	inst := instances[id]
@@ -88,6 +93,10 @@ func Process(id int32, in, out unsafe.Pointer, nch, n int32, param float32) bool
 		copy(buf, src)
 		for i, x := range buf {
 			dst[i] = flush(inst.effect(x, param))
+		}
+		if c == 0 {
+			inst.latest.Store(&buf)
+			inst.seq.Add(1)
 		}
 	}
 	// One audio thread drives an instance at a time, so blocks needs no
@@ -107,22 +116,33 @@ func flush(y float32) float32 {
 	return y
 }
 
-// churn allocates in the background until the instance is freed, so this
-// runtime's collector runs while other runtimes are working.
-func (in *instance) churn() {
+// analyze is the instance's worker. It waits for each block the way
+// real-time audio code hands work between threads, spinning on an atomic
+// instead of blocking, then allocates a peak envelope of the block.
+//
+// The spin loop makes no calls, so it has no cooperative preemption point.
+// A collection can only stop it by signalling its thread (asynchronous
+// preemption), which needs the signal routing that lets a runtime loaded
+// before another one still preempt its own goroutines (#5).
+func (in *instance) analyze() {
 	defer close(in.done)
-	tick := time.NewTicker(time.Millisecond)
-	defer tick.Stop()
+	var seen uint64
 	for {
-		select {
-		case <-in.stop:
+		for in.seq.Load() == seen && !in.stop.Load() {
+		}
+		if in.stop.Load() {
 			return
-		case <-tick.C:
 		}
-		garbage := make([][]byte, 256)
-		for j := range garbage {
-			garbage[j] = make([]byte, 1024+j)
+		seen = in.seq.Load()
+		block := *in.latest.Load()
+		peaks := make([]float32, 0, len(block)/16+1)
+		for i := 0; i < len(block); i += 16 {
+			var peak float32
+			for _, x := range block[i:min(i+16, len(block))] {
+				peak = max(peak, x, -x)
+			}
+			peaks = append(peaks, peak)
 		}
-		sink.Store(&garbage)
+		sink.Store(&peaks)
 	}
 }

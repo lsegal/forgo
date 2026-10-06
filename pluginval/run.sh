@@ -14,6 +14,8 @@
 #   STRICTNESS        pluginval strictness level (default: 10)
 #   REPEAT            pluginval --repeat count (default: 3)
 #   ROUNDS            how many times to run pluginval (default: 1)
+#   TIMEOUT_MS        fail when pluginval prints nothing for this long
+#                     (default: 300000)
 #   BUILD_DIR         build output (default: pluginval/build)
 #   VST3_SDK_DIR      local VST3 SDK checkout (default: fetched by CMake)
 
@@ -35,6 +37,7 @@ version="${PLUGINVAL_VERSION:-v1.0.4}"
 strictness="${STRICTNESS:-10}"
 repeat="${REPEAT:-3}"
 rounds="${ROUNDS:-1}"
+timeout="${TIMEOUT_MS:-300000}"
 
 # native converts a path for the Windows tools (cmake, pluginval).
 native() {
@@ -47,9 +50,10 @@ golibs="$build/go"
 mkdir -p "$golibs"
 (
 	cd "$here"
-	export GOROOT="$(cd "$(dirname "$forgo")/.." && pwd)" GOTOOLCHAIN=local CGO_ENABLED=1
-	"$forgo" build -buildmode=c-shared -o "$golibs/forgo-gain$ext" ./gain
-	"$forgo" build -buildmode=c-shared -o "$golibs/forgo-drive$ext" ./drive
+	GOROOT="$(native "$(cd "$(dirname "$forgo")/.." && pwd)")"
+	export GOROOT GOTOOLCHAIN=local CGO_ENABLED=1
+	"$forgo" build -buildmode=c-shared -o "$(native "$golibs/forgo-gain$ext")" ./gain
+	"$forgo" build -buildmode=c-shared -o "$(native "$golibs/forgo-drive$ext")" ./drive
 )
 # A byte-identical copy, so one Go binary is loaded twice from two paths.
 cp "$golibs/forgo-gain$ext" "$golibs/forgo-gain-copy$ext"
@@ -77,7 +81,11 @@ if [ -z "$pluginval" ]; then
 		mkdir -p "$dir"
 		curl -fsSL -o "$dir/pluginval.zip" \
 			"https://github.com/Tracktion/pluginval/releases/download/$version/pluginval_$os.zip"
-		(cd "$dir" && unzip -q pluginval.zip)
+		if command -v unzip >/dev/null; then
+			(cd "$dir" && unzip -q pluginval.zip)
+		else
+			(cd "$dir" && cmake -E tar xf pluginval.zip)
+		fi
 	fi
 	case "$os" in
 	macOS) pluginval="$dir/pluginval.app/Contents/MacOS/pluginval" ;;
@@ -93,7 +101,7 @@ for ((round = 1; round <= rounds; round++)); do
 	log="$build/pluginval-round$round.log"
 	status=0
 	"$pluginval" --strictness-level "$strictness" --repeat "$repeat" --randomise \
-		--skip-gui-tests --timeout-ms 300000 --validate "$(native "$bundle")" 2>&1 |
+		--skip-gui-tests --timeout-ms "$timeout" --validate "$(native "$bundle")" 2>&1 |
 		tee "$log" || status=$?
 	if [ "$status" -ne 0 ]; then
 		echo "run.sh: pluginval failed in round $round (exit $status)" >&2

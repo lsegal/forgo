@@ -6,14 +6,15 @@
 // runtimes in one host process with pluginval.
 //
 // The module's factory exposes one plugin class per Go library. pluginval
-// tests every class in a module one after another in a single process, and
-// a library stays loaded once a class has opened it, so by the last class
-// every Go runtime is resident at once, each still collecting garbage in a
-// background goroutine for every open instance.
+// tests every class in a module one after another in a single process.
+// The first instance of any class loads every library, the way a DAW loads
+// all of a project's plugins before playing it, so each class is tested
+// while all of the Go runtimes are resident.
 //
 // The libraries sit next to this module's binary inside the bundle and are
-// loaded on first use with RTLD_LOCAL (LoadLibrary on Windows). They are
-// never unloaded: a Go c-shared library cannot be.
+// loaded with RTLD_LOCAL (LoadLibrary on Windows), in the order of the
+// libraries array. They are never unloaded: a Go c-shared library cannot
+// be.
 
 #include "public.sdk/source/main/pluginfactory.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
@@ -45,7 +46,6 @@ typedef int (*process_fn) (int, void*, void*, int, int, float);
 struct GoLibrary
 {
 	const char* file; // base name, without the platform extension
-	std::once_flag once;
 	bool ok = false;
 	new_fn newInstance = nullptr;
 	free_fn freeInstance = nullptr;
@@ -57,6 +57,8 @@ struct GoLibrary
 GoLibrary libGain {"forgo-gain"};
 GoLibrary libDrive {"forgo-drive"};
 GoLibrary libGainCopy {"forgo-gain-copy"};
+GoLibrary* libraries[] = {&libGain, &libDrive, &libGainCopy};
+std::once_flag loadOnce;
 
 // moduleDir returns the directory holding this module's binary, with a
 // trailing separator.
@@ -89,31 +91,38 @@ void* lookup (void* handle, const char* name)
 #endif
 }
 
-// load opens lib on first use and reports whether its functions resolved.
+void openLibrary (GoLibrary& lib)
+{
+#ifdef _WIN32
+	std::string path = moduleDir () + lib.file + ".dll";
+	void* handle = LoadLibraryA (path.c_str ());
+#elif defined(__APPLE__)
+	std::string path = moduleDir () + lib.file + ".dylib";
+	void* handle = dlopen (path.c_str (), RTLD_NOW | RTLD_LOCAL);
+#else
+	std::string path = moduleDir () + lib.file + ".so";
+	void* handle = dlopen (path.c_str (), RTLD_NOW | RTLD_LOCAL);
+#endif
+	if (!handle)
+	{
+		fprintf (stderr, "goplugin: cannot load %s\n", path.c_str ());
+		return;
+	}
+	lib.newInstance = reinterpret_cast<new_fn> (lookup (handle, "ForgoPluginNew"));
+	lib.freeInstance = reinterpret_cast<free_fn> (lookup (handle, "ForgoPluginFree"));
+	lib.process = reinterpret_cast<process_fn> (lookup (handle, "ForgoPluginProcess"));
+	lib.ok = lib.newInstance && lib.freeInstance && lib.process;
+	if (!lib.ok)
+		fprintf (stderr, "goplugin: %s is missing an export\n", path.c_str ());
+}
+
+// load opens every library on first use and reports whether lib's
+// functions resolved.
 bool load (GoLibrary& lib)
 {
-	std::call_once (lib.once, [&lib] {
-#ifdef _WIN32
-		std::string path = moduleDir () + lib.file + ".dll";
-		void* handle = LoadLibraryA (path.c_str ());
-#elif defined(__APPLE__)
-		std::string path = moduleDir () + lib.file + ".dylib";
-		void* handle = dlopen (path.c_str (), RTLD_NOW | RTLD_LOCAL);
-#else
-		std::string path = moduleDir () + lib.file + ".so";
-		void* handle = dlopen (path.c_str (), RTLD_NOW | RTLD_LOCAL);
-#endif
-		if (!handle)
-		{
-			fprintf (stderr, "goplugin: cannot load %s\n", path.c_str ());
-			return;
-		}
-		lib.newInstance = reinterpret_cast<new_fn> (lookup (handle, "ForgoPluginNew"));
-		lib.freeInstance = reinterpret_cast<free_fn> (lookup (handle, "ForgoPluginFree"));
-		lib.process = reinterpret_cast<process_fn> (lookup (handle, "ForgoPluginProcess"));
-		lib.ok = lib.newInstance && lib.freeInstance && lib.process;
-		if (!lib.ok)
-			fprintf (stderr, "goplugin: %s is missing an export\n", path.c_str ());
+	std::call_once (loadOnce, [] {
+		for (GoLibrary* l : libraries)
+			openLibrary (*l);
 	});
 	return lib.ok;
 }
@@ -209,8 +218,10 @@ public:
 
 	tresult PLUGIN_API getState (IBStream* state) SMTG_OVERRIDE
 	{
+		// Save the controller's value: the host may have changed it
+		// without processing a block since, so param can be stale.
 		IBStreamer streamer (state, kLittleEndian);
-		streamer.writeFloat (param);
+		streamer.writeFloat (static_cast<float> (getParamNormalized (kParamId)));
 		return kResultOk;
 	}
 
