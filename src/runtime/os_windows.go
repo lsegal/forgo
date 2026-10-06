@@ -536,6 +536,7 @@ func goenvs() {
 	var fn any = ctrlHandler
 	ctrlHandlerPC := compileCallback(*efaceOf(&fn), true)
 	stdcall(_SetConsoleCtrlHandler, ctrlHandlerPC, 1)
+	forgoCtrlRegister()
 
 	monitorSuspendResume()
 }
@@ -1056,7 +1057,7 @@ func ctrlHandler(_type uint32) uintptr {
 		return 0
 	}
 
-	if sigsend(s) {
+	if forgoCtrlSend(s) {
 		if s == windows.SIGTERM {
 			// Windows terminates the process after this handler returns.
 			// Block indefinitely to give signal handlers a chance to clean up,

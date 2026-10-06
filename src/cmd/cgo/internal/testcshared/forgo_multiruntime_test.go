@@ -76,6 +76,14 @@ func TestMultiRuntime(t *testing.T) {
 			})
 		}
 	}
+	// A Ctrl+Break console event reaches every runtime that called Notify.
+	if GOOS == "windows" {
+		for _, p := range pairs {
+			t.Run(p.name+"/ctrlbreak", func(t *testing.T) {
+				runMultiRuntimeHost(t, nil, host, "ctrlbreak", p.a, p.b)
+			})
+		}
+	}
 	// Every instance of a single plugin shares one library image and one
 	// runtime, however many times the host opens it.
 	t.Run("OneLibrary/instances", func(t *testing.T) {
@@ -123,9 +131,15 @@ func runMultiRuntimeHost(t *testing.T, env []string, host, mode, a, b string) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, host, mode, a, b)
 	cmd.Env = append(os.Environ(), env...)
+	// A console control event the host sends itself must not reach the
+	// test, which shares its console.
+	setNewProcessGroup(cmd)
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		t.Fatalf("%s %s: timed out (a runtime is hung)\n%s", host, mode, out)
+	}
+	if s := strings.TrimSpace(string(out)); err == nil && strings.HasPrefix(s, "SKIP: ") {
+		t.Skip(strings.TrimPrefix(s, "SKIP: "))
 	}
 	if err != nil || strings.TrimSpace(string(out)) != "PASS" {
 		t.Fatalf("%s %s: %v\n%s", host, mode, err, out)

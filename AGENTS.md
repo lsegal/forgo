@@ -375,7 +375,17 @@ Several Go runtimes in one process (c-shared plugins loaded by one host):
   `sigtrampgo` in `signal_unix.go` with one line. It also keeps
   `os/signal.Reset` from removing a handler another runtime installed on top
   (hooks in `sigenable`, `sigdisable`, and `sigignore`), and tells `syscall`
-  whether it is in a library.
+  whether it is in a library. A one-line hook at the top of `sigtrampgo`
+  (`forgoSigNotifyFwd`) hands `os/signal.Notify` signals down to another
+  forgo runtime's handler, marked in `si_errno`
+  (`forgo_multiruntime_mark.go`).
+- `src/runtime/cgo/gcc_forgo_multiruntime.c` — tells another forgo runtime's
+  signal handler from a C one with `dladdr`/`dlopen`/`dlsym` (weak outside
+  macOS) and exports `_forgo_cgo_sighandler` for that check.
+- `src/runtime/forgo_multiruntime_windows.go` — a per-process registry of
+  runtimes (named file mapping keyed by PID) through which the console
+  control handler delivers events to every runtime; hooked into `ctrlHandler`
+  and its registration in `os_windows.go`.
 - `src/syscall/forgo_rlimit.go` — a library leaves the open-file limit to
   the host; one condition in `rlimit.go`'s `init`.
 - `src/cmd/cgo/internal/testcshared/forgo_multiruntime_test.go` and

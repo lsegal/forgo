@@ -41,6 +41,18 @@
 // above calls Reset. Calling Notify again while its handler is still in the
 // chain reuses that place instead of installing a second handler, which
 // would forward to itself forever.
+//
+// Notify signals also reach every other forgo runtime that asked for them.
+// When the handler below this runtime's Notify handler is another forgo
+// runtime's (forgoSigBelowGo), this runtime hands the signal down to it as
+// well as keeping it, and marks the copy it hands down (forgoSigMark). A
+// runtime that receives a marked signal it is not listening for passes it on
+// only to another forgo runtime, never to a C handler or the default action,
+// so a C handler installed before the libraries still loses the signal to
+// Notify, as upstream documents. Telling the handlers apart needs the
+// dynamic loader (see runtime/cgo/gcc_forgo_multiruntime.c): the module
+// that holds the handler below must export _forgo_cgo_sighandler, and it
+// must report that very handler.
 
 package runtime
 
@@ -81,9 +93,79 @@ func forgoSigfwdForeign(sig uint32, info *siginfo, ctx unsafe.Pointer) {
 // such handler in the process's chain for sig.
 var forgoSigHandler [_NSIG]uintptr
 
-// forgoSigInstalled records the handler sigenable just installed for sig.
+// forgoSigBelowGo[sig] is 1 when the handler below this runtime's Notify
+// handler for sig is another forgo runtime's Notify handler.
+var forgoSigBelowGo [_NSIG]uint32
+
+// _cgo_forgo_setsighandler and _cgo_forgo_isgosighandler are filled in by
+// runtime/cgo on the platforms that support delivering Notify signals to
+// several runtimes. See runtime/cgo/gcc_forgo_multiruntime.c.
+//
+//go:linkname _cgo_forgo_setsighandler
+var _cgo_forgo_setsighandler unsafe.Pointer
+
+//go:linkname _cgo_forgo_isgosighandler
+var _cgo_forgo_isgosighandler unsafe.Pointer
+
+// forgoSigInstalled records the handler sigenable just installed for sig,
+// publishes it for the other runtimes in the process, and records whether
+// the handler it replaced belongs to one of them.
 func forgoSigInstalled(sig uint32) {
-	atomic.Storeuintptr(&forgoSigHandler[sig], getsig(sig))
+	h := getsig(sig)
+	atomic.Storeuintptr(&forgoSigHandler[sig], h)
+	if !isarchive && !islibrary || _cgo_forgo_setsighandler == nil || _cgo_forgo_isgosighandler == nil {
+		return
+	}
+	asmcgocall(_cgo_forgo_setsighandler, unsafe.Pointer(&h))
+	below := uint32(0)
+	if fwd := atomic.Loaduintptr(&fwdSig[sig]); fwd != _SIG_DFL && fwd != _SIG_IGN {
+		arg := [2]uintptr{fwd, 0}
+		asmcgocall(_cgo_forgo_isgosighandler, unsafe.Pointer(&arg))
+		below = uint32(arg[1])
+	}
+	atomic.Store(&forgoSigBelowGo[sig], below)
+}
+
+// forgoSigNotifyFwd hands an asynchronous Notify signal down to the forgo
+// runtime below this one. It is called first thing in sigtrampgo and
+// reports whether the signal is fully handled.
+//
+// A signal from the kernel that this runtime is listening for goes down
+// marked, and this runtime then handles it as usual. A marked signal comes
+// from a forgo runtime above: this runtime handles it if it is listening,
+// passes it down if the handler below is another forgo runtime, and drops it
+// otherwise.
+//
+//go:nosplit
+//go:nowritebarrierrec
+func forgoSigNotifyFwd(sig uint32, info *siginfo, ctx unsafe.Pointer) bool {
+	if !isarchive && !islibrary || sig >= _NSIG || info == nil {
+		return false
+	}
+	if sigtable[sig].flags&_SigPanic != 0 || sig == _SIGPIPE || sig == sigPreempt || sig == _SIGPROF {
+		return false
+	}
+	marked := forgoSigMarked(info)
+	if !marked && atomic.Loaduintptr(&forgoSigHandler[sig]) == 0 {
+		return false
+	}
+	handling := atomic.Load(&handlingSig[sig]) != 0 && signalsOK
+	below := atomic.Load(&forgoSigBelowGo[sig]) != 0
+	if !marked && !handling {
+		// Nobody above wants it: pass it down unchanged, as sigfwdgo does.
+		return false
+	}
+	if below {
+		fwdFn := atomic.Loaduintptr(&fwdSig[sig])
+		if marked {
+			sigfwd(fwdFn, sig, info, ctx)
+		} else {
+			fwd := *info
+			forgoSigMark(&fwd)
+			sigfwd(fwdFn, sig, &fwd, ctx)
+		}
+	}
+	return marked && !handling
 }
 
 // forgoSigStillChained reports whether the handler this runtime installed
@@ -103,12 +185,14 @@ func forgoSigKeepChained(sig uint32) bool {
 		return true
 	}
 	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
+	atomic.Store(&forgoSigBelowGo[sig], 0)
 	return false
 }
 
 // forgoSigUnchained records that sigignore replaced every handler for sig.
 func forgoSigUnchained(sig uint32) {
 	atomic.Storeuintptr(&forgoSigHandler[sig], 0)
+	atomic.Store(&forgoSigBelowGo[sig], 0)
 }
 
 // syscall_forgoRuntimeIsLibrary reports whether this runtime was built into
