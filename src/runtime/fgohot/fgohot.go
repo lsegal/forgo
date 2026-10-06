@@ -22,7 +22,7 @@
 // at the addresses they already live at.
 //
 // The protocol is deliberately plain files in a directory, so it behaves the
-// same on Linux, macOS and Windows and pulls in no dependencies beyond os.
+// same on Linux, macOS and Windows.
 package fgohot
 
 import (
