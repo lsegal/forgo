@@ -91,6 +91,7 @@ pluginval 1.0.4 (JUCE 8.0.3), strictness 10, `--repeat 3 --randomise`:
 | darwin/arm64  | before #5 (`7eaed83ed5`)      | hangs in the first class; pluginval times out |
 | macOS (CI)    | this branch                   | pass                                         |
 | Windows (CI)  | this branch                   | pass                                         |
+| Linux (CI)    | this branch                   | pass                                         |
 
 Before #5, the runtime loaded last owned the process's signal handler and
 dropped the preemption signals that the earlier runtimes sent to their own
