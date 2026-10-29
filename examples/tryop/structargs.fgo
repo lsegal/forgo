@@ -1,0 +1,33 @@
+package main
+
+import "fmt"
+
+type point struct{ X, Y int }
+
+type options struct {
+	Name    string
+	Retries int
+}
+
+// The parameter types tell the compiler what {...} and &{...} build at
+// each call site below.
+func scale(p *point, by int) { p.X, p.Y = p.X*by, p.Y*by }
+
+func describe(o options) string { return fmt.Sprintf("%s (retries=%d)", o.Name, o.Retries) }
+
+func sum(ps ...*point) (n int) {
+	for _, p := range ps {
+		n += p.X + p.Y
+	}
+	return
+}
+
+func runStructArgsDemo() {
+	p := &point{X: 1, Y: 2}
+	scale(p, 3)
+	fmt.Println("scale(&point{1, 2}, 3):", *p)
+	scale(&{X: 1}, 2) // same as scale(&point{X: 1}, 2)
+	fmt.Println("describe({Name: \"job\"}):", describe({Name: "job"}))
+	fmt.Println("describe({\"retry\", 3}):", describe({"retry", 3}))
+	fmt.Println("sum({1, 2}, &{X: 3}):", sum({1, 2}, &{X: 3}))
+}
