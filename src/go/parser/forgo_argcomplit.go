@@ -20,6 +20,8 @@ import (
 // Only a whole argument may be an untyped literal: {...} and &{...} are
 // not operands, so they cannot appear inside a larger expression.
 func (p *parser) parseArg() ast.Expr {
+	defer decNestLev(incNestLev(p))
+
 	if p.trace {
 		defer un(trace(p, "Arg"))
 	}

@@ -49,6 +49,7 @@ a:hover { color: var(--color-accent-600); }
       <a href="#try" style="font-size:15px;line-height:28px;text-decoration:none">? — error propagation</a>
       <a href="#throw" style="font-size:15px;line-height:28px;text-decoration:none">throw</a>
       <a href="#postfix" style="font-size:15px;line-height:28px;text-decoration:none">Postfix if</a>
+      <a href="#structargs" style="font-size:15px;line-height:28px;text-decoration:none">Struct literal arguments</a>
       <a href="#comptime" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:comptime</a>
       <a href="#macros" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:macro</a>
       <a href="#packages" style="font-size:15px;line-height:28px;text-decoration:none">comptime/embed</a>
@@ -146,6 +147,27 @@ return errors.New(<span style="color:var(--color-accent-700)">"bad"</span>) <spa
       <li>Unambiguous by construction: a statement must always be followed by <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">;</code> before the next statement can begin, so <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code> appearing immediately after a just-completed statement on the same line was always a syntax error before — there's no existing program this could misparse.</li>
     </ul>
     <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/postfixif.fgo</code></p>
+  </section>
+
+  <section id="structargs" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0">Struct literal arguments — <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">f({...})</code></h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">When a parameter's type is a struct type <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">T</code> or a pointer type <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">*T</code>, a call can leave the type off a composite literal argument, the same way Go already lets a slice or map literal leave it off its elements.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">type options struct {
+	Name    string
+	Retries int
+}
+
+func run(o *options) { ... }
+
+run(&amp;{Name: <span style="color:var(--color-accent-700)">"job"</span>}) <span style="color:var(--color-neutral-600)">// same as: run(&amp;options{Name: "job"})</span>
+run({Name: <span style="color:var(--color-accent-700)">"job"</span>})  <span style="color:var(--color-neutral-600)">// same as: run(&amp;options{Name: "job"})</span></pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">{...}</code> takes the parameter's type: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">T</code> for a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">T</code> parameter, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">&amp;T{...}</code> for a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">*T</code> parameter. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">&amp;{...}</code> needs a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">*T</code> parameter.</li>
+      <li style="margin-bottom:14px">The literal is checked exactly as if <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">T</code> had been written, so an unknown field or a mistyped value is reported against <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">T</code>.</li>
+      <li style="margin-bottom:14px">It applies to each argument of an ordinary function or method call, including the extra arguments of a variadic one — not to parameters of other types, to generic calls whose type arguments still need inferring, or to builtins and conversions.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">{...}</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">&amp;{...}</code> are only accepted as a whole call argument: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">x := &amp;{A: 1}</code> is still a syntax error.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/structargs.fgo</code></p>
   </section>
 
   <section id="comptime" style="padding:0 0 70px">
