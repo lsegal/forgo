@@ -5,6 +5,7 @@
 package types_test
 
 import (
+	"go/ast"
 	"go/constant"
 	"internal/testenv"
 	"strings"
@@ -144,5 +145,43 @@ func f() (err error) {
 	_, err = typecheck(noImport, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), `requires this file to already import "errors"`) {
 		t.Errorf("got error %v, want a missing errors import error", err)
+	}
+}
+
+// TestForgoArgCompositeLit checks that an untyped composite literal call
+// argument {...} or &{...} records the type it takes from its parameter,
+// which is what the compiler's backend uses to build the literal.
+func TestForgoArgCompositeLit(t *testing.T) {
+	const src = `
+package p
+
+type S struct{ A int }
+
+func val(S)  {}
+func ptr(*S) {}
+
+func _() {
+	val({A: 1})
+	ptr({A: 2})
+	ptr(&{A: 3})
+}
+`
+	info := &Info{Types: make(map[ast.Expr]TypeAndValue)}
+	mustTypecheck(src, nil, info)
+
+	want := map[string]string{"1": "p.S", "2": "*p.S", "3": "p.S"}
+	got := make(map[string]string)
+	for e, tv := range info.Types {
+		lit, _ := e.(*ast.CompositeLit)
+		if lit == nil || len(lit.Elts) != 1 {
+			continue
+		}
+		v := lit.Elts[0].(*ast.KeyValueExpr).Value.(*ast.BasicLit).Value
+		got[v] = tv.Type.String()
+	}
+	for v, typ := range want {
+		if got[v] != typ {
+			t.Errorf("type of literal {A: %s} = %q, want %q", v, got[v], typ)
+		}
 	}
 }

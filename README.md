@@ -2,8 +2,9 @@
 
 `forgo` is a fork of Go (currently synced to the 1.27 release branch) that adds
 Nim-style compile-time execution and AST macros, plus Rust-style `?`
-error-propagation, `throw` for failing a function out with a new error, and
-a Ruby/Perl-style postfix `if` for one-line guard clauses.
+error-propagation, `throw` for failing a function out with a new error,
+a Ruby/Perl-style postfix `if` for one-line guard clauses, and struct
+literal arguments whose type comes from the parameter (`f({A: 1})`).
 
 Using a coding agent on a forgo codebase? Point it at [AGENTS.md](AGENTS.md)
 — it tells the agent when to reach for `?`, `throw`, postfix `if`,
@@ -299,6 +300,41 @@ return errors.New("bad") if x < 0
   existing program this could misparse.
 
 See [examples/tryop/postfixif.fgo](examples/tryop/postfixif.fgo) for a
+runnable version.
+
+### Struct literal arguments — `f({...})` and `f(&{...})`
+
+When a parameter's type is a struct type `T` or a pointer type `*T`, a call
+can leave the type off a composite literal argument, the same way Go
+already lets a slice or map literal leave it off its elements:
+
+```go
+type options struct {
+	Name    string
+	Retries int
+}
+
+func run(o *options) { ... }
+
+run(&{Name: "job"}) // same as: run(&options{Name: "job"})
+run({Name: "job"})  // same as: run(&options{Name: "job"})
+```
+
+- `{...}` takes the parameter's type: `T` for a `T` parameter, and `&T{...}`
+  for a `*T` parameter (as `[]*T{{...}}` does for slice elements).
+  `&{...}` needs a `*T` parameter.
+- The literal is then checked exactly as if `T` had been written, so an
+  unknown field or a mistyped value is reported against `T`.
+- It applies to each argument of an ordinary function or method call,
+  including the extra arguments of a variadic one. It does not apply to
+  parameters of other types (slices, maps, interfaces), to calls of a
+  generic function whose type arguments still need inferring, or to
+  builtins and conversions; those report `missing type in composite
+  literal`.
+- `{...}` and `&{...}` are only accepted as a whole call argument, not as
+  an operand elsewhere (`x := &{A: 1}` is still a syntax error).
+
+See [examples/tryop/structargs.fgo](examples/tryop/structargs.fgo) for a
 runnable version.
 
 ### `comptime/embed` — compile-time file reads

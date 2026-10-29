@@ -309,7 +309,7 @@ func (check *Checker) callExpr(x *operand, call *ast.CallExpr) exprKind {
 	}
 
 	// evaluate arguments
-	args, atargs := check.genericExprList(call.Args)
+	args, atargs := check.genericExprList(call.Args, forgoArgHints(sig, call)) // forgo
 	sig = check.arguments(call, sig, targs, xlist, args, atargs)
 
 	if wasGeneric && sig.TypeParams().Len() == 0 {
@@ -375,7 +375,7 @@ func (check *Checker) exprList(elist []ast.Expr) (xlist []*operand) {
 // elements do not exist (targsList is nil) or the elements are nil.
 // For each partially instantiated generic function operand, the corresponding
 // targsList elements are the operand's partial type arguments.
-func (check *Checker) genericExprList(elist []ast.Expr) (resList []*operand, targsList [][]Type) {
+func (check *Checker) genericExprList(elist []ast.Expr, hints []Type) (resList []*operand, targsList [][]Type) {
 	if debug {
 		defer func() {
 			// type arguments must only exist for partially instantiated functions
@@ -418,7 +418,7 @@ func (check *Checker) genericExprList(elist []ast.Expr) (resList []*operand, tar
 			resList = []*operand{&x}
 		} else {
 			// x is not a function instantiation (it may still be a generic function).
-			check.rawExpr(nil, &x, e, nil, true)
+			check.rawExpr(nil, &x, e, forgoHint(hints, 0), true) // forgo
 			check.exclude(&x, 1<<novalue|1<<builtin|1<<typexpr)
 			if t, ok := x.typ().(*Tuple); ok && x.isValid() {
 				// x is a function call returning multiple values; it cannot be generic.
@@ -452,7 +452,7 @@ func (check *Checker) genericExprList(elist []ast.Expr) (resList []*operand, tar
 				}
 			} else {
 				// x is exactly one value (possibly invalid or uninstantiated generic function).
-				check.genericExpr(&x, e, nil)
+				check.genericExpr(&x, e, forgoHint(hints, i)) // forgo
 			}
 			resList[i] = &x
 		}

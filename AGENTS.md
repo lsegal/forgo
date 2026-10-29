@@ -4,7 +4,7 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the Go 1.27 release branch — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands five extra
+binary (built under `bin/`, `pkg/tool/`) that understands six extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
@@ -197,6 +197,31 @@ Constraints:
   correctly, in that order (postfix `if` unwraps first, so `throw`/`?`
   lowering see an ordinary statement inside a regular `if` afterward).
 
+## Rule 1d: let a struct argument's type come from its parameter
+
+**Default to this** when passing a struct literal straight to a parameter
+of that struct type (or a pointer to it): leave the type name off.
+
+```go
+// Write this:
+run(&{Name: "job", Retries: 3})
+draw({X: 1, Y: 2})
+
+// Not this:
+run(&options{Name: "job", Retries: 3})
+draw(point{X: 1, Y: 2})
+```
+
+For a parameter of struct type `T`, `{...}` means `T{...}`; for a
+parameter of type `*T`, both `{...}` and `&{...}` mean `&T{...}` (prefer
+`&{...}`, which keeps the pointer visible). Constraints:
+- Only a whole call argument can be written this way — not `x := &{...}`,
+  a return value, or an operand of a larger expression.
+- Only struct and pointer-to-struct parameters. Not slices, maps, or
+  interfaces, and not a generic function whose type arguments are still
+  being inferred (instantiate it explicitly, `f[T]({...})`, or name the
+  type), builtins (`append`), or conversions.
+
 ## Rule 2: use `//fgo:comptime` for values that can be computed once, at compile time
 
 If you're computing a `const` from a pure function of literal/constant
@@ -280,6 +305,7 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 | Bubble up an error with added context (`fmt.Errorf("...: %w", err)`) | manual `if err != nil`     |
 | Fail a function outright with a new error                          | `throw`                    |
 | Guard clause whose body is one statement (`throw`, `return`, `continue`, ...) | postfix `if` (`STMT if COND`) |
+| Pass a struct literal to a `T` or `*T` parameter                    | `f({...})` / `f(&{...})`   |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//fgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//fgo:macro`              |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
@@ -337,6 +363,10 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/noder/forgo_postfixif.go` — lowers postfix
   `if` (`STMT if COND`) to a plain `if COND { STMT }`; runs before
   `forgo_throw.go`/`forgo_try.go`.
+- `src/cmd/compile/internal/{syntax,types2}/forgo_argcomplit.go` — struct
+  literal arguments (`f({...})`, `f(&{...})`): the parser accepts them as
+  call arguments, and types2 passes the parameter type down as the
+  literal's type hint. `go/{parser,types}/forgo_argcomplit.go` mirror them.
 - `src/cmd/compile/internal/noder/forgo_pragma.go` — parses
   `//fgo:comptime`/`//fgo:macro`.
 - `src/cmd/compile/internal/noder/forgo_macro.go` — macro expansion pass.
