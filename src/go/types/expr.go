@@ -126,8 +126,11 @@ var op2str2 = [...]string{
 }
 
 // The unary expression e may be nil. It's passed in for better error messages only.
-func (check *Checker) unary(x *operand, e *ast.UnaryExpr) {
-	check.expr(nil, x, e.X)
+func (check *Checker) unary(x *operand, e *ast.UnaryExpr, hint Type) {
+	// forgo: like check.expr, but passes the hint on to an untyped &{...}
+	check.rawExpr(nil, x, e.X, forgoAddrLitHint(e, hint), false)
+	check.exclude(x, 1<<novalue|1<<builtin|1<<typexpr)
+	check.singleValue(x)
 	if !x.isValid() {
 		return
 	}
@@ -1157,7 +1160,7 @@ func (check *Checker) exprInternal(T *target, x *operand, e ast.Expr, hint Type)
 		}
 
 	case *ast.UnaryExpr:
-		check.unary(x, e)
+		check.unary(x, e, hint) // forgo: hint for &{...}
 		if !x.isValid() {
 			goto Error
 		}
