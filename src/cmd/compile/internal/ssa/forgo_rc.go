@@ -165,6 +165,7 @@ type fgoRCPass struct {
 	idx     map[*Value]int      // memory value -> 1-based index in its block's chain
 	callMem map[*Value]*Value   // call -> its memory result
 	callRes map[*Value]*Value   // call -> its single nogc pointer result
+	tupMem  map[*Value]*Value   // tuple op (an atomic) -> its memory
 	defs    map[*Value]*fgoDef
 	users   map[*Value][]*Value
 	elems   map[*Value]fgoElem // nogc pointer loaded from a view of a slice field
@@ -1126,6 +1127,7 @@ func (p *fgoRCPass) buildChains() {
 	p.idx = map[*Value]int{}
 	p.callMem = map[*Value]*Value{}
 	p.callRes = map[*Value]*Value{}
+	p.tupMem = map[*Value]*Value{}
 	for _, b := range f.Blocks {
 		var mems []*Value
 		in := map[*Value]bool{}
@@ -1136,6 +1138,9 @@ func (p *fgoRCPass) buildChains() {
 			case v.Type == types.TypeMem && v.Op != OpPhi:
 				mems = append(mems, v)
 				in[v] = true
+				if v.Op == OpSelect1 {
+					p.tupMem[v.Args[0]] = v
+				}
 			}
 			if v.Op == OpSelectN && len(v.Args) == 1 && fgoIsCall(v.Args[0]) {
 				if v.Type == types.TypeMem {
@@ -1194,6 +1199,9 @@ func (p *fgoRCPass) opPos(v *Value) int {
 		if m == nil {
 			return fgoEnd
 		}
+		return 2 * p.idx[m]
+	}
+	if m := p.tupMem[v]; m != nil {
 		return 2 * p.idx[m]
 	}
 	return 2 * p.idx[v]
