@@ -310,6 +310,7 @@ var debug struct {
 	dontfreezetheworld       int32
 	efence                   int32
 	gccheckmark              int32
+	fgoesc                   int32 // forgo: trace the GC's nogc references
 	gcpacertrace             int32
 	gcshrinkstackoff         int32
 	gcstoptheworld           int32
@@ -367,6 +368,7 @@ var dbgvars = []*dbgVar{
 	{name: "checkfinalizers", value: &debug.checkfinalizers},
 	{name: "efence", value: &debug.efence},
 	{name: "gccheckmark", value: &debug.gccheckmark},
+	{name: "fgoesc", value: &debug.fgoesc},
 	{name: "gcpacertrace", value: &debug.gcpacertrace},
 	{name: "gcshrinkstackoff", value: &debug.gcshrinkstackoff},
 	{name: "gcstoptheworld", value: &debug.gcstoptheworld},

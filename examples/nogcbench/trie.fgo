@@ -1,0 +1,122 @@
+package main
+
+import "strconv"
+
+// trie counts words in a persistent trie whose nodes keep their children
+// in a slice field, sorted by letter. Each insert rebuilds the path to its
+// word, splicing the rebuilt child into a copy of its parent's children.
+// Autocomplete indexes and routers are built like this.
+
+type Trie struct {
+	Ch    byte
+	Count int
+	Kids  []*Trie
+}
+
+func insertWord2(t *Trie, w string, i int) *Trie {
+	if i == len(w) {
+		return &Trie{Ch: t.Ch, Count: t.Count + 1, Kids: t.Kids}
+	}
+	c := w[i]
+	j := 0
+	for j < len(t.Kids) && t.Kids[j].Ch < c {
+		j++
+	}
+	if j < len(t.Kids) && t.Kids[j].Ch == c {
+		k := insertWord2(t.Kids[j], w, i+1)
+		return &Trie{Ch: t.Ch, Count: t.Count, Kids: append(append(t.Kids[:j:j], k), t.Kids[j+1:]...)}
+	}
+	k := insertWord2(&Trie{Ch: c}, w, i+1)
+	return &Trie{Ch: t.Ch, Count: t.Count, Kids: append(append(t.Kids[:j:j], k), t.Kids[j:]...)}
+}
+
+func lookup(t *Trie, w string) int {
+	for i := 0; i < len(w); i++ {
+		var next *Trie
+		for _, k := range t.Kids {
+			if k.Ch == w[i] {
+				next = k
+				break
+			}
+		}
+		if next == nil {
+			return 0
+		}
+		t = next
+	}
+	return t.Count
+}
+
+// trieSum folds every node's letter and count, in order.
+func trieSum(t *Trie) uint64 {
+	s := uint64(t.Ch)*31 + uint64(t.Count)
+	for _, k := range t.Kids {
+		s = s*1_000_003 + trieSum(k)
+	}
+	return s
+}
+
+// trieVocab is the words trieWords inserts, made at compile time: they
+// are constant data in the binary, so neither mode allocates them.
+const trieVocab = makeVocab(50_000)
+
+// trieRng is the generator's state after making the words.
+const trieRng = vocabRng(50_000)
+
+// makeVocab makes n words of two to five syllables each, numbered 0 to 6,
+// using rng's generator from seed 5.
+//
+//fgo:comptime
+func makeVocab(n int) []string {
+	syllables := []string{"ka", "lo", "mi", "ne", "ru", "sa", "ti", "vo", "ze", "pa", "qu", "do"}
+	var s uint64 = 5
+	vocab := make([]string, 0, n)
+	for i := range n {
+		s = xorshift(s)
+		w := ""
+		for k := 2 + int(s%4); k > 0; k-- {
+			s = xorshift(s)
+			w += syllables[s%uint64(len(syllables))]
+		}
+		vocab = append(vocab, w+strconv.Itoa(i%7))
+	}
+	return vocab
+}
+
+// vocabRng is the generator state makeVocab(n) ends with.
+//
+//fgo:comptime
+func vocabRng(n int) uint64 {
+	var s uint64 = 5
+	for range n {
+		s = xorshift(s)
+		for k := 2 + int(s%4); k > 0; k-- {
+			s = xorshift(s)
+		}
+	}
+	return s
+}
+
+// xorshift is rng.next.
+//
+//fgo:comptime
+func xorshift(s uint64) uint64 {
+	s ^= s << 13
+	s ^= s >> 7
+	s ^= s << 17
+	return s
+}
+
+func trieWords(scale int) uint64 {
+	r, vocab := rng{trieRng}, trieVocab
+	t := &Trie{}
+	var hits uint64
+	for i := range 150_000 * scale {
+		x := r.next() % 1_000_000
+		t = insertWord2(t, vocab[x*x/1_000_000*uint64(len(vocab))/1_000_000], 0)
+		if i%4 == 0 {
+			hits += uint64(lookup(t, vocab[r.next()%uint64(len(vocab))]))
+		}
+	}
+	return hits + trieSum(t)
+}

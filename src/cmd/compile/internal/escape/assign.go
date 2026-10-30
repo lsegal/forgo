@@ -17,6 +17,9 @@ func (e *escape) addr(n ir.Node) hole {
 		return e.discardHole()
 	}
 
+	if k, ok := e.fgoStringStore(n); ok {
+		return k
+	}
 	k := e.heapHole()
 
 	switch n.Op() {

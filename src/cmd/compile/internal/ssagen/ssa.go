@@ -597,6 +597,7 @@ func buildssa(fn *ir.Func, worker int, isPgoHot bool) *ssa.Func {
 	if len(s.openDefers) != 0 {
 		s.emitOpenDeferInfo()
 	}
+	fgoShadowInfo(fn)
 
 	// Record incoming parameter spill information for morestack calls emitted in the assembler.
 	// This is done here, using all the parameters (used, partially used, and unused) because
@@ -1862,8 +1863,8 @@ func (s *state) stmt(n ir.Node) {
 				// Check whether we're writing the result of an append back to the same slice.
 				// If so, we handle it specially to avoid write barriers on the fast
 				// (non-growth) path.
-				if !ir.SameSafeExpr(n.X, rhs.Args[0]) || base.Flag.N != 0 {
-					break
+				if !ir.SameSafeExpr(n.X, rhs.Args[0]) || base.Flag.N != 0 || s.curfn.FgoNogc() && ir.FgoBufField(n.X) {
+					break // forgo: a nogc buffer field is set by copying
 				}
 				// If the slice can be SSA'd, it'll be on the stack,
 				// so there will be no write barriers,
@@ -3511,7 +3512,7 @@ func (s *state) exprCheckPtr(n ir.Node, checkPtrOK bool) *ssa.Value {
 		// instrumentation.
 		if ir.IsAddressable(n) && !s.canSSA(n) {
 			p := s.addr(n)
-			return s.load(n.Type(), p)
+			return s.fgoStringRead(n, s.load(n.Type(), p))
 		}
 		v := s.expr(n.X)
 		return s.newValue1I(ssa.OpStructSelect, n.Type(), int64(fieldIdx(n)), v)
@@ -3520,7 +3521,7 @@ func (s *state) exprCheckPtr(n ir.Node, checkPtrOK bool) *ssa.Value {
 		n := n.(*ir.SelectorExpr)
 		p := s.exprPtr(n.X, n.Bounded(), n.Pos())
 		p = s.newValue1I(ssa.OpOffPtr, types.NewPtr(n.Type()), n.Offset(), p)
-		return s.load(n.Type(), p)
+		return s.fgoStringRead(n, s.load(n.Type(), p))
 
 	case ir.OINDEX:
 		n := n.(*ir.IndexExpr)
@@ -3731,6 +3732,9 @@ func (s *state) exprCheckPtr(n ir.Node, checkPtrOK bool) *ssa.Value {
 		n := n.(*ir.UnaryExpr)
 		if x, ok := n.X.(*ir.DynamicType); ok && x.Op() == ir.ODYNAMICTYPE {
 			return s.newObjectNonSpecialized(n.Type().Elem(), s.expr(x.RType))
+		}
+		if v := s.fgoNewObject(n.Type().Elem()); v != nil {
+			return v
 		}
 		return s.newObject(n.Type().Elem())
 
@@ -4467,6 +4471,9 @@ func (s *state) assignWhichMayOverlap(left ir.Node, right *ssa.Value, deref bool
 	if left.Op() == ir.ONAME && ir.IsBlank(left) {
 		return
 	}
+	if s.fgoStringStore(left, right, deref) {
+		return
+	}
 	t := left.Type()
 	types.CalcSize(t)
 	if s.canSSA(left) {
@@ -4990,6 +4997,8 @@ func (s *state) call(n *ir.CallExpr, k callKind, returnResultAddr bool, deferExt
 		if (k == callNormal || k == callTail) && fn.Op() == ir.ONAME && fn.(*ir.Name).Class == ir.PFUNC {
 			fn := fn.(*ir.Name)
 			calleeLSym = callTargetLSym(fn)
+			ssa.FgoNoteCallee(calleeLSym, fn.Type())
+			s.fgoNoteKeeps(calleeLSym, fn.Type())
 			if buildcfg.Experiment.RegabiArgs {
 				// This is a static call, so it may be
 				// a direct call to a non-ABIInternal
@@ -7012,6 +7021,7 @@ func genssa(f *ssa.Func, pp *objw.Progs) {
 	}
 
 	emitWrappedFuncInfo(e, pp)
+	fgoEmitShadowInfo(e, pp)
 
 	// Remember where each block starts.
 	s.bstart = make([]*obj.Prog, f.NumBlocks())

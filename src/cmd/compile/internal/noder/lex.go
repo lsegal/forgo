@@ -35,7 +35,8 @@ const (
 		ir.Systemstack |
 		ir.Nowritebarrier |
 		ir.Nowritebarrierrec |
-		ir.Yeswritebarrierrec
+		ir.Yeswritebarrierrec |
+		ir.FgoNogc
 )
 
 func pragmaFlag(verb string) ir.PragmaFlag {

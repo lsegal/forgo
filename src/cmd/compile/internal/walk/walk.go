@@ -30,6 +30,7 @@ func Walk(fn *ir.Func) {
 	defer func() { staticValues = nil; shapeConvSources = nil }()
 
 	errorsBefore := base.Errors()
+	fgoBuildPtrSlices(fn)
 	order(fn)
 	if base.Errors() > errorsBefore {
 		return

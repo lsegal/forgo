@@ -7,6 +7,7 @@ package forgo
 import (
 	"go/ast"
 	"go/token"
+	"internal/fgoeval"
 )
 
 // evalQuote implements the Quote(func(){ ... }) builtin available inside
@@ -193,8 +194,8 @@ func ExpandMacros(fset *token.FileSet, files []*ast.File) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			if re, ok := r.(runtimeErr); ok {
-				err = re.err
+			if re, ok := r.(fgoeval.Error); ok {
+				err = re.Err
 				return
 			}
 			panic(r)

@@ -30,10 +30,10 @@ instead of just tolerating or choking on them.
   `PATH`, which will misreport `?`/`throw` (it wasn't built against forgo's
   `go/parser`/`go/types`, and doesn't have the `golang.org/x/tools` patches
   described in [build-forgopls.sh](../../scripts/build-forgopls.sh)), not
-  just `//fgo:comptime`/`//fgo:macro`. `//fgo:comptime` and
-  `//fgo:macro` are compiler-only either way and will still show
-  false-positive diagnostics from either binary; disable
-  `forgo.enableLanguageServer` if that's noisier than it's worth.
+  and `//fgo:comptime` constants (forgopls folds them, as the compiler
+  does). `//fgo:macro` is compiler-only either way, so macro calls still
+  show false-positive diagnostics; disable `forgo.enableLanguageServer`
+  if that's noisier than it's worth.
 - `forgo.languageServerEnv` (default `{}`) — extra environment variables for
   the forgopls/gopls process, merged over VS Code's own environment.
   forgopls resolves packages by shelling out to `go list`/`go build` using

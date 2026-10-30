@@ -75,6 +75,7 @@ var bootstrapDirs = []string{
 	"internal/bisect",
 	"internal/buildcfg",
 	"internal/exportdata",
+	"internal/fgoeval",
 	"internal/goarch",
 	"internal/godebugs",
 	"internal/goexperiment",

@@ -47,8 +47,9 @@ compile as before). The [Forgo VS Code extension](editors/vscode) adds `.fgo`
 syntax highlighting for `?`, `//fgo:comptime`, and `//fgo:macro`, plus a
 language client backed by **forgopls** — a build of
 [gopls](https://pkg.go.dev/golang.org/x/tools/gopls) that understands `?`
-well enough to type-check it correctly. `//fgo:comptime` and `//fgo:macro`
-are still compiler-only and will show as false-positive diagnostics.
+well enough to type-check it correctly, and folds `//fgo:comptime`
+constants the way the compiler does. `//fgo:macro` is still
+compiler-only: macro calls show as false-positive diagnostics.
 `forgopls` ships in the toolchain install above; download the extension's
 `.vsix` from the [latest release](https://github.com/lsegal/forgo/releases)
 and install it with:
@@ -102,17 +103,46 @@ and folds the result into a real Go constant — so it can be used anywhere
 the language requires a constant expression (array lengths, other `const`
 declarations, etc.).
 
-Supported inside a comptime function body: `int`/`float`/`string`/`bool`
-locals and arithmetic, `if`, 3-clause `for` loops, `+=`/`-=`/... compound
-assignment, `++`/`--`, calls to other `//fgo:comptime` functions, and a
-small allow-list of real stdlib calls (`fmt.Sprintf`, `strconv.Itoa`, and
-the [`comptime/embed`](#comptimeembed--compile-time-file-reads) helpers
-below).
-Anything else (closures, goroutines, maps, slices, method calls, `range`
-loops, ...) is not supported in v1 and reports a compile error if reached.
-Building or indexing a composite literal isn't supported inside a comptime
-function body either — only directly within a `const` initializer's
-expression tree (see "Non-scalar (struct/slice/map) consts" below).
+Supported inside a comptime function body:
+
+- locals of the basic types, with Go's semantics for them: integers wrap
+  around at their type's size, integer division truncates, shifts and
+  bitwise operators work, and conversions like `uint64(x)`, `byte(x)`,
+  `string(r)` and `[]byte(s)` convert;
+- `if`, `for` loops (3-clause, condition-only, and `range` over an int, a
+  string, a slice or a map), `break` and `continue`, compound assignment,
+  `++`/`--`;
+- slices: literals, `make`, `append`, `len`, `cap`, indexing, element
+  assignment, and slicing of slices and strings; struct and map literals,
+  field selection and map indexing;
+- calls to other `//fgo:comptime` functions, and a small allow-list of
+  real stdlib calls (`fmt.Sprintf`, `strconv.Itoa`, and the
+  [`comptime/embed`](#comptimeembed--compile-time-file-reads) helpers
+  below).
+
+Anything else (closures, goroutines, pointers, method calls, labeled
+`break`, ...) reports a compile error if reached.
+
+A comptime function can return a slice, struct or map, which folds into a
+constant laid out in the binary's data (see "Non-scalar (struct/slice/map)
+consts" below), so building a table at compile time allocates nothing at
+run time:
+
+```go
+//fgo:comptime
+func squares(n int) []int {
+	s := make([]int, n)
+	for i := range n {
+		s[i] = i * i
+	}
+	return s
+}
+
+const sq = squares(1000)
+```
+
+Called at run time, a comptime function is nogc code: it is a
+[`//fgo:nogc`](#fgonogc--reference-counted-memory-no-gc) root.
 
 Folding only triggers for `const` initializers, not other
 constant-expression contexts written directly as a call (an array length,
@@ -480,6 +510,231 @@ diagnostic rather than a crash:
   a plain value at an arbitrary reference site is unsupported; using one
   where it isn't supported reports a specific compile error rather than
   crashing.
+
+### `//fgo:nogc` — reference counted memory, no GC
+
+Mark a function `//fgo:nogc` and the structs it allocates live outside the
+GC heap: the compiler counts references Perceus-style and frees each
+object the moment its last reference dies. There's no `free` call, no new
+syntax and no marker in your types: you write plain `*T` code with
+ordinary structs, including types from other packages.
+
+```go
+type Node struct {
+	Val         int
+	Left, Right *Node
+}
+
+func build(d int) *Node {
+	if d == 0 {
+		return &Node{}
+	}
+	return &Node{Val: d, Left: build(d - 1), Right: build(d - 1)}
+}
+
+func sum(n *Node) int { // no count operations: see below
+	if n == nil {
+		return 0
+	}
+	return n.Val + sum(n.Left) + sum(n.Right)
+}
+
+//fgo:nogc
+func run() int {
+	t := build(20)
+	return sum(t)
+} // t's last use was sum(t): the whole tree is freed right after it
+```
+
+**Roots and callees.** A `//fgo:nogc` function is a *root*. The root and
+every function of the same package it calls directly (and the ones those
+call, and so on) run as nogc code: their `&T{...}` and `new(T)` of
+structs are reference counted, and they count the pointers they hold.
+A `//fgo:nogc` directive on a type makes its methods roots, and every
+`//fgo:comptime` function is a root.
+
+**The same code, both ways.** Being nogc belongs to where an object is
+allocated, not to its type. The compiler keeps every function a root
+reaches as it is, garbage collected, for other callers, and builds a
+second, nogc copy of it that nogc code calls instead. So one binary can
+run the same code and the same types both ways: `build` above allocates
+counted nodes when `run` calls it and garbage collected ones when `main`
+does. The count lives in a header in front of each counted object.
+
+**Handing objects to the GC.** Nogc code can give its objects to any other
+code. Code that doesn't count can't be trusted to keep the counts right,
+so when a nogc object reaches it, the object is *handed off* to the
+garbage collector first, along with every nogc object it can reach. From
+then on its fields hold ordinary GC values, and the GC frees it once
+nothing points to it (and nogc code no longer counts it). That happens
+when nogc code:
+
+- stores the pointer in an interface, a map, a slice, a global, a
+  closure, a channel, or a field of a garbage collected object;
+- passes it to a function that isn't nogc code (another package's, a
+  func value, an interface method, a generic function, a goroutine) whose
+  escape analysis says it may keep the pointer, return it or something
+  inside it, or change pointers in what it points to. A callee that only
+  reads, or only changes numbers in a struct with no pointers, leaves the
+  object counted, and calls the compiler inlines are nogc code anyway;
+- takes the address of one of the object's fields, other than to call a
+  method that only changes numbers (`n.mu.Lock()` is fine);
+- assigns a field through which the object can reach itself again
+  (`l.Next = m`) outside a composite literal, which could form a cycle:
+  the GC collects those;
+- stores a garbage collected pointer into it: a counted object can only
+  count nogc objects.
+
+```go
+//fgo:nogc
+func index(words []string) map[string]*Entry {
+	m := map[string]*Entry{}
+	for _, w := range words {
+		e := &Entry{Word: w} // counted
+		m[w] = e             // into a map: handed to the GC
+	}
+	return m
+}
+```
+
+To change a structure without handing it off, rebuild it:
+
+```go
+func insert(t *Node, v int) *Node {
+	if t == nil {
+		return &Node{Val: v}
+	}
+	if v < t.Val {
+		return &Node{Val: t.Val, Left: insert(t.Left, v), Right: t.Right}
+	}
+	return &Node{Val: t.Val, Left: t.Left, Right: insert(t.Right, v)}
+}
+```
+
+When `t` isn't shared, this updates in place: each node on the path dies as
+it's rebuilt, and its memory goes straight to its replacement (Koka's
+"functional but in-place").
+
+What the compiler does:
+
+- **Escape analysis still applies.** A struct that doesn't outlive the
+  function goes on the stack as usual, unless it has pointer, string or
+  slice fields, which counted objects own.
+- **Ownership of parameters is inferred** for the nogc copies of
+  functions. A function that returns or stores a parameter, or allocates
+  something of the same size, takes ownership of it: the caller hands
+  over its reference (or adds one if it still needs the value). Other
+  parameters are borrowed, which costs nothing.
+- **Each owned value is released right after its last use**, not at the
+  end of its scope.
+- **A field read is counted only when it has to be.** A child read from a
+  field that's never reassigned is kept alive by its parent, so walking a
+  tree costs zero count operations. Other reads are counted, unless every
+  use happens before any other memory operation.
+- **Counting is inline.** Increments and decrements of counted objects are
+  a few instructions in place; the runtime is called only for handed-off
+  objects and for frees.
+- **Reuse.** A release followed by an allocation of the same size, later in
+  the same block or on every path after it, hands over the memory when it
+  was the last reference. A release that has no such allocation is pushed
+  into each branch that follows it, so each branch's own allocation can
+  take the memory, as in `insert` above. That covers loops like
+  `c = &Counter{N: c.N + 1}` and the recursive rebuilds above:
+  `rev(l, acc)` in the example reverses a 100,000-element list without
+  allocating. Fields read just before their parent's release aren't
+  counted: if the parent goes, its references pass to the reads instead
+  (Perceus's drop specialization), and a reused or new object that the
+  literal writes in full isn't cleared first.
+- **Panics release what unwound frames owned.** Each owned value sits in a
+  stack slot listed in the function's metadata while it's owned. When
+  `recover` discards frames, or `Goexit` ends a goroutine, the runtime
+  releases what those slots hold.
+
+**Strings.** A string field of a counted object owns its bytes, in a
+buffer outside the GC heap that's freed with the object. Storing into it
+copies the string. Reading it is free: you get an ordinary `string`
+pointing into the buffer, and the compiler keeps the object alive for as
+long as that string is used. Where the string outlives the function
+(stored in a map or global, returned, or passed to something that keeps
+it), escape analysis sees it and the read copies it onto the GC heap
+instead.
+
+**Slices.** A slice field of numbers, bools, or arrays or structs of them
+works the same way: storing copies (capacity equals length, so `append`
+to the field always copies into a new buffer), and reading gives a view
+whose element writes change the object. A read that escapes is a copy.
+In nogc code, storing into these fields copies into garbage collected
+objects too.
+
+**Slices of struct pointers.** In a counted object, a field like
+`Kids []*Node` owns a reference to each element. Nogc code doesn't assign
+its elements in place (that's a compile error): it stores a new slice,
+built from a slice literal, `append`, or slicing of another such field.
+When `t.Kids[j]` goes to an owned parameter and the code after the call
+reads only `t.Kids[:j]` and `t.Kids[j+1:]` (the usual splice), the
+compiler moves the child out of `t`'s slice when `t` is unique, so the
+callee sees it unique too.
+
+**Any other field.** Maps, interfaces, funcs, channels, pointers to
+anything but structs, `[]string`: those values stay on the GC heap. While
+an object holding them is alive, the GC scans it as a root.
+
+**Current limits:**
+
+- Generic functions aren't copied: calls to them leave nogc code.
+- A cycle has to go through the GC: an object that can reach itself is
+  handed off when the cycle is made.
+- A handed-off object is freed after a GC cycle, not at its last use.
+- Weak pointers to nogc objects hand them off; finalizers and cleanups
+  on them aren't supported.
+
+**Benchmarks.** [examples/nogcbench](examples/nogcbench) runs seven
+allocation-heavy workloads (the Benchmarks Game's binary trees, a
+persistent red-black tree map, symbolic differentiation, word counting,
+an adaptive quadtree Mandelbrot zoom, a chunked sorted index whose leaves
+hold slices, and a trie whose nodes hold slices of children), each
+written once and compiled both ways into one binary. With all cores free,
+the GC build often finishes sooner, because its collector runs on other
+cores, but it uses up to 3.9x the CPU time. With one core, nogc is 1.3x
+to 2.4x faster on the tree workloads. nogc's peak memory is about half the
+GC build's on `rbtree` and `chunks`, and it never pauses. The two slice
+workloads (`chunks`, `trie`) are faster with nogc even with all cores
+free. It is slower where every allocation is tiny and short-lived
+(`binarytrees`, 1.3x the GC build's wall time with cores to spare) and
+where rebuilding copies string fields (`wordfreq`, 1.4x).
+
+| workload (scale 4) | gc wall, all cores | nogc wall | gc cpu | nogc cpu | gc wall, 1 core | nogc wall, 1 core | gc peak RSS | nogc peak RSS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| binarytrees | 189 ms | 251 ms | 458 ms | 250 ms | 335 ms | 251 ms | 15.3 MB | 13.1 MB |
+| rbtree | 614 ms | 627 ms | 2122 ms | 625 ms | 1305 ms | 622 ms | 55.4 MB | 29.5 MB |
+| deriv | 2800 ms | 2931 ms | 6107 ms | 2910 ms | 4509 ms | 2899 ms | 120.7 MB | 103.3 MB |
+| wordfreq | 218 ms | 314 ms | 228 ms | 313 ms | 226 ms | 304 ms | 9.9 MB | 9.0 MB |
+| mandeltree | 6200 ms | 6188 ms | 6339 ms | 6164 ms | 6255 ms | 6122 ms | 31.7 MB | 23.0 MB |
+| chunks | 619 ms | 541 ms | 1088 ms | 539 ms | 842 ms | 520 ms | 22.9 MB | 12.2 MB |
+| trie | 698 ms | 529 ms | 2063 ms | 529 ms | 1245 ms | 525 ms | 22.2 MB | 17.2 MB |
+
+See [examples/nogc](examples/nogc/main.fgo) for a runnable version that
+checks live object counts and reuse, and
+[examples/rbtree](examples/rbtree/main.fgo) for a full program: a
+persistent red-black tree map, the benchmark from the Perceus paper.
+
+```
+$ forgo run ./examples/rbtree
+insert 1,000,000 keys           1042.2ms  1000000 live 21693947 reused   0 GCs
+overwrite every key              664.4ms  1000000 live 19454319 reused   0 GCs
+scale every value                 37.3ms  1000000 live  1000000 reused   0 GCs
+scale, keeping the old version    42.7ms  2000000 live        0 reused   0 GCs
+after old's last use                      1000000 live
+after t's last use                              0 live
+```
+
+Every insert rebuilds the path from the root, and every rebuilt node
+takes the memory of the node it replaces, so the tree is updated in place
+and the garbage collector never runs. Scaling a version that is still held
+elsewhere copies it instead, and the old version stays valid until its
+last use. The same program without the directive, garbage collected,
+takes about 1.2s to insert and 0.62s to overwrite, with 91 and 18
+collections.
 
 ### `forgo run --watch` — hot reload
 

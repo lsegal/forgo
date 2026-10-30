@@ -694,6 +694,7 @@ func Goexit() {
 		fn()
 	}
 
+	fgoRCReleaseOwnFrames() // forgo: release nogc objects owned by this goroutine's frames
 	goexit1()
 }
 
@@ -1399,6 +1400,8 @@ func recovery(gp *g) {
 	// overhead of the "deferreturn" call when there aren't actually any
 	// pending defers left, and shrink the TEXT size of compiled
 	// binaries. (Admittedly, both of these are modest savings.)
+
+	fgoRCReleaseFrames(gp, sp) // forgo: release nogc objects owned by discarded frames
 
 	// Ensure we're recovering within the appropriate stack.
 	if sp != 0 && (sp < gp.stack.lo || gp.stack.hi < sp) {

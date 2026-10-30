@@ -231,6 +231,7 @@ func addGCLocals() {
 		for _, jt := range fn.JumpTables {
 			objw.Global(jt.Sym, int32(len(jt.Targets)*base.Ctxt.Arch.PtrSize), obj.RODATA)
 		}
+		fgoAddShadowInfo(fn)
 	}
 }
 

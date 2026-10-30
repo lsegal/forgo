@@ -1,0 +1,121 @@
+package main
+
+// chunks keeps a sorted multiset of keys as a persistent binary tree of
+// chunks: leaves hold up to chunkCap sorted keys in a slice field, inner
+// nodes split the key range. Insertion rebuilds the path and the leaf,
+// splitting full leaves. Between inserts it counts keys in random ranges,
+// and now and then shifts every key in place. Time series indexes and
+// column stores are built like this.
+
+const chunkCap = 64
+
+type Chunk struct {
+	Max         int32   // largest key below
+	Keys        []int32 // leaf: the keys, sorted
+	Left, Right *Chunk  // inner node
+}
+
+func insertKey(t *Chunk, k int32) *Chunk {
+	if t == nil {
+		return &Chunk{Max: k, Keys: []int32{k}}
+	}
+	if t.Left != nil {
+		if k <= t.Left.Max {
+			return &Chunk{Max: max(t.Max, k), Left: insertKey(t.Left, k), Right: t.Right}
+		}
+		return &Chunk{Max: max(t.Max, k), Left: t.Left, Right: insertKey(t.Right, k)}
+	}
+	keys := t.Keys
+	i := 0
+	for i < len(keys) && keys[i] < k {
+		i++
+	}
+	var buf [chunkCap + 1]int32
+	if len(keys) < chunkCap {
+		nk := buf[:len(keys)+1]
+		copy(nk, keys[:i])
+		nk[i] = k
+		copy(nk[i+1:], keys[i:])
+		return &Chunk{Max: nk[len(nk)-1], Keys: nk}
+	}
+	all := buf[:len(keys)+1]
+	copy(all, keys[:i])
+	all[i] = k
+	copy(all[i+1:], keys[i:])
+	h := len(all) / 2
+	lo, hi := new([chunkCap + 1]int32)[:h], buf[:len(all)-h]
+	copy(lo, all[:h])
+	copy(hi, all[h:]) // hi may share buf with all: copy moves overlapping keys correctly
+	left := &Chunk{Max: lo[len(lo)-1], Keys: lo}
+	right := &Chunk{Max: hi[len(hi)-1], Keys: hi}
+	return &Chunk{Max: right.Max, Left: left, Right: right}
+}
+
+// countRange counts the keys in [lo, hi).
+func countRange(t *Chunk, lo, hi int32) int {
+	n := 0
+	for t != nil {
+		if t.Left == nil {
+			for _, k := range t.Keys {
+				if k >= lo && k < hi {
+					n++
+				}
+			}
+			return n
+		}
+		if lo <= t.Left.Max {
+			n += countRange(t.Left, lo, hi)
+		}
+		if hi <= t.Left.Max {
+			return n // the right keys are all at least t.Left.Max
+		}
+		t = t.Right
+	}
+	return n
+}
+
+// shift adds d to every key, in place.
+func shift(t *Chunk, d int32) {
+	for t != nil {
+		t.Max += d
+		if t.Left == nil {
+			for i := range t.Keys {
+				t.Keys[i] += d
+			}
+			return
+		}
+		shift(t.Left, d)
+		t = t.Right
+	}
+}
+
+func sumKeys(t *Chunk) (s uint64) {
+	for t != nil {
+		if t.Left == nil {
+			for _, k := range t.Keys {
+				s = s*31 + uint64(uint32(k))
+			}
+			return s
+		}
+		s += sumKeys(t.Left)
+		t = t.Right
+	}
+	return s
+}
+
+func chunks(scale int) uint64 {
+	r := rng{11}
+	var t *Chunk
+	var found uint64
+	for i := range 250_000 * scale {
+		t = insertKey(t, int32(r.next()%(1<<30)))
+		if i%8 == 0 {
+			lo := int32(r.next() % (1 << 30))
+			found += uint64(countRange(t, lo, lo+1<<18))
+		}
+		if i%40_000 == 39_999 {
+			shift(t, 3)
+		}
+	}
+	return found + sumKeys(t)
+}

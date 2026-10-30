@@ -13,6 +13,7 @@ import (
 	"cmd/compile/internal/deadlocals"
 	"cmd/compile/internal/dwarfgen"
 	"cmd/compile/internal/escape"
+	"cmd/compile/internal/fgorc"
 	"cmd/compile/internal/inline"
 	"cmd/compile/internal/inline/interleaved"
 	"cmd/compile/internal/ir"
@@ -216,6 +217,7 @@ func Main(archInit func(*ssagen.ArchInfo)) {
 
 	// Parse and typecheck input.
 	noder.LoadPackage(flag.Args())
+	fgorc.Check(typecheck.Target)
 
 	// As a convenience to users (toolchain maintainers, in particular),
 	// when compiling a package named "main", we default the package

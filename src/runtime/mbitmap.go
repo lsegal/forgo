@@ -408,6 +408,7 @@ func bulkBarrierPreWrite(dst, src, size uintptr, typ *abi.Type) {
 				return
 			}
 		}
+		fgoBulkBarrier(dst, src, size, typ) // forgo: nogc objects
 		return
 	} else if s.state.get() != mSpanInUse || dst < s.base() || s.limit <= dst {
 		// dst was heap memory at some point, but isn't now.

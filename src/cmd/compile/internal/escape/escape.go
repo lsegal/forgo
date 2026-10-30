@@ -171,6 +171,9 @@ func Batch(fns []*ir.Func, reassignOracles map[*ir.Func]*ir.ReassignOracle) {
 
 		// Check if the node must be heap allocated for certain reasons
 		// such as OMAKESLICE for a large slice.
+		if why := fgoHeapAllocReason(loc.curfn, loc.n); why != "" {
+			b.flow(b.heapHole().addr(loc.n, why), loc)
+		}
 		if why := HeapAllocReason(loc.n); why != "" {
 			b.flow(b.heapHole().addr(loc.n, why), loc)
 		}
@@ -418,6 +421,9 @@ const (
 )
 
 func (b *batch) paramTag(fn *ir.Func, narg int, f *types.Field) string {
+	if tag := fgoParamTag(fn, f); tag != "" {
+		return tag
+	}
 	name := func() string {
 		if f.Nname != nil {
 			return f.Nname.Sym().Name

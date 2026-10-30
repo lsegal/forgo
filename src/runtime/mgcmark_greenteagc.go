@@ -262,6 +262,7 @@ func gcUsesSpanInlineMarkBits(size uintptr) bool {
 // tryDeferToSpanScan tries to queue p on the span it points to, if it
 // points to a small object span (gcUsesSpanQueue size).
 func tryDeferToSpanScan(p uintptr, gcw *gcWork) bool {
+	fgoEscMark(p, gcw) // forgo: nogc objects held by the GC
 	if useCheckmark {
 		return false
 	}

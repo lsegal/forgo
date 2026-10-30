@@ -176,6 +176,13 @@ func (check *Checker) builtin(x *operand, call *syntax.CallExpr, id builtinId) (
 
 		case *Slice, *Chan:
 			mode = value
+			// forgo: the length of a slice-shaped composite constant
+			// (folded by the comptime interpreter, see forgo.go) is a
+			// constant.
+			if x.mode() == constant_ && x.val != nil && x.val.Kind() == constant.Composite && constant.CompositeIsArray(x.val) {
+				mode = constant_
+				val = constant.MakeInt64(int64(len(constant.CompositeElems(x.val))))
+			}
 
 		case *Map:
 			if id == _Len {

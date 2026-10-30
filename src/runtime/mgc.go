@@ -579,6 +579,7 @@ func GC() {
 	for work.cycles.Load() == n+1 && !isSweepDone() {
 		Gosched()
 	}
+	fgoEscWait(n + 1) // forgo: and the nogc objects the cycle let go
 
 	// Now we're really done with sweeping, so we can publish the
 	// stable heap profile. Only do this if we haven't already hit
@@ -1402,6 +1403,7 @@ func gcMarkTermination(stw worldStop) {
 		// marking is complete so we can turn the write barrier off
 		setGCPhase(_GCoff)
 		stwSwept = gcSweep(work.mode)
+		fgoEscWake(work.cycles.Load()) // forgo
 	})
 
 	mp.traceback = 0

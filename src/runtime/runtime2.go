@@ -727,6 +727,10 @@ type m struct {
 
 	// self points this M until mexit clears it to return nil.
 	self mWeakPointer
+
+	fgoRC       *fgoRCCache // forgo: nogc allocator cache, see forgo_rc.go
+	fgoScanning bool        // forgo: scanning handed-off nogc objects (fgoEscReach)
+	fgoScanQ    uintptr     // forgo: *fgoEscRec, the ones still to scan
 }
 
 const mRedZoneSize = (16 << 3) * asanenabledBit // redZoneSize(2048)

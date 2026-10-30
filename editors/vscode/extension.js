@@ -63,12 +63,11 @@ function startClient(serverPath, onFailure) {
 	return c;
 }
 
-function activate(context) {
+// Starts (or restarts) the client from current configuration, with the
+// gopls-on-PATH fallback. Shared by activate() and the restart command so
+// a restart picks up settings changes the same way a fresh window would.
+function launch() {
 	const config = vscode.workspace.getConfiguration("forgo");
-	if (!config.get("enableLanguageServer")) {
-		return;
-	}
-
 	const configuredPath = config.get("languageServerPath") || "forgopls";
 	const triedFallback = configuredPath !== "gopls";
 
@@ -93,6 +92,31 @@ function activate(context) {
 			);
 		}
 	});
+}
+
+async function restartLanguageServer() {
+	if (client) {
+		await client.stop().catch(() => undefined);
+		client = undefined;
+	}
+	const config = vscode.workspace.getConfiguration("forgo");
+	if (!config.get("enableLanguageServer")) {
+		vscode.window.showInformationMessage("forgo: language server is disabled (forgo.enableLanguageServer is false).");
+		return;
+	}
+	launch();
+	vscode.window.showInformationMessage("forgo: language server restarted.");
+}
+
+function activate(context) {
+	context.subscriptions.push(vscode.commands.registerCommand("forgo.restartLanguageServer", restartLanguageServer));
+
+	const config = vscode.workspace.getConfiguration("forgo");
+	if (!config.get("enableLanguageServer")) {
+		return;
+	}
+
+	launch();
 
 	context.subscriptions.push({ dispose: () => client && client.stop() });
 }

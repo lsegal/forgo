@@ -2437,6 +2437,11 @@ func internal_weak_runtime_makeStrongFromWeak(u unsafe.Pointer) unsafe.Pointer {
 			releasem(mp)
 			return unsafe.Pointer(p)
 		}
+		if uintptr(p)-fgoArena.lo < fgoArena.size { // forgo: nogc objects
+			q := fgoMakeStrong(handle)
+			releasem(mp)
+			return q
+		}
 		// It's heap-allocated, so the span probably just got swept and released.
 		releasem(mp)
 		return nil
@@ -2512,6 +2517,10 @@ func getOrAddWeakHandle(p unsafe.Pointer) *atomic.Uintptr {
 		// really matter in this particular case.
 		handle := mheap_.immortalWeakHandles.getOrAdd(uintptr(p))
 		KeepAlive(p)
+		return handle
+	}
+
+	if handle := fgoWeakHandle(p); handle != nil { // forgo: nogc objects
 		return handle
 	}
 
@@ -2594,6 +2603,9 @@ func getWeakHandle(p unsafe.Pointer) *atomic.Uintptr {
 	if span == nil {
 		if isGoPointerWithoutSpan(p) {
 			return mheap_.immortalWeakHandles.getOrAdd(uintptr(p))
+		}
+		if handle := fgoWeakHandle(p); handle != nil { // forgo: nogc objects
+			return handle
 		}
 		throw("getWeakHandle on invalid pointer")
 	}

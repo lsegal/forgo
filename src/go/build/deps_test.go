@@ -42,6 +42,7 @@ var depsRules = `
 	< cmp,
 	  container/list,
 	  container/ring,
+	  fgo/nogc,
 	  internal/byteorder,
 	  internal/cfg,
 	  internal/coverage,
@@ -641,7 +642,11 @@ var depsRules = `
 	FMT, hash/maphash
 	< container/hash;
 
-	FMT, encoding/json, go/ast, go/constant
+	# forgo: what the //fgo:comptime interpreters share.
+	encoding/json, go/constant, FMT
+	< internal/fgoeval;
+
+	FMT, encoding/json, go/ast, go/constant, internal/fgoeval
 	< internal/forgo;
 
 	hash/maphash, container/heap, go/constant, go/parser, internal/buildcfg, internal/forgo, internal/goversion, internal/types/errors

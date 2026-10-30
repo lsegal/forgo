@@ -1,0 +1,149 @@
+// Benchmarks of reference counted (nogc) memory against the same code
+// garbage collected.
+//
+//	forgo run .         # every workload, nogc
+//	forgo run . -gc     # the same, garbage collected
+//	./bench.sh          # both, side by side, at a larger scale
+//
+// Every workload is written once, with ordinary types, and compiled both
+// ways into the same binary: runNogc is marked //fgo:nogc, so the
+// workloads it calls get nogc copies, while runGC calls the originals.
+package main
+
+import (
+	"fgo/nogc"
+	"flag"
+	"fmt"
+	"os"
+	"runtime"
+	"runtime/pprof"
+	"syscall"
+	"time"
+)
+
+var workloads = []string{"binarytrees", "rbtree", "deriv", "wordfreq", "mandeltree", "chunks", "trie"}
+
+// run runs one workload. Its calls are direct, so that the nogc copy of
+// run calls the workloads' nogc copies.
+func run(name string, scale int) uint64 {
+	switch name {
+	case "binarytrees":
+		return binaryTrees(scale)
+	case "rbtree":
+		return rbTree(scale)
+	case "deriv":
+		return derivs(scale)
+	case "wordfreq":
+		return wordFreq(scale)
+	case "mandeltree":
+		return mandelTree(scale)
+	case "chunks":
+		return chunks(scale)
+	case "trie":
+		return trieWords(scale)
+	}
+	panic("unknown workload " + name)
+}
+
+//fgo:nogc
+func runNogc(name string, scale int) uint64 { return run(name, scale) }
+
+func runGC(name string, scale int) uint64 { return run(name, scale) }
+
+var gcMode = flag.Bool("gc", false, "run the garbage collected code instead of nogc")
+
+// rng is a small deterministic generator (xorshift), so both modes see
+// the same inputs.
+type rng struct{ s uint64 }
+
+func (r *rng) next() uint64 {
+	r.s ^= r.s << 13
+	r.s ^= r.s >> 7
+	r.s ^= r.s << 17
+	return r.s
+}
+
+// scaleBits is how many doublings scale asks for, for workloads whose size
+// grows exponentially.
+func scaleBits(scale int) int {
+	n := 0
+	for scale > 1 {
+		scale /= 2
+		n++
+	}
+	return n
+}
+
+func main() {
+	scale := flag.Int("scale", 1, "workload size multiplier")
+	only := flag.String("w", "", "run only this workload")
+	prof := flag.String("cpuprofile", "", "write a CPU profile to this file")
+	flag.Parse()
+	if *prof != "" {
+		f, err := os.Create(*prof)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+	for _, w := range workloads {
+		if *only == "" || *only == w {
+			measure(w, *scale)
+		}
+	}
+}
+
+func measure(w string, scale int) {
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	mode, runMode := "nogc", runNogc
+	if *gcMode {
+		mode, runMode = "gc", runGC
+	}
+	r0 := nogc.Reuses()
+	cpu0 := cpuTime()
+	start := time.Now()
+	sum := runMode(w, scale)
+	elapsed := time.Since(start)
+	cpu := cpuTime() - cpu0
+	runtime.ReadMemStats(&after)
+	if n := nogc.Live(); n != 0 {
+		fmt.Fprintf(os.Stderr, "%s: %d nogc allocations leaked\n", w, n)
+		os.Exit(1)
+	}
+	gcs := after.NumGC - before.NumGC
+	var maxPause uint64
+	for i := before.NumGC; i < after.NumGC && i-before.NumGC < 256; i++ {
+		maxPause = max(maxPause, after.PauseNs[i%256])
+	}
+	fmt.Printf("%-5s %-12s %8.1f ms %8.1f ms cpu %5d GCs %7.2f ms max pause %7.1f MB peak RSS %9d reused  checksum %d\n",
+		mode, w, ms(uint64(elapsed)), ms(uint64(cpu)), gcs, ms(maxPause),
+		float64(peakRSS())/(1<<20), nogc.Reuses()-r0, sum)
+}
+
+func ms(ns uint64) float64 { return float64(ns) / 1e6 }
+
+// cpuTime is the user and system CPU time the process has used, in
+// nanoseconds, across all its threads (including the GC's).
+func cpuTime() int64 {
+	var u syscall.Rusage
+	if syscall.Getrusage(syscall.RUSAGE_SELF, &u) != nil {
+		return 0
+	}
+	return u.Utime.Nano() + u.Stime.Nano()
+}
+
+// peakRSS is the process's peak resident set size in bytes.
+func peakRSS() int64 {
+	var u syscall.Rusage
+	if syscall.Getrusage(syscall.RUSAGE_SELF, &u) != nil {
+		return 0
+	}
+	if runtime.GOOS == "darwin" {
+		return int64(u.Maxrss) // bytes
+	}
+	return int64(u.Maxrss) << 10 // kilobytes elsewhere
+}

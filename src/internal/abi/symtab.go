@@ -119,6 +119,7 @@ const (
 	FUNCDATA_ArgInfo            = 5
 	FUNCDATA_ArgLiveInfo        = 6
 	FUNCDATA_WrapInfo           = 7
+	FUNCDATA_FgoShadow          = 8 // forgo: frame slots holding owned nogc pointers
 )
 
 // Special values for the PCDATA_UnsafePoint table.
