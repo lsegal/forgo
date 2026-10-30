@@ -48,6 +48,7 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 	}
 
 	didMidway := false
+	didNogc := false
 
 recheck:
 	// typechecking
@@ -202,6 +203,19 @@ recheck:
 
 	if len(base.Debug.AstDump) > 0 {
 		dumpSyntax(pkg, info, files, "midway after recheck")
+	}
+
+	if !didNogc {
+		didNogc = true
+		// forgo: add the nogc copies of functions reachable from
+		// //fgo:nogc roots, which type checking must then see too.
+		if forgoNogc(m, info, files) {
+			for _, p := range types.PkgMap() {
+				p.Direct = false
+			}
+			typecheck.Target.Imports = nil
+			goto recheck
+		}
 	}
 
 	// Rewrite range over function to explicit function calls

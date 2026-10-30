@@ -23,6 +23,7 @@ func (s *mspan) markBitsForBase() markBits {
 }
 
 func tryDeferToSpanScan(p uintptr, gcw *gcWork) bool {
+	fgoEscMark(p, gcw) // forgo: nogc objects held by the GC
 	return false
 }
 

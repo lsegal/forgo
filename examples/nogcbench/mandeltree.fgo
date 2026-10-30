@@ -1,0 +1,65 @@
+package main
+
+// mandeltree renders a zoom into the Mandelbrot set adaptively: each
+// frame builds a quadtree over the view, subdividing only where the
+// escape count varies, then measures it and throws it away.
+
+type Quad struct {
+	Iter       int32
+	A, B, C, D *Quad
+}
+
+func escapeAt(cx, cy float64, max int32) int32 {
+	var zx, zy float64
+	var i int32
+	for ; i < max && zx*zx+zy*zy <= 4; i++ {
+		zx, zy = zx*zx-zy*zy+cx, 2*zx*zy+cy
+	}
+	return i
+}
+
+func buildQuad(x, y, size float64, depth int, max int32) *Quad {
+	c := escapeAt(x+size/2, y+size/2, max)
+	if depth == 0 {
+		return &Quad{Iter: c}
+	}
+	if escapeAt(x, y, max) == c && escapeAt(x+size, y, max) == c &&
+		escapeAt(x, y+size, max) == c && escapeAt(x+size, y+size, max) == c {
+		return &Quad{Iter: c}
+	}
+	h := size / 2
+	return &Quad{Iter: c,
+		A: buildQuad(x, y, h, depth-1, max),
+		B: buildQuad(x+h, y, h, depth-1, max),
+		C: buildQuad(x, y+h, h, depth-1, max),
+		D: buildQuad(x+h, y+h, h, depth-1, max)}
+}
+
+// quadStats returns the number of leaves and the iteration count summed
+// over the leaves, each weighted by its area (in units of the smallest
+// cell).
+func quadStats(q *Quad, area uint64) (leaves, weighted uint64) {
+	if q.A == nil {
+		return 1, uint64(q.Iter) * area
+	}
+	a := area / 4
+	l1, w1 := quadStats(q.A, a)
+	l2, w2 := quadStats(q.B, a)
+	l3, w3 := quadStats(q.C, a)
+	l4, w4 := quadStats(q.D, a)
+	return l1 + l2 + l3 + l4, w1 + w2 + w3 + w4
+}
+
+func mandelTree(scale int) uint64 {
+	const cx, cy = -0.743643887037151, 0.131825904205330
+	const depth = 9
+	size := 3.0
+	var sum uint64
+	for range 12 * scale {
+		q := buildQuad(cx-size/2, cy-size/2, size, depth, 512)
+		leaves, weighted := quadStats(q, 1<<(2*depth))
+		sum += leaves + weighted
+		size *= 0.7
+	}
+	return sum
+}

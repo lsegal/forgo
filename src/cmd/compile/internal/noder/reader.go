@@ -3323,6 +3323,13 @@ func (r *reader) funcLit() ir.Node {
 	}
 
 	fn := r.inlClosureFunc(origPos, sig, why)
+	// forgo: closures in nogc code are nogc code too (with Go's calling
+	// convention, as they are called through func values).
+	if outer := r.curfn; r.inlCaller != nil {
+		fn.Pragma |= r.inlCaller.Pragma & ir.FgoNogc
+	} else if outer != nil {
+		fn.Pragma |= outer.Pragma & ir.FgoNogc
+	}
 
 	fn.ClosureVars = make([]*ir.Name, 0, r.Len())
 	for len(fn.ClosureVars) < cap(fn.ClosureVars) {

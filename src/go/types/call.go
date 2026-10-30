@@ -8,6 +8,7 @@ package types
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
 	. "internal/types/errors"
 	"strings"
@@ -858,6 +859,21 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr, wantType bool) {
 		goto Error
 	}
 	// obj != nil
+
+	// forgo: x.Field on a struct-shaped composite constant (folded by the
+	// comptime interpreter, see forgo.go) is itself a constant. (As in
+	// types2's selector.)
+	if _, isVar := obj.(*Var); isVar && len(index) == 1 && !indirect &&
+		x.mode() == constant_ && x.val != nil && x.val.Kind() == constant.Composite && !constant.CompositeIsArray(x.val) {
+		if fv, ok := constant.CompositeField(x.val, sel); ok {
+			check.recordSelection(e, FieldVal, x.typ(), obj, index, indirect)
+			x.mode_ = constant_
+			x.typ_ = obj.(*Var).typ
+			x.val = fv
+			x.expr = e
+			return
+		}
+	}
 
 	switch obj := obj.(type) {
 	case *Var:

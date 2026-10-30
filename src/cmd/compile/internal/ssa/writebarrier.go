@@ -86,7 +86,7 @@ func needwb(v *Value, zeroes map[ID]ZeroRegion) bool {
 	if !ok {
 		v.Fatalf("store aux is not a type: %s", v.LongString())
 	}
-	if !t.HasPointers() {
+	if !t.HasPointers() || v.Block.Func.fgoNoWB[v.ID] {
 		return false
 	}
 	dst := v.Args[0]

@@ -4,15 +4,15 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the Go 1.27 release branch — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands five extra
+binary (built under `bin/`, `pkg/tool/`) that understands six extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `throw`, postfix `if`, `//fgo:comptime`, or `//fgo:macro`. If
-unsure, check for a forgo `GOROOT` (a directory with
+uses `?`, `throw`, postfix `if`, `//fgo:comptime`, `//fgo:macro`, or
+`//fgo:nogc`. If unsure, check for a forgo `GOROOT` (a directory with
 `src/cmd/compile/internal/forgo`).
 
 ## Rule 1: propagate errors with `?`, not manual `if err != nil` chains
@@ -233,12 +233,19 @@ Constraints:
   constant-expression positions like an inline array length
   (`var a [f(3)]int` won't fold — assign to a `const` first, then use that
   `const`).
-- The comptime interpreter supports a deliberately small subset of Go:
-  `int`/`float`/`string`/`bool` locals and arithmetic, `if`, 3-clause `for`,
-  compound assignment, calls to other `//fgo:comptime` functions, and
-  `fmt.Sprintf`/`strconv.Itoa`. **No closures, generics, maps, slices,
-  method calls, or `range` loops** inside a comptime function body — if you
-  need those, compute the value at runtime (`var`, `init()`) instead.
+- The comptime interpreter supports a subset of Go: basic-type locals with
+  Go's integer semantics (wraparound, truncating division, shifts,
+  conversions), `if`, `for` (including `range`), `break`/`continue`,
+  slices (`make`, `append`, `len`, indexing, slicing), struct and map
+  literals, calls to other `//fgo:comptime` functions, and
+  `fmt.Sprintf`/`strconv.Itoa`. A comptime function may return a slice
+  (or struct or map): `const table = build(n)` puts the table in the
+  binary's data, so prefer it over building lookup tables in `init()`.
+  **No closures, generics, pointers or method calls** inside a comptime
+  function body — if you need those, compute the value at runtime (`var`,
+  `init()`) instead.
+- Called at run time, a comptime function is nogc code (a `//fgo:nogc`
+  root, see Rule 4).
 
 ## Rule 3: use `//fgo:macro` for AST-level code generation, not for things a normal function/generic can do
 
@@ -272,6 +279,58 @@ double(compute()) // expands, at compile time, to: compute() + compute()
   calls), expanded before type-checking, and only within function bodies
   — not in a package-level `var`/`const` initializer.
 
+## Rule 4: mark allocation-heavy code `//fgo:nogc`
+
+Reach for `//fgo:nogc` when code allocates a lot and either (a) profiling
+or benchmarking shows GC pressure from it, or (b) it builds persistent,
+tree-/DAG-shaped structures (trees, persistent maps, ASTs, tries). Put the
+directive on the function that does the work (the root); it and every
+function of the same package it calls allocate their structs outside the
+GC heap, reference-counted and freed immediately on last use. No `free`
+call, no new syntax, no change to the types: plain `*T` code, and the same
+types and functions stay garbage collected for other callers.
+
+```go
+type Node struct {
+	Val         int
+	Left, Right *Node
+}
+
+func build(d int) *Node {
+	if d == 0 {
+		return &Node{}
+	}
+	return &Node{Val: d, Left: build(d - 1), Right: build(d - 1)}
+}
+
+//fgo:nogc
+func checksum(d int) int {
+	return sum(build(d)) // the tree is freed right after sum
+}
+```
+
+- **Keep the hot path inside the root's package.** Calls to other
+  packages' functions (unless inlined), func values, interface methods,
+  generic functions and goroutines leave nogc code: an object passed to
+  one that may keep it or change its pointers is handed to the GC, with
+  everything it reaches. So is one stored in a map, interface, slice,
+  global, closure or channel, one whose field address escapes, and one
+  given a pointer to itself outside a composite literal (a cycle). That's
+  always correct, but those objects are then freed by the GC, later.
+- **Rebuild instead of mutating linked fields.** To "change" a tree,
+  rebuild the path (`&Node{Val: t.Val, Left: insert(t.Left, v), Right:
+  t.Right}`), which reuses the dying nodes' memory for the new ones when
+  the old tree isn't shared.
+- **Don't reach for this by default.** It's a targeted optimization, not a
+  style preference: plain GC-backed code remains the default for anything
+  that isn't on a hot, allocation-heavy path.
+- Ownership of parameters, release timing, and reuse are all inferred by
+  the compiler — don't try to manage this by hand. See
+  [README.md](README.md)'s "`//fgo:nogc` — reference counted memory, no
+  GC" section for the full rules and limits.
+  [examples/nogc](examples/nogc/main.fgo) and
+  [examples/rbtree](examples/rbtree/main.fgo) are runnable references.
+
 ## Decision quick-reference
 
 | You need to...                                                     | Use                        |
@@ -282,6 +341,7 @@ double(compute()) // expands, at compile time, to: compute() + compute()
 | Guard clause whose body is one statement (`throw`, `return`, `continue`, ...) | postfix `if` (`STMT if COND`) |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//fgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//fgo:macro`              |
+| A hot, allocation-heavy tree/DAG that's causing measurable GC pressure | `//fgo:nogc` on the function building it |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
 
 ## Building and running
@@ -342,8 +402,133 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/noder/forgo_macro.go` — macro expansion pass.
 - `src/cmd/compile/internal/types2/forgo.go` — folds `//fgo:comptime`
   calls in `const` initializers.
+- Comptime has two interpreters that must stay in step: the compiler's
+  (`src/cmd/compile/internal/forgo/interp.go`, walking `syntax` trees, also
+  used for macros) and `src/go/types/forgo.go` (walking `go/ast`, so
+  forgopls folds the same constants; std can't import `cmd/`). Everything
+  but the tree walking is shared in `src/internal/fgoeval` (values,
+  `BinaryOp`/`Convert` for Go's integer semantics, the native
+  fmt/strconv/embed/json calls, `ToConstant`), which is listed in
+  `cmd/dist/buildtool.go`'s bootstrap packages. Each interpreter tracks
+  variables' basic types from their declarations (`typeOf`). Tests:
+  `cmd/compile/internal/forgo/interp_test.go` and
+  `go/types/forgo_test.go`. Composite constants fold through field
+  selection, indexing and `len` in both checkers (`types2`'s
+  `call.go`/`index.go`/`builtins.go`; `go/types`' generated files come from
+  `go test -run=Generate -write=all go/types`, the others are edited by
+  hand). `types2/forgo.go` caches folded values by initializer node
+  (`forgoConstCache`), since the noder type checks a package twice when it
+  has nogc roots.
+- After changing `go/types` or `internal/fgoeval`, rebuild forgopls with
+  `scripts/build-forgopls.sh`.
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
   `?` token/operator and `//fgo:` pragma parsing.
+
+Reference counted (`//fgo:nogc`) code lives in:
+
+- `src/cmd/compile/internal/noder/forgo_nogc.go` — after a first type
+  check, finds the roots (`//fgo:nogc` and `//fgo:comptime` functions,
+  methods of `//fgo:nogc` types) and every same-package function they call directly (types2
+  `Uses`/`Selections`; generic functions and calls in `go`/`defer` are
+  left out), deep-copies each callee's syntax as `_fgonogc_<name>`
+  (`ir.FgoNogcPrefix`) with its calls pointed at the copies, and has the
+  package type checked again (the `didNogc` recheck in `irgen.go`, like
+  the SIMD midway one). Copies and roots get `ir.FgoNogc`; closures
+  inherit it in `reader.funcLit`; roots are `Noinline`. `ir.Func.FgoNogc`
+  is "this is nogc code", `FgoNogcABI` "this is a copy, called only by nogc
+  code" (owned results, maybe owned parameters).
+- `src/fgo/nogc/` — `Count`, `HandedOff`, `Live`, `Reuses` diagnostics.
+- `src/cmd/compile/internal/fgorc/` — checks nogc code for the remaining
+  error (writing elements of a pointer-slice field) and records which
+  fields nogc code reassigns.
+- `src/cmd/compile/internal/ssa/forgo_rc.go` — the SSA pass (before call
+  expansion) that inserts increments, releases and reuse; runs only in
+  nogc code (`fgoRCNeeded`).
+- `src/cmd/compile/internal/types/forgo_rc.go` — type predicates shared by
+  the above (`FgoIsRCPtr`: any pointer to a non-compiler struct);
+  `escape/forgo_rc.go` and `ssagen/forgo_rc.go` — keep nogc allocations
+  with owned fields off the stack and route `ONEW` (only) to the runtime
+  allocator in nogc code.
+- `src/runtime/forgo_rc.go` — the allocator (per-M caches outside the GC
+  heap, header in front of each object), inc/dec/release/reuse, hand-off
+  to the GC.
+
+- Owned-parameter inference is `fgoParamTag` in `escape/forgo_rc.go`, for
+  copies only; it replaces the parameter's escape tag with
+  `types.FgoOwnedTag`. Panic unwinding uses `FUNCDATA_FgoShadow` (emitted
+  from `ssagen/forgo_rc.go`, declared in `gc/forgo_rc.go`, read by
+  `runtime/forgo_rc.go`).
+- Calls: results of copies and of the runtime's allocators are owned;
+  results of anything else get an increment. Before a call to code that
+  isn't nogc, `fgoRCPass.handsOff` decides from the callee's escape tags
+  (recorded by `ssagen.fgoNoteKeeps`) whether to hand the argument's
+  object off: heap, callee or result leaks, or a mutator leak into a type
+  with pointers.
+- Stores: `lowerStores` turns each store into a struct-pointer field into
+  `runtime.fgoRCStore` (or `fgoRCStoreGC` for a field that can lead back
+  to the type), except the stores filling in a new object, which stay
+  plain (no write barrier: `Func.fgoNoWB`) and get an inline check
+  (`vetIf`, applied after `materialize`) that every stored pointer is a
+  nogc object, calling `runtime.fgoRCVet` otherwise. `inlineCounts`
+  replaces the pass's `fgoRCInc`/`fgoRCDec` calls with inline code for
+  counted objects. Both read `runtime.fgoArena` (`lo`, `size`, `chunks`)
+  at fixed offsets.
+- Anything the pass can't follow (a pointer into an object stored,
+  returned, merged or passed on; whole-struct copies holding struct
+  pointers; unknown uses) hands the object off (`handOff` in `use`)
+  instead of failing to compile.
+- Runtime states: a pointer in the arena points to a counted object unless
+  its 64 KiB chunk is flagged in `fgoArena.chunks` (holds handed-off
+  objects), where `fgoArena.state` marks handed-off objects' starts and
+  `fgoStateSlow` tells their interiors apart (`fgoQuick` is the inlinable
+  part). `fgoRCHandoff` sets `fgoHeld` and walks everything the object
+  reaches, copying owned strings and slices onto the GC heap and handing
+  the old buffers to the GC too (views may still point into them).
+  Counts of handed-off objects change atomically. The GC scans handed-off
+  objects with counted references as roots (`fgoMarkCounted`) and traces
+  the others from `fgoEscMark` (called for every non-heap pointer it
+  finds, with interior pointers resolved by `fgoHandedObj`), queuing them
+  per M (`fgoEscReach`); `fgoEscSweeper` frees the unreached ones with no
+  counted references. Weak pointers to nogc objects hand them off and use
+  `fgoWeakHandle`/`fgoMakeStrong`. `GODEBUG=fgoesc=1` traces sweeps, `=2`
+  hand-offs and frees, `=3` stops at the first hand-off with a traceback.
+- String and scalar slice fields ("buffer fields", `types.FgoBufType`):
+  `ir.FgoBufField` (`ir/forgo_rc.go`) recognizes them. The set/put
+  runtime calls take the object as their last argument and copy onto the
+  GC heap when it isn't a counted object.
+- Slices of struct pointers (`types.FgoPtrSliceType`,
+  `ir.FgoPtrSliceField`): `walk/forgo_rc.go` rewrites each stored value
+  into `fgoPtrsMake/Append1/AppendN` calls (declared in
+  `typecheck/_builtin/runtime.go`; regenerate `builtin.go` with
+  `forgo run mkbuiltin.go`), which flag a buffer holding a pointer no
+  counted object can count (`fgoPtrsTaint`), and ssagen's store hook
+  hands the result to `runtime.fgoPtrsPut`. `takeElems` replaces an
+  element passed to an owned parameter with `runtime.fgoPtrsTake`.
+- Mixed types (`types.FgoMixed`: fields holding GC values) allocate with
+  `runtime.fgoRCNewMixed`: two link words before the header put each live
+  one on `fgoMixed`, which the GC scans as a root (`fixedRootFgoMixed` in
+  `mgcmark.go`).
+- `planKeep` drops the increments of loads of an object's struct pointer
+  fields that reach its release with no memory write in between, and the
+  release becomes `runtime.fgoRCDecKeep`/`fgoRCDropReuseKeep` with a word
+  mask. `fullInits` finds allocations whose fields are all stored right
+  after and calls `fgoRCNewInit`/`fgoRCNewAtInit`, which don't clear.
+- After compiler changes, build with `-a` (or `forgo clean -cache` both
+  before and after installing the compiler): the build cache has served
+  objects built by the previous compiler.
+
+Their hooks into upstream files are single lines in `gc/main.go`,
+`gc/obj.go`, `escape/utils.go`, `escape/escape.go`, `escape/expr.go`,
+`escape/assign.go`, `ssagen/ssa.go` (including one that turns off the
+in-place `x = append(x, ...)` path for buffer fields, which would bypass
+the copying store), `walk/walk.go`, `typecheck/_builtin/runtime.go`,
+`ssa/compile.go`, `ssa/writebarrier.go`, `ssa/func.go` (`fgoNoWB`),
+`noder/irgen.go` (the recheck), `noder/reader.go` (closures),
+`noder/noder.go` and `noder/lex.go` (the pragma), `ir/node.go` (the
+`FgoNogc` flag), `runtime/runtime2.go` (`m` fields), `runtime/panic.go`
+(recovery and Goexit), `runtime/mheap.go` (weak handles),
+`runtime/mgcmark*.go`, `internal/abi/symtab.go` and `runtime/funcdata.h`
+(the funcdata index), and `go/build/deps_test.go`.
 
 Hot reload (`forgo run --watch`) lives in four places:
 

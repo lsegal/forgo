@@ -43,7 +43,7 @@ a:hover { color: var(--color-accent-600); }
       <span class="cmyk-head" style="display:block"><span class="paper">A fork of Go with compile-time</span><span class="plate plate-c" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-m" aria-hidden="true">A fork of Go with compile-time</span><span class="plate plate-y" aria-hidden="true">A fork of Go with compile-time</span></span>
       <span class="cmyk-head" style="display:block"><span class="paper">execution, macros, and hot reload.</span><span class="plate plate-c" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-m" aria-hidden="true">execution, macros, and hot reload.</span><span class="plate plate-y" aria-hidden="true">execution, macros, and hot reload.</span></span>
     </h1>
-    <p style="font-size:18px;line-height:30px;max-width:62ch;margin:36px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo is a fork of Go, currently synced to the Go 1.27 release branch, that adds Nim-style compile-time execution and AST macros, plus Rust-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">?</code> error-propagation, a JavaScript-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">throw</code> for failing a function out with a new error, a Ruby/Perl-style postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">if</code> for one-line guard clauses, SIMD enabled by default, and Dart/Flutter-style hot reload for a running program.</p>
+    <p style="font-size:18px;line-height:30px;max-width:62ch;margin:36px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">forgo is a fork of Go, currently synced to the Go 1.27 release branch, that adds Nim-style compile-time execution and AST macros, plus Rust-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">?</code> error-propagation, a JavaScript-style <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">throw</code> for failing a function out with a new error, a Ruby/Perl-style postfix <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:16px">if</code> for one-line guard clauses, SIMD enabled by default, Dart/Flutter-style hot reload for a running program, and Koka-style reference counted types that never touch the garbage collector.</p>
     <div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:34px">
       <a class="btn btn-primary" href="#install" style="text-decoration:none;min-height:38px">Install forgo</a>
       <a class="btn btn-ghost" href="#new" style="text-decoration:none;min-height:38px">What’s new</a>
@@ -68,6 +68,7 @@ a:hover { color: var(--color-accent-600); }
       <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#packages" style="text-decoration:none">comptime/embed and comptime/json</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">06</span></p>
       <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#consts" style="text-decoration:none">Non-scalar consts</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">07</span></p>
       <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#hotreload" style="text-decoration:none">forgo run --watch — hot reload</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">08</span></p>
+      <p style="display:flex;align-items:baseline;gap:8px;margin:0;font-size:16px;line-height:28px"><span><a href="#nogc" style="text-decoration:none">//fgo:nogc — reference counting, no GC</a></span><span style="flex:1;min-width:28px;align-self:flex-end;margin-bottom:0.34em;border-bottom:1px dotted color-mix(in srgb,var(--color-text) 45%,transparent)"></span><span style="font-family:var(--font-heading);font-weight:600;font-size:17px">09</span></p>
     </div>
     <hr style="height:0;border:0;border-top:1px solid var(--color-text);margin:0">
   </section>
@@ -248,12 +249,64 @@ GEN1 tick 105</pre>
     <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;max-width:58ch;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Note the tick count and the uptime: same process, new code.</p>
   </section>
 
+  <section id="nogc" style="padding:56px 0 0">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px clamp(28px,5vw,84px);align-items:start">
+      <div>
+        <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">09</span>
+        <h3 style="font-family:var(--font-heading);font-weight:600;font-size:28px;line-height:36px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em">//fgo:nogc</code> — reference counting, no GC</h3>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Mark a function <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:nogc</code> and the structs allocated by it, and by every function of its package that it calls, live outside the GC heap. The compiler counts references the way Koka’s Perceus does and frees each object right after its last use. There is no <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">free</code>, no lifetime syntax, no new keyword and no marker in your types: it is plain <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">*T</code> code with ordinary structs, including other packages’ types. The same functions also stay garbage collected for every other caller, so one binary can run the same code both ways.</p>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">Rebuilding a structure updates it in place when nothing else holds it: each node on the path dies as it is rebuilt, and its memory goes straight to its replacement. The insert on the right reuses the whole path; <a href="https://github.com/lsegal/forgo/tree/release-branch.go1.27/examples/rbtree">examples/rbtree</a> adds red-black balancing to it and prints the run below it. When a nogc object reaches code that does not count it (a map, an interface, another package’s function that may keep it), it is handed to the garbage collector with everything it points to, so nothing is off limits.</p>
+        <p style="font-size:16px;line-height:28px;margin:20px 0 0;max-width:52ch;color:color-mix(in srgb,var(--color-text) 82%,transparent)">On the tree workloads in <a href="https://github.com/lsegal/forgo/tree/release-branch.go1.27/examples/nogcbench">examples/nogcbench</a>, the GC build uses up to 3.9× the CPU time and up to twice the memory, and with one core nogc runs 1.3× to 2.4× faster.</p>
+        <p style="margin:20px 0 0"><a href="docs.html#nogc" style="font-size:15.5px">What the compiler checks, the benchmarks, and the limits →</a></p>
+      </div>
+      <div style="display:grid;gap:20px">
+        <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">type Tree struct {
+	Key, Val    int
+	Left, Right *Tree
+}
+
+<span style="color:var(--color-neutral-600)">//fgo:nogc</span>
+func Distinct(keys []int) int {
+	var t *Tree
+	for _, k := range keys {
+		t = Insert(t, k, k)
+	}
+	return Len(t)
+} <span style="color:var(--color-neutral-600)">// the tree is freed here</span>
+
+func Insert(t *Tree, k, v int) *Tree {
+	if t == nil {
+		return &amp;Tree{Key: k, Val: v}
+	}
+	if k &lt; t.Key {
+		return &amp;Tree{Key: t.Key, Val: t.Val,
+			Left:  Insert(t.Left, k, v),
+			Right: t.Right}
+	}
+	if k &gt; t.Key {
+		return &amp;Tree{Key: t.Key, Val: t.Val,
+			Left:  t.Left,
+			Right: Insert(t.Right, k, v)}
+	}
+	return &amp;Tree{Key: k, Val: v,
+		Left: t.Left, Right: t.Right}
+}</pre>
+        <pre style="margin:0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">$ forgo run ./examples/rbtree
+                     time    reused  GCs
+insert 1M keys     1042ms  21693947    0
+overwrite 1M keys   664ms  19454319    0
+scale, unshared      37ms   1000000    0
+scale, shared        43ms         0    0</pre>
+      </div>
+    </div>
+  </section>
+
   <section aria-label="Toolchain notes" style="padding:56px 0 98px">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:42px clamp(28px,4vw,70px)">
       <div>
         <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Editors</span>
         <h3 style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:32px;margin:0">forgopls and the VS Code extension</h3>
-        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The extension adds <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.fgo</code> syntax highlighting plus a language client backed by forgopls, a build of gopls that understands <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">?</code> well enough to type-check it correctly. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:comptime</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:macro</code> are still compiler-only and show as false-positive diagnostics.</p>
+        <p style="font-size:15.5px;line-height:28px;margin:20px 0 0;text-align:justify;hyphens:auto;color:color-mix(in srgb,var(--color-text) 82%,transparent)">The extension adds <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">.fgo</code> syntax highlighting plus a language client backed by forgopls, a build of gopls that understands <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">?</code> well enough to type-check it correctly. It folds <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:comptime</code> constants the way the compiler does; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">//fgo:macro</code> is still compiler-only, so macro calls show as false-positive diagnostics.</p>
       </div>
       <div>
         <span style="display:block;font-size:13px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 70%,transparent);margin:0 0 14px">Coding agents</span>

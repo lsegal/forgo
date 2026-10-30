@@ -22,38 +22,48 @@ package forgo
 
 import (
 	"cmd/compile/internal/syntax"
-	stdjson "encoding/json"
 	"fmt"
 	"go/constant"
 	"go/token"
-	"os"
+	"internal/fgoeval"
 	"path/filepath"
-	"sort"
-	"strings"
 )
 
-// Value is a go/constant.Value (scalar comptime evaluation), an objectVal
-// or arrayVal (composite comptime evaluation, e.g. a struct/map or
-// slice/array literal, or the result of json.Unmarshal), or a NodeVal
-// (macro evaluation).
-type Value interface{}
+// What the interpreter shares with go/types' (see internal/fgoeval).
+type (
+	Value      = fgoeval.Value
+	objectVal  = fgoeval.ObjectVal
+	arrayVal   = fgoeval.ArrayVal
+	runtimeErr = fgoeval.Error
+)
 
-// objectVal is a struct- or map[string]T-shaped composite value: a struct
-// or map composite literal evaluated at compile time, or a JSON object
-// produced by comptime/json's Unmarshal. Field access (x.Field) and string
-// indexing (x["field"]) both read from fields, keyed by struct field name
-// (for a struct literal), map key (for a map literal), or JSON object key
-// (for an Unmarshal result).
-type objectVal struct {
-	keys   []string // preserves literal/decode order, for json.Marshal output
-	fields map[string]Value
-}
+var (
+	fail           = fgoeval.Fail
+	binaryOp       = fgoeval.BinaryOp
+	convertTo      = fgoeval.Convert
+	isIntType      = fgoeval.IsIntType
+	isFloatType    = fgoeval.IsFloatType
+	isBasicType    = fgoeval.IsBasicType
+	defaultType    = fgoeval.DefaultType
+	valueType      = fgoeval.ValueType
+	scalarConstant = fgoeval.Scalar
+	scalarString   = fgoeval.ScalarString
+	scalarInt      = fgoeval.ScalarInt
+	nativeValue    = fgoeval.Native
+	ToConstant     = fgoeval.ToConstant
+)
 
-// arrayVal is a slice-, array-, or JSON-array-shaped composite value: a
-// slice/array composite literal evaluated at compile time, or a JSON array
-// produced by comptime/json's Unmarshal.
-type arrayVal struct {
-	elems []Value
+// HasNative reports whether pkg.fn is one of forgo's natively evaluated
+// compile-time helpers (see fgoeval.HasNative).
+func (in *Interp) HasNative(pkg, fn string) bool { return fgoeval.HasNative(pkg, fn) }
+
+// nativeCall evaluates one of those helpers called at pos.
+func (in *Interp) nativeCall(pos syntax.Pos, pkg, fn string, args []Value) (Value, bool) {
+	dir := ""
+	if base := pos.Base(); base != nil && base.Filename() != "" {
+		dir = filepath.Dir(base.Filename())
+	}
+	return fgoeval.NativeCall(dir, pkg, fn, args)
 }
 
 // NodeVal wraps a syntax tree produced or manipulated by a macro.
@@ -71,6 +81,7 @@ type Interp struct {
 type scope struct {
 	parent *scope
 	vars   map[string]Value
+	types  map[string]string // the basic type each variable was declared with, if known
 }
 
 func newScope(parent *scope) *scope { return &scope{parent: parent, vars: map[string]Value{}} }
@@ -86,6 +97,29 @@ func (s *scope) get(name string) (Value, bool) {
 
 func (s *scope) define(name string, v Value) { s.vars[name] = v }
 
+// defineTyped defines name with basic type t ("" if not a basic type).
+func (s *scope) defineTyped(name string, v Value, t string) {
+	s.vars[name] = v
+	if t != "" {
+		if s.types == nil {
+			s.types = map[string]string{}
+		}
+		s.types[name] = t
+	} else if s.types != nil {
+		delete(s.types, name)
+	}
+}
+
+// typeOf returns the basic type name was declared with, or "".
+func (s *scope) typeOf(name string) string {
+	for cur := s; cur != nil; cur = cur.parent {
+		if _, ok := cur.vars[name]; ok {
+			return cur.types[name]
+		}
+	}
+	return ""
+}
+
 func (s *scope) assign(name string, v Value) bool {
 	for cur := s; cur != nil; cur = cur.parent {
 		if _, ok := cur.vars[name]; ok {
@@ -97,6 +131,10 @@ func (s *scope) assign(name string, v Value) bool {
 }
 
 type returnSignal struct{ val Value }
+
+// breakSignal and continueSignal end the innermost loop's iteration.
+type breakSignal struct{}
+type continueSignal struct{}
 
 // EvalMacro runs a //fgo:macro function, binding its parameters to the
 // unevaluated argument syntax trees, and returns the syntax tree the macro
@@ -129,7 +167,7 @@ func (in *Interp) EvalExprValue(e syntax.Expr) (result Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if re, ok := r.(runtimeErr); ok {
-				err = re.err
+				err = re.Err
 				return
 			}
 			panic(r)
@@ -164,10 +202,19 @@ func (in *Interp) call(fn *syntax.FuncDecl, args []Value) (val Value, err error)
 				return
 			}
 			if e, ok := r.(runtimeErr); ok {
-				err = e.err
+				err = e.Err
 				return
 			}
 			panic(r)
+		}
+	}()
+
+	defer func() {
+		// The result takes the declared result type.
+		if len(fn.Type.ResultList) == 1 && err == nil {
+			if cv, ok := val.(constant.Value); ok {
+				val = convertTo(cv, typeName(fn.Type.ResultList[0].Type))
+			}
 		}
 	}()
 
@@ -179,18 +226,17 @@ func (in *Interp) call(fn *syntax.FuncDecl, args []Value) (val Value, err error)
 			continue
 		}
 		if i < len(args) {
-			sc.define(p.Name.Value, args[i])
+			t := typeName(p.Type)
+			v := args[i]
+			if cv, ok := v.(constant.Value); ok {
+				v = convertTo(cv, t)
+			}
+			sc.defineTyped(p.Name.Value, v, t)
 		}
 		i++
 	}
 	in.execBlock(sc, fn.Body)
 	return nil, nil
-}
-
-type runtimeErr struct{ err error }
-
-func fail(format string, a ...any) {
-	panic(runtimeErr{fmt.Errorf(format, a...)})
 }
 
 // ---------------------------------------------------------------------------
@@ -242,76 +288,201 @@ func (in *Interp) execStmt(sc *scope, s syntax.Stmt) {
 
 	case *syntax.ForStmt:
 		child := newScope(sc)
+		if r, isRange := x.Init.(*syntax.RangeClause); isRange {
+			in.execRange(child, r, x.Body)
+			return
+		}
 		if x.Init != nil {
-			if _, isRange := x.Init.(*syntax.RangeClause); isRange {
-				fail("forgo: range-form for loops are not supported in comptime functions")
-			}
 			in.execStmt(child, x.Init)
 		}
 		for x.Cond == nil || in.evalBool(child, x.Cond) {
-			in.execBlock(child, x.Body)
+			if in.loopBody(child, x.Body) {
+				break
+			}
 			if x.Post != nil {
 				in.execStmt(child, x.Post)
 			}
 		}
+
+	case *syntax.BranchStmt:
+		if x.Label != nil {
+			fail("forgo: labeled break and continue are not supported in comptime functions")
+		}
+		switch x.Tok {
+		case syntax.Break:
+			panic(breakSignal{})
+		case syntax.Continue:
+			panic(continueSignal{})
+		}
+		fail("forgo: unsupported branch statement in comptime function")
 
 	default:
 		fail("forgo: unsupported statement %T in comptime function", s)
 	}
 }
 
+// loopBody runs one iteration of a loop body, reporting whether it ran a
+// break.
+func (in *Interp) loopBody(sc *scope, body *syntax.BlockStmt) (broke bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch r.(type) {
+			case breakSignal:
+				broke = true
+			case continueSignal:
+			default:
+				panic(r)
+			}
+		}
+	}()
+	in.execBlock(sc, body)
+	return false
+}
+
+// execRange runs a range-form for loop over an int, a string (by rune), a
+// slice or array, or a map or struct value (in key order).
+func (in *Interp) execRange(sc *scope, r *syntax.RangeClause, body *syntax.BlockStmt) {
+	var keyName, valName syntax.Expr
+	switch lhs := r.Lhs.(type) {
+	case nil:
+	case *syntax.ListExpr:
+		keyName = lhs.ElemList[0]
+		if len(lhs.ElemList) > 1 {
+			valName = lhs.ElemList[1]
+		}
+	default:
+		keyName = lhs
+	}
+	set := func(e syntax.Expr, v Value, t string) {
+		n, ok := e.(*syntax.Name)
+		if e == nil || ok && n.Value == "_" {
+			return
+		}
+		if !ok {
+			fail("forgo: range variables must be plain names in comptime functions")
+		}
+		if r.Def {
+			sc.defineTyped(n.Value, v, t)
+		} else if !sc.assign(n.Value, v) {
+			fail("forgo: undefined: %s", n.Value)
+		}
+	}
+	iter := func(k Value, kt string, v Value, vt string) bool {
+		set(keyName, k, kt)
+		set(valName, v, vt)
+		return in.loopBody(sc, body)
+	}
+	switch x := in.evalExpr(sc, r.X).(type) {
+	case constant.Value:
+		switch x.Kind() {
+		case constant.Int:
+			n := scalarInt(x, "range")
+			for i := int64(0); i < n; i++ {
+				if iter(constant.MakeInt64(i), "int", nil, "") {
+					return
+				}
+			}
+		case constant.String:
+			for i, c := range constant.StringVal(x) {
+				if iter(constant.MakeInt64(int64(i)), "int", constant.MakeInt64(int64(c)), "rune") {
+					return
+				}
+			}
+		default:
+			fail("forgo: cannot range over this value in comptime functions")
+		}
+	case arrayVal:
+		for i, e := range x.Elems {
+			if iter(constant.MakeInt64(int64(i)), "int", e, valueType(e)) {
+				return
+			}
+		}
+	case objectVal:
+		for _, k := range x.Keys {
+			if iter(constant.MakeString(k), "string", x.Fields[k], valueType(x.Fields[k])) {
+				return
+			}
+		}
+	default:
+		fail("forgo: cannot range over this value in comptime functions")
+	}
+}
+
 func (in *Interp) execLocalDecl(sc *scope, d syntax.Decl) {
 	switch x := d.(type) {
 	case *syntax.VarDecl:
-		in.bindNames(sc, x.NameList, x.Values)
+		in.bindNames(sc, x.NameList, x.Type, x.Values)
 	case *syntax.ConstDecl:
-		in.bindNames(sc, x.NameList, x.Values)
+		in.bindNames(sc, x.NameList, x.Type, x.Values)
 	default:
 		fail("forgo: unsupported local declaration %T in comptime function", d)
 	}
 }
 
-func (in *Interp) bindNames(sc *scope, names []*syntax.Name, values syntax.Expr) {
+func (in *Interp) bindNames(sc *scope, names []*syntax.Name, typ syntax.Expr, values syntax.Expr) {
+	t := typeName(typ)
 	if values == nil {
 		for _, n := range names {
-			sc.define(n.Value, constant.MakeUnknown())
+			sc.defineTyped(n.Value, zeroValue(typ), t)
 		}
 		return
+	}
+	bind := func(n *syntax.Name, e syntax.Expr) {
+		v := in.evalExpr(sc, e)
+		vt := t
+		if typ == nil {
+			vt = in.typeOf(sc, e)
+		}
+		if cv, ok := v.(constant.Value); ok {
+			if vt == "" {
+				vt = defaultType(cv)
+			}
+			v = convertTo(cv, vt)
+		}
+		sc.defineTyped(n.Value, v, vt)
 	}
 	if lst, ok := values.(*syntax.ListExpr); ok {
 		for i, n := range names {
 			if n.Value == "_" || i >= len(lst.ElemList) {
 				continue
 			}
-			sc.define(n.Value, in.evalExpr(sc, lst.ElemList[i]))
+			bind(n, lst.ElemList[i])
 		}
 		return
 	}
 	if len(names) != 1 {
 		fail("forgo: multi-value declarations are not supported in comptime functions")
 	}
-	sc.define(names[0].Value, in.evalExpr(sc, values))
+	bind(names[0], values)
 }
 
 func (in *Interp) execAssign(sc *scope, a *syntax.AssignStmt) {
+	if ix, ok := a.Lhs.(*syntax.IndexExpr); ok {
+		in.execIndexAssign(sc, a, ix)
+		return
+	}
 	name, ok := a.Lhs.(*syntax.Name)
 	if !ok {
-		fail("forgo: only simple identifier assignment is supported in comptime functions")
+		fail("forgo: only assignment to a name or an element is supported in comptime functions")
 	}
-
-	if a.Op == syntax.Def {
-		sc.define(name.Value, in.evalExpr(sc, a.Rhs))
+	if name.Value == "_" {
+		in.evalExpr(sc, a.Rhs)
 		return
 	}
 
+	if a.Op == syntax.Def {
+		in.bindNames(sc, []*syntax.Name{name}, nil, a.Rhs)
+		return
+	}
+
+	t := sc.typeOf(name.Value)
 	if a.Rhs == nil {
 		// i++ / i--
 		cur, ok := sc.get(name.Value)
 		if !ok {
 			fail("forgo: undefined: %s", name.Value)
 		}
-		one := constant.MakeInt64(1)
-		next := constant.BinaryOp(scalarConstant(cur, name.Value), tokenFor(a.Op), one)
+		next := binaryOp(scalarConstant(cur, name.Value), tokenFor(a.Op), constant.MakeInt64(1), t)
 		if !sc.assign(name.Value, next) {
 			fail("forgo: undefined: %s", name.Value)
 		}
@@ -320,6 +491,9 @@ func (in *Interp) execAssign(sc *scope, a *syntax.AssignStmt) {
 
 	rhs := in.evalExpr(sc, a.Rhs)
 	if a.Op == 0 {
+		if cv, ok := rhs.(constant.Value); ok {
+			rhs = convertTo(cv, t)
+		}
 		if !sc.assign(name.Value, rhs) {
 			fail("forgo: undefined: %s", name.Value)
 		}
@@ -330,9 +504,48 @@ func (in *Interp) execAssign(sc *scope, a *syntax.AssignStmt) {
 	if !ok {
 		fail("forgo: undefined: %s", name.Value)
 	}
-	next := constant.BinaryOp(scalarConstant(cur, name.Value), tokenFor(a.Op), scalarConstant(rhs, name.Value))
+	next := binaryOp(scalarConstant(cur, name.Value), tokenFor(a.Op), scalarConstant(rhs, name.Value), t)
 	if !sc.assign(name.Value, next) {
 		fail("forgo: undefined: %s", name.Value)
+	}
+}
+
+// execIndexAssign assigns an element of a slice or a key of a map
+// (s[i] = v, m[k] += v).
+func (in *Interp) execIndexAssign(sc *scope, a *syntax.AssignStmt, ix *syntax.IndexExpr) {
+	base := in.evalExpr(sc, ix.X)
+	key := in.evalExpr(sc, ix.Index)
+	var cur Value
+	var store func(Value)
+	switch b := base.(type) {
+	case arrayVal:
+		i := scalarInt(key, "index expression")
+		if i < 0 || i >= int64(len(b.Elems)) {
+			fail("forgo: index %d out of range in comptime evaluation (length %d)", i, len(b.Elems))
+		}
+		cur, store = b.Elems[i], func(v Value) { b.Elems[i] = v }
+	case objectVal:
+		k := scalarString(key, "index expression")
+		cur = b.Fields[k]
+		store = func(v Value) {
+			if _, ok := b.Fields[k]; !ok {
+				b.Keys = append(b.Keys, k)
+				if n, ok := ix.X.(*syntax.Name); ok {
+					sc.assign(n.Value, b)
+				}
+			}
+			b.Fields[k] = v
+		}
+	default:
+		fail("forgo: cannot assign to an element of this value in comptime evaluation")
+	}
+	switch {
+	case a.Rhs == nil:
+		store(binaryOp(scalarConstant(cur, "element"), tokenFor(a.Op), constant.MakeInt64(1), valueType(cur)))
+	case a.Op == 0:
+		store(in.evalExpr(sc, a.Rhs))
+	default:
+		store(binaryOp(scalarConstant(cur, "element"), tokenFor(a.Op), scalarConstant(in.evalExpr(sc, a.Rhs), "element"), valueType(cur)))
 	}
 }
 
@@ -383,24 +596,36 @@ func (in *Interp) evalExpr(sc *scope, e syntax.Expr) Value {
 		if !ok {
 			fail("forgo: cannot select field %q from a non-struct/map value in comptime evaluation", x.Sel.Value)
 		}
-		v, ok := obj.fields[x.Sel.Value]
+		v, ok := obj.Fields[x.Sel.Value]
 		if !ok {
 			fail("forgo: no field %q in comptime evaluation", x.Sel.Value)
 		}
 		return v
 
+	case *syntax.SliceExpr:
+		return in.evalSlice(sc, x)
+
 	case *syntax.IndexExpr:
 		base := in.evalExpr(sc, x.X)
 		switch b := base.(type) {
+		case constant.Value:
+			if b.Kind() == constant.String {
+				str := constant.StringVal(b)
+				idx := scalarInt(in.evalExpr(sc, x.Index), "index expression")
+				if idx < 0 || idx >= int64(len(str)) {
+					fail("forgo: index %d out of range in comptime evaluation (length %d)", idx, len(str))
+				}
+				return constant.MakeInt64(int64(str[idx]))
+			}
 		case arrayVal:
 			idx := scalarInt(in.evalExpr(sc, x.Index), "index expression")
-			if idx < 0 || idx >= int64(len(b.elems)) {
-				fail("forgo: index %d out of range in comptime evaluation (length %d)", idx, len(b.elems))
+			if idx < 0 || idx >= int64(len(b.Elems)) {
+				fail("forgo: index %d out of range in comptime evaluation (length %d)", idx, len(b.Elems))
 			}
-			return b.elems[idx]
+			return b.Elems[idx]
 		case objectVal:
 			key := scalarString(in.evalExpr(sc, x.Index), "index expression")
-			v, ok := b.fields[key]
+			v, ok := b.Fields[key]
 			if !ok {
 				fail("forgo: no key %q in comptime evaluation", key)
 			}
@@ -424,22 +649,22 @@ func (in *Interp) evalCompositeLit(sc *scope, lit *syntax.CompositeLit) Value {
 		for i, e := range lit.ElemList {
 			elems[i] = in.evalExpr(sc, e)
 		}
-		return arrayVal{elems: elems}
+		return arrayVal{Elems: elems}
 	}
 	if lit.NKeys != len(lit.ElemList) {
 		fail("forgo: mixed keyed and unkeyed composite literal elements are not supported in comptime evaluation")
 	}
-	obj := objectVal{fields: map[string]Value{}}
+	obj := objectVal{Fields: map[string]Value{}}
 	for _, e := range lit.ElemList {
 		kv, ok := e.(*syntax.KeyValueExpr)
 		if !ok {
 			fail("forgo: unsupported composite literal element %T in comptime evaluation", e)
 		}
 		key := in.compositeLitKey(sc, kv.Key)
-		if _, dup := obj.fields[key]; !dup {
-			obj.keys = append(obj.keys, key)
+		if _, dup := obj.Fields[key]; !dup {
+			obj.Keys = append(obj.Keys, key)
 		}
-		obj.fields[key] = in.evalExpr(sc, kv.Value)
+		obj.Fields[key] = in.evalExpr(sc, kv.Value)
 	}
 	return obj
 }
@@ -486,15 +711,16 @@ func literalValue(lit *syntax.BasicLit) constant.Value {
 func (in *Interp) evalOperation(sc *scope, op *syntax.Operation) Value {
 	if op.Y == nil {
 		x := scalarConstant(in.evalExpr(sc, op.X), "unary operand")
+		t := in.typeOf(sc, op.X)
 		switch op.Op {
 		case syntax.Sub:
-			return constant.UnaryOp(token.SUB, x, 0)
+			return convertTo(constant.UnaryOp(token.SUB, x, 0), t)
 		case syntax.Add:
-			return constant.UnaryOp(token.ADD, x, 0)
+			return x
 		case syntax.Not:
 			return constant.MakeBool(!constant.BoolVal(x))
 		case syntax.Xor:
-			return constant.UnaryOp(token.XOR, x, 0)
+			return convertTo(constant.UnaryOp(token.XOR, x, 0), t)
 		}
 		fail("forgo: unsupported unary operator in comptime function")
 	}
@@ -519,7 +745,234 @@ func (in *Interp) evalOperation(sc *scope, op *syntax.Operation) Value {
 	case syntax.Eql, syntax.Neq, syntax.Lss, syntax.Leq, syntax.Gtr, syntax.Geq:
 		return constant.MakeBool(constant.Compare(x, tokenFor(op.Op), y))
 	}
-	return constant.BinaryOp(x, tokenFor(op.Op), y)
+	return binaryOp(x, tokenFor(op.Op), y, in.typeOf(sc, op))
+}
+
+// typeName returns the name of basic type expression e, or "".
+func typeName(e syntax.Expr) string {
+	if n, ok := e.(*syntax.Name); ok && isBasicType(n.Value) {
+		return n.Value
+	}
+	return ""
+}
+
+// zeroValue returns the zero value of type expression typ.
+func zeroValue(typ syntax.Expr) Value {
+	switch t := typ.(type) {
+	case *syntax.SliceType:
+		return arrayVal{}
+	case *syntax.MapType:
+		return objectVal{Fields: map[string]Value{}}
+	case *syntax.Name:
+		switch {
+		case isIntType(t.Value):
+			return constant.MakeInt64(0)
+		case isFloatType(t.Value):
+			return constant.MakeFloat64(0)
+		case t.Value == "string":
+			return constant.MakeString("")
+		case t.Value == "bool":
+			return constant.MakeBool(false)
+		}
+	}
+	return constant.MakeUnknown()
+}
+
+// typeOf infers the basic type of expression e from the declared types of
+// the variables and functions it uses: "" for an untyped constant, or a
+// type the interpreter does not track.
+func (in *Interp) typeOf(sc *scope, e syntax.Expr) string {
+	switch x := e.(type) {
+	case *syntax.ParenExpr:
+		return in.typeOf(sc, x.X)
+	case *syntax.Name:
+		return sc.typeOf(x.Value)
+	case *syntax.BasicLit:
+		return ""
+	case *syntax.Operation:
+		if x.Y == nil {
+			if x.Op == syntax.Not {
+				return "bool"
+			}
+			return in.typeOf(sc, x.X)
+		}
+		switch x.Op {
+		case syntax.Eql, syntax.Neq, syntax.Lss, syntax.Leq, syntax.Gtr, syntax.Geq, syntax.AndAnd, syntax.OrOr:
+			return "bool"
+		case syntax.Shl, syntax.Shr:
+			return in.typeOf(sc, x.X)
+		}
+		if t := in.typeOf(sc, x.X); t != "" {
+			return t
+		}
+		return in.typeOf(sc, x.Y)
+	case *syntax.IndexExpr:
+		if v, ok := in.evalNoFail(sc, x.X).(constant.Value); ok && v.Kind() == constant.String {
+			return "byte"
+		}
+	case *syntax.SliceExpr:
+		return in.typeOf(sc, x.X)
+	case *syntax.CallExpr:
+		if n, ok := x.Fun.(*syntax.Name); ok {
+			if isBasicType(n.Value) {
+				return n.Value
+			}
+			switch n.Value {
+			case "len", "cap":
+				return "int"
+			}
+			if fn, ok := in.Funcs[n.Value]; ok && len(fn.Type.ResultList) == 1 {
+				return typeName(fn.Type.ResultList[0].Type)
+			}
+		}
+	}
+	return ""
+}
+
+// evalNoFail is evalExpr, returning nil where that would fail.
+func (in *Interp) evalNoFail(sc *scope, e syntax.Expr) (v Value) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtimeErr); !ok {
+				panic(r)
+			}
+			v = nil
+		}
+	}()
+	if n, ok := e.(*syntax.Name); ok {
+		v, _ = sc.get(n.Value)
+		return v
+	}
+	return in.evalExpr(sc, e)
+}
+
+// evalSlice evaluates s[i:j] (or s[i:j:k]) of a string or slice.
+func (in *Interp) evalSlice(sc *scope, x *syntax.SliceExpr) Value {
+	base := in.evalExpr(sc, x.X)
+	var n int64
+	switch b := base.(type) {
+	case constant.Value:
+		if b.Kind() != constant.String {
+			fail("forgo: cannot slice a non-string scalar in comptime evaluation")
+		}
+		n = int64(len(constant.StringVal(b)))
+	case arrayVal:
+		n = int64(cap(b.Elems))
+	default:
+		fail("forgo: cannot slice this value in comptime evaluation")
+	}
+	idx := [3]int64{0, -1, -1}
+	for i, e := range x.Index {
+		if e != nil {
+			idx[i] = scalarInt(in.evalExpr(sc, e), "slice index")
+		}
+	}
+	lo, hi, max := idx[0], idx[1], idx[2]
+	if str, ok := base.(constant.Value); ok {
+		if hi < 0 {
+			hi = n
+		}
+		if lo < 0 || hi < lo || hi > n {
+			fail("forgo: slice bounds [%d:%d] out of range in comptime evaluation (length %d)", lo, hi, n)
+		}
+		return constant.MakeString(constant.StringVal(str)[lo:hi])
+	}
+	elems := base.(arrayVal).Elems
+	if hi < 0 {
+		hi = int64(len(elems))
+	}
+	if max < 0 {
+		max = n
+	}
+	if lo < 0 || hi < lo || max < hi || max > n {
+		fail("forgo: slice bounds [%d:%d:%d] out of range in comptime evaluation (capacity %d)", lo, hi, max, n)
+	}
+	return arrayVal{Elems: elems[lo:hi:max]}
+}
+
+// evalBuiltin evaluates a call to len, cap, append or make, or a
+// conversion to a basic type, reporting whether call was one.
+func (in *Interp) evalBuiltin(sc *scope, name string, call *syntax.CallExpr) (Value, bool) {
+	if isBasicType(name) && len(call.ArgList) == 1 {
+		v := scalarConstant(in.evalExpr(sc, call.ArgList[0]), name+" conversion")
+		return convertTo(v, name), true
+	}
+	switch name {
+	case "len", "cap":
+		if len(call.ArgList) != 1 {
+			fail("forgo: %s takes one argument", name)
+		}
+		switch v := in.evalExpr(sc, call.ArgList[0]).(type) {
+		case constant.Value:
+			if v.Kind() == constant.String {
+				return constant.MakeInt64(int64(len(constant.StringVal(v)))), true
+			}
+		case arrayVal:
+			if name == "cap" {
+				return constant.MakeInt64(int64(cap(v.Elems))), true
+			}
+			return constant.MakeInt64(int64(len(v.Elems))), true
+		case objectVal:
+			return constant.MakeInt64(int64(len(v.Fields))), true
+		}
+		fail("forgo: invalid argument to %s in comptime evaluation", name)
+	case "append":
+		if len(call.ArgList) == 0 {
+			fail("forgo: append needs a slice")
+		}
+		var elems []Value
+		switch v := in.evalExpr(sc, call.ArgList[0]).(type) {
+		case arrayVal:
+			elems = v.Elems
+		case constant.Value:
+			if v.Kind() != constant.Unknown {
+				fail("forgo: first argument to append must be a slice")
+			}
+		default:
+			fail("forgo: first argument to append must be a slice")
+		}
+		rest := call.ArgList[1:]
+		if call.HasDots {
+			switch v := in.evalExpr(sc, rest[0]).(type) {
+			case arrayVal:
+				return arrayVal{Elems: append(elems, v.Elems...)}, true
+			case constant.Value:
+				if v.Kind() == constant.String {
+					for _, c := range []byte(constant.StringVal(v)) {
+						elems = append(elems, constant.MakeInt64(int64(c)))
+					}
+					return arrayVal{Elems: elems}, true
+				}
+			}
+			fail("forgo: cannot append this value in comptime evaluation")
+		}
+		for _, a := range rest {
+			elems = append(elems, in.evalExpr(sc, a))
+		}
+		return arrayVal{Elems: elems}, true
+	case "make":
+		if len(call.ArgList) < 2 {
+			fail("forgo: make needs a slice type and a length in comptime evaluation")
+		}
+		st, ok := call.ArgList[0].(*syntax.SliceType)
+		if !ok {
+			fail("forgo: only slices can be made in comptime evaluation")
+		}
+		n := scalarInt(in.evalExpr(sc, call.ArgList[1]), "make")
+		c := n
+		if len(call.ArgList) > 2 {
+			c = scalarInt(in.evalExpr(sc, call.ArgList[2]), "make")
+		}
+		if n < 0 || c < n || c > 1<<24 {
+			fail("forgo: invalid make length or capacity in comptime evaluation")
+		}
+		elems := make([]Value, n, c)
+		for i := range elems {
+			elems[i] = zeroValue(st.Elem)
+		}
+		return arrayVal{Elems: elems}, true
+	}
+	return nil, false
 }
 
 func tokenFor(op syntax.Operator) token.Token {
@@ -585,9 +1038,27 @@ func (in *Interp) evalCall(sc *scope, call *syntax.CallExpr) Value {
 		}
 	}
 
+	if st, ok := fun.(*syntax.SliceType); ok && len(call.ArgList) == 1 {
+		// []byte(s)
+		if n, ok := st.Elem.(*syntax.Name); ok && (n.Value == "byte" || n.Value == "uint8") {
+			v := scalarString(in.evalExpr(sc, call.ArgList[0]), "[]byte conversion")
+			elems := make([]Value, len(v))
+			for i := range len(v) {
+				elems[i] = constant.MakeInt64(int64(v[i]))
+			}
+			return arrayVal{Elems: elems}
+		}
+	}
+
 	name, ok := fun.(*syntax.Name)
 	if !ok {
 		fail("forgo: unsupported function call in comptime function")
+	}
+
+	if _, shadowed := sc.get(name.Value); !shadowed {
+		if v, ok := in.evalBuiltin(sc, name.Value, call); ok {
+			return v
+		}
 	}
 
 	if fn, ok := in.Funcs[name.Value]; ok {
@@ -617,458 +1088,4 @@ func (in *Interp) evalStdlibCall(sc *scope, pos syntax.Pos, pkg, fn string, argL
 		args[i] = in.evalExpr(sc, a)
 	}
 	return in.nativeCall(pos, pkg, fn, args)
-}
-
-// HasNative reports whether pkg.fn is one of forgo's natively evaluated
-// compile-time helpers, without actually invoking it. It lets callers (see
-// types2's forgoEvalConstCall) tell a real forgo native call apart from an
-// arbitrary function call that just happens to not be constant, before
-// committing to evaluating it.
-func (in *Interp) HasNative(pkg, fn string) bool {
-	switch pkg + "." + fn {
-	case "fmt.Sprintf", "strconv.Itoa",
-		"embed.ReadFile", "embed.ReadFileRange", "embed.Exists",
-		"embed.IsDir", "embed.ReadDir", "embed.Getwd", "embed.Load",
-		"json.Marshal", "json.Unmarshal":
-		return true
-	}
-	return false
-}
-
-// nativeCall implements the fixed allow-list of package-qualified
-// functions forgo evaluates natively at compile time, either as calls
-// inside a //fgo:comptime function body (see evalStdlibCall) or, via a
-// chain of field/index access, written directly as a const initializer
-// (see types2's forgoEvalConstCall). pos is the call site, used by the
-// "embed" (comptime/embed) helpers to resolve relative file paths.
-func (in *Interp) nativeCall(pos syntax.Pos, pkg, fn string, args []Value) (Value, bool) {
-	switch pkg + "." + fn {
-	case "fmt.Sprintf":
-		if len(args) == 0 {
-			fail("forgo: fmt.Sprintf requires a format string")
-		}
-		format := scalarString(args[0], "fmt.Sprintf")
-		rest := make([]any, len(args)-1)
-		for i, a := range args[1:] {
-			rest[i] = nativeValue(scalarConstant(a, "fmt.Sprintf"))
-		}
-		return constant.MakeString(fmt.Sprintf(format, rest...)), true
-
-	case "strconv.Itoa":
-		if len(args) != 1 {
-			fail("forgo: strconv.Itoa takes exactly one argument")
-		}
-		return constant.MakeString(fmt.Sprintf("%d", scalarInt(args[0], "strconv.Itoa"))), true
-
-	case "embed.ReadFile":
-		path := scalarString(args[0], "embed.ReadFile")
-		data, err := os.ReadFile(resolveEmbedPath(pos, path))
-		if err != nil {
-			fail("forgo: embed.ReadFile(%q): %s", path, err)
-		}
-		return constant.MakeString(string(data)), true
-
-	case "embed.ReadFileRange":
-		if len(args) != 3 {
-			fail("forgo: embed.ReadFileRange takes exactly 3 arguments")
-		}
-		path := scalarString(args[0], "embed.ReadFileRange")
-		offset := scalarInt(args[1], "embed.ReadFileRange")
-		length := scalarInt(args[2], "embed.ReadFileRange")
-		data, err := os.ReadFile(resolveEmbedPath(pos, path))
-		if err != nil {
-			fail("forgo: embed.ReadFileRange(%q): %s", path, err)
-		}
-		if offset < 0 || length < 0 || offset+length > int64(len(data)) {
-			fail("forgo: embed.ReadFileRange(%q): range [%d:%d] out of bounds for %d-byte file", path, offset, offset+length, len(data))
-		}
-		return constant.MakeString(string(data[offset : offset+length])), true
-
-	case "embed.Exists":
-		path := scalarString(args[0], "embed.Exists")
-		_, err := os.Stat(resolveEmbedPath(pos, path))
-		return constant.MakeBool(err == nil), true
-
-	case "embed.IsDir":
-		path := scalarString(args[0], "embed.IsDir")
-		info, err := os.Stat(resolveEmbedPath(pos, path))
-		if err != nil {
-			fail("forgo: embed.IsDir(%q): %s", path, err)
-		}
-		return constant.MakeBool(info.IsDir()), true
-
-	case "embed.ReadDir":
-		path := scalarString(args[0], "embed.ReadDir")
-		entries, err := os.ReadDir(resolveEmbedPath(pos, path))
-		if err != nil {
-			fail("forgo: embed.ReadDir(%q): %s", path, err)
-		}
-		names := make([]string, len(entries))
-		for i, e := range entries {
-			names[i] = e.Name()
-		}
-		return constant.MakeString(strings.Join(names, "\n")), true
-
-	case "embed.Getwd":
-		if len(args) != 0 {
-			fail("forgo: embed.Getwd takes no arguments")
-		}
-		wd, err := os.Getwd()
-		if err != nil {
-			fail("forgo: embed.Getwd: %s", err)
-		}
-		return constant.MakeString(wd), true
-
-	case "embed.Load":
-		if len(args) == 0 {
-			fail("forgo: embed.Load requires at least one pattern")
-		}
-		patterns := make([]string, len(args))
-		for i, a := range args {
-			patterns[i] = scalarString(a, "embed.Load")
-		}
-		return loadEmbedFS(pos, patterns), true
-
-	case "json.Marshal":
-		if len(args) != 1 {
-			fail("forgo: json.Marshal takes exactly one argument")
-		}
-		s, err := marshalJSONValue(args[0])
-		if err != nil {
-			fail("forgo: json.Marshal: %s", err)
-		}
-		return constant.MakeString(s), true
-
-	case "json.Unmarshal":
-		if len(args) != 1 {
-			fail("forgo: json.Unmarshal takes exactly one argument")
-		}
-		s := scalarString(args[0], "json.Unmarshal")
-		var raw any
-		if err := stdjson.Unmarshal([]byte(s), &raw); err != nil {
-			fail("forgo: json.Unmarshal: %s", err)
-		}
-		return valueFromJSON(raw), true
-	}
-	return nil, false
-}
-
-// resolveEmbedPath resolves a relative path passed to one of the "embed"
-// (comptime/embed) helpers against the directory of the source file
-// containing the call, so `embed.ReadFile("data.txt")` reads the file next
-// to the .go/.fgo file it's written in, not relative to whatever directory
-// the compiler happens to be invoked from.
-func resolveEmbedPath(pos syntax.Pos, path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	dir := "."
-	if base := pos.Base(); base != nil && base.Filename() != "" {
-		dir = filepath.Dir(base.Filename())
-	}
-	return filepath.Join(dir, path)
-}
-
-// loadEmbedFS implements embed.Load: it walks patterns (each either a
-// plain file path or a directory, resolved against the call site's
-// source directory the same way resolveEmbedPath does) and builds an
-// objectVal shaped like comptime/embed's FS{files []file{name, data}}
-// struct -- an unexported "files" field holding an arrayVal of
-// name/data objectVals, sorted by (dir, elem) exactly as
-// comptime/embed's split/lookup/readDir expect, so the resulting
-// constant materializes into a real, queryable FS value (see
-// staticdata's slice-composite handling in InitConst).
-//
-// A directory pattern embeds every file in its subtree, skipping names
-// beginning with '.' or '_', matching the `//go:embed` directive's
-// rules; a plain path embeds exactly that file.
-func loadEmbedFS(pos syntax.Pos, patterns []string) Value {
-	type embedFile struct{ name, data string }
-	var files []embedFile
-	seen := map[string]bool{}
-
-	var addFile func(fsPath, diskPath string)
-	addFile = func(fsPath, diskPath string) {
-		if seen[fsPath] {
-			return
-		}
-		seen[fsPath] = true
-		data, err := os.ReadFile(diskPath)
-		if err != nil {
-			fail("forgo: embed.Load: %s", err)
-		}
-		files = append(files, embedFile{name: fsPath, data: string(data)})
-	}
-	var walkDir func(diskDir, fsDir string)
-	walkDir = func(diskDir, fsDir string) {
-		entries, err := os.ReadDir(diskDir)
-		if err != nil {
-			fail("forgo: embed.Load: %s", err)
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
-				continue
-			}
-			diskPath := filepath.Join(diskDir, name)
-			fsPath := fsDir + "/" + name
-			if e.IsDir() {
-				walkDir(diskPath, fsPath)
-				continue
-			}
-			addFile(fsPath, diskPath)
-		}
-	}
-
-	for _, p := range patterns {
-		diskPath := resolveEmbedPath(pos, p)
-		info, err := os.Stat(diskPath)
-		if err != nil {
-			fail("forgo: embed.Load(%q): %s", p, err)
-		}
-		if info.IsDir() {
-			walkDir(diskPath, p)
-		} else {
-			addFile(p, diskPath)
-		}
-	}
-
-	// Add a directory marker entry (name ending in '/', no data) for
-	// every ancestor directory of every file, mirroring
-	// comptime/embed's addDirEntries: without it, FS.lookup/readDir
-	// can't find/list "template" as a directory, only its leaf files.
-	dirSeen := map[string]bool{}
-	var dirs []embedFile
-	for _, f := range files {
-		for dir, _, _ := splitEmbedName(f.name); dir != "."; {
-			if !dirSeen[dir] {
-				dirSeen[dir] = true
-				dirs = append(dirs, embedFile{name: dir + "/"})
-			}
-			dir, _, _ = splitEmbedName(dir)
-		}
-	}
-	files = append(files, dirs...)
-
-	sort.Slice(files, func(i, j int) bool {
-		idir, ielem, _ := splitEmbedName(files[i].name)
-		jdir, jelem, _ := splitEmbedName(files[j].name)
-		if idir != jdir {
-			return idir < jdir
-		}
-		return ielem < jelem
-	})
-
-	elems := make([]Value, len(files))
-	for i, f := range files {
-		elems[i] = objectVal{
-			keys: []string{"name", "data"},
-			fields: map[string]Value{
-				"name": constant.MakeString(f.name),
-				"data": constant.MakeString(f.data),
-			},
-		}
-	}
-	return objectVal{
-		keys:   []string{"files"},
-		fields: map[string]Value{"files": arrayVal{elems: elems}},
-	}
-}
-
-// splitEmbedName mirrors comptime/embed's split: it separates name into
-// (dir, elem), taking dir to be "." at the root, and reports whether
-// name ended in a trailing slash (a directory entry). It's used to
-// reproduce the FS files list's (dir, elem) sort order here at compile
-// time.
-func splitEmbedName(name string) (dir, elem string, isDir bool) {
-	name, isDir = strings.CutSuffix(name, "/")
-	i := strings.LastIndexByte(name, '/')
-	if i < 0 {
-		return ".", name, isDir
-	}
-	return name[:i], name[i+1:], isDir
-}
-
-// marshalJSONValue renders v (a scalar, or an objectVal/arrayVal built by
-// a composite literal or another comptime call) as JSON text. Object keys
-// are emitted in their original literal/decode order (see objectVal),
-// matching struct-field-order marshaling rather than alphabetically
-// sorting map keys the way encoding/json does for map[string]T.
-func marshalJSONValue(v Value) (string, error) {
-	switch x := v.(type) {
-	case constant.Value:
-		b, err := stdjson.Marshal(nativeValue(x))
-		if err != nil {
-			return "", err
-		}
-		return string(b), nil
-
-	case objectVal:
-		var buf strings.Builder
-		buf.WriteByte('{')
-		for i, k := range x.keys {
-			if i > 0 {
-				buf.WriteByte(',')
-			}
-			kb, err := stdjson.Marshal(k)
-			if err != nil {
-				return "", err
-			}
-			buf.Write(kb)
-			buf.WriteByte(':')
-			s, err := marshalJSONValue(x.fields[k])
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(s)
-		}
-		buf.WriteByte('}')
-		return buf.String(), nil
-
-	case arrayVal:
-		var buf strings.Builder
-		buf.WriteByte('[')
-		for i, e := range x.elems {
-			if i > 0 {
-				buf.WriteByte(',')
-			}
-			s, err := marshalJSONValue(e)
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(s)
-		}
-		buf.WriteByte(']')
-		return buf.String(), nil
-	}
-	return "", fmt.Errorf("unsupported value of type %T", v)
-}
-
-// valueFromJSON converts a value decoded by encoding/json (into `any`)
-// into the interpreter's own Value representation. Object keys are
-// sorted, since Go map iteration order (and so encoding/json's decoded
-// map[string]any) is random.
-func valueFromJSON(x any) Value {
-	switch v := x.(type) {
-	case nil:
-		return constant.MakeUnknown()
-	case bool:
-		return constant.MakeBool(v)
-	case float64:
-		// encoding/json decodes every JSON number into `any` as float64,
-		// even whole numbers like 8080. Represent it as an Int constant
-		// when it's exactly representable as one, so it matches a real
-		// int-typed struct field (e.g. `.Port`) the way a plain integer
-		// literal in source would -- an untyped Float constant assigned
-		// to an int-typed const would otherwise panic the compiler.
-		if i := int64(v); float64(i) == v {
-			return constant.MakeInt64(i)
-		}
-		return constant.MakeFloat64(v)
-	case string:
-		return constant.MakeString(v)
-	case []any:
-		elems := make([]Value, len(v))
-		for i, e := range v {
-			elems[i] = valueFromJSON(e)
-		}
-		return arrayVal{elems: elems}
-	case map[string]any:
-		keys := make([]string, 0, len(v))
-		for k := range v {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		fields := make(map[string]Value, len(v))
-		for _, k := range keys {
-			fields[k] = valueFromJSON(v[k])
-		}
-		return objectVal{keys: keys, fields: fields}
-	}
-	fail("forgo: unsupported JSON value of type %T", x)
-	panic("unreachable")
-}
-
-// scalarConstant asserts that v is a scalar (int/float/string/bool)
-// value, failing with a message naming ctx (the argument, operand, or
-// variable it came from) otherwise.
-func scalarConstant(v Value, ctx string) constant.Value {
-	cv, ok := v.(constant.Value)
-	if !ok {
-		fail("forgo: %s must be a scalar (int/float/string/bool) value in comptime evaluation, not a struct/slice/map", ctx)
-	}
-	return cv
-}
-
-func scalarString(v Value, ctx string) string {
-	s, ok := nativeValue(scalarConstant(v, ctx)).(string)
-	if !ok {
-		fail("forgo: %s requires a string argument", ctx)
-	}
-	return s
-}
-
-func scalarInt(v Value, ctx string) int64 {
-	n, ok := nativeValue(scalarConstant(v, ctx)).(int64)
-	if !ok {
-		fail("forgo: %s requires an integer argument", ctx)
-	}
-	return n
-}
-
-// ToConstant converts v (whatever EvalExprValue produced: a scalar, or an
-// objectVal/arrayVal built by a composite literal or a call like
-// json.Unmarshal) into a real go/constant.Value, recursively, using
-// go/constant's Composite kind for objectVal/arrayVal. It's used by
-// types2's forgoEvalConstCall to fold a const initializer that evaluates
-// to a struct/map/slice, not just a scalar. It reports false if v is
-// something ToConstant doesn't know how to represent (in practice, this
-// shouldn't happen: every Value EvalExprValue can produce is one of the
-// cases below).
-func ToConstant(v Value) (constant.Value, bool) {
-	switch x := v.(type) {
-	case constant.Value:
-		return x, true
-	case objectVal:
-		fields := make(map[string]constant.Value, len(x.fields))
-		for k, fv := range x.fields {
-			cv, ok := ToConstant(fv)
-			if !ok {
-				return nil, false
-			}
-			fields[k] = cv
-		}
-		return constant.MakeCompositeStruct(x.keys, fields), true
-	case arrayVal:
-		elems := make([]constant.Value, len(x.elems))
-		for i, ev := range x.elems {
-			cv, ok := ToConstant(ev)
-			if !ok {
-				return nil, false
-			}
-			elems[i] = cv
-		}
-		return constant.MakeCompositeArray(elems), true
-	}
-	return nil, false
-}
-
-func nativeValue(v constant.Value) any {
-	switch v.Kind() {
-	case constant.Bool:
-		return constant.BoolVal(v)
-	case constant.String:
-		return constant.StringVal(v)
-	case constant.Int:
-		n, exact := constant.Int64Val(v)
-		if !exact {
-			fail("forgo: integer constant too large for compile-time evaluation")
-		}
-		return n
-	case constant.Float:
-		f, _ := constant.Float64Val(v)
-		return f
-	}
-	fail("forgo: unsupported constant kind in comptime function")
-	panic("unreachable")
 }

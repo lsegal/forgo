@@ -474,6 +474,7 @@ var passes = [...]pass{
 	{name: "middle opt", fn: opt, required: true},
 	{name: "known bits", fn: knownBits},
 	{name: "early fuse", fn: fuseEarly},
+	{name: "fgo rc", fn: fgoRC, required: true}, // reference counting for nogc pointers
 	{name: "expand calls", fn: expandCalls, required: true},
 	{name: "decompose builtin", fn: postExpandCallsDecompose, required: true},
 	{name: "softfloat", fn: softfloat, required: true},

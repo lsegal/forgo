@@ -311,3 +311,8 @@ func asanregisterglobals(unsafe.Pointer, uintptr)
 
 // used by testing.B.Loop
 func KeepAlive(interface{})
+
+// forgo: building slices of nogc pointers stored into nogc fields
+func fgoPtrsMake(n int) []*any
+func fgoPtrsAppend1(s []*any, i int, p *any)
+func fgoPtrsAppendN(s []*any, i int, src []*any)

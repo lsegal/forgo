@@ -1,0 +1,210 @@
+// A persistent red-black tree map with no garbage collector involvement.
+//
+// This is the benchmark from the Perceus paper: insert a million keys
+// into a functional red-black tree. Every insert "rebuilds" the path from
+// the root, but because the old tree is never shared, each rebuilt node
+// takes the memory of the node it replaces, so the tree is updated in
+// place. When a version is shared, the rebuild copies the path instead and
+// the old version stays intact.
+//
+// Tree is an ordinary struct. main is marked //fgo:nogc, so it and every
+// function it calls allocate its nodes outside the GC heap and free them
+// by reference counting.
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"time"
+
+	"fgo/nogc"
+)
+
+type Tree struct {
+	Red         bool
+	Key, Val    int
+	Left, Right *Tree
+}
+
+// Insert returns t with key set to val.
+func Insert(t *Tree, key, val int) *Tree {
+	return blacken(ins(t, key, val))
+}
+
+func ins(t *Tree, key, val int) *Tree {
+	if t == nil {
+		return &Tree{Red: true, Key: key, Val: val}
+	}
+	switch {
+	case key < t.Key:
+		return balance(&Tree{Red: t.Red, Key: t.Key, Val: t.Val, Left: ins(t.Left, key, val), Right: t.Right})
+	case key > t.Key:
+		return balance(&Tree{Red: t.Red, Key: t.Key, Val: t.Val, Left: t.Left, Right: ins(t.Right, key, val)})
+	}
+	return &Tree{Red: t.Red, Key: key, Val: val, Left: t.Left, Right: t.Right}
+}
+
+func blacken(t *Tree) *Tree {
+	if !t.Red {
+		return t
+	}
+	return &Tree{Key: t.Key, Val: t.Val, Left: t.Left, Right: t.Right}
+}
+
+// balance fixes a black node with a red child that has a red child.
+func balance(t *Tree) *Tree {
+	if t.Red {
+		return t
+	}
+	if l := t.Left; l != nil && l.Red {
+		if a := l.Left; a != nil && a.Red {
+			return node(a.Left, a.Key, a.Val, a.Right, l.Key, l.Val, l.Right, t.Key, t.Val, t.Right)
+		}
+		if b := l.Right; b != nil && b.Red {
+			return node(l.Left, l.Key, l.Val, b.Left, b.Key, b.Val, b.Right, t.Key, t.Val, t.Right)
+		}
+	}
+	if r := t.Right; r != nil && r.Red {
+		if b := r.Left; b != nil && b.Red {
+			return node(t.Left, t.Key, t.Val, b.Left, b.Key, b.Val, b.Right, r.Key, r.Val, r.Right)
+		}
+		if c := r.Right; c != nil && c.Red {
+			return node(t.Left, t.Key, t.Val, r.Left, r.Key, r.Val, c.Left, c.Key, c.Val, c.Right)
+		}
+	}
+	return t
+}
+
+// node builds red(black(a, x, b), y, black(c, z, d)).
+func node(a *Tree, xk, xv int, b *Tree, yk, yv int, c *Tree, zk, zv int, d *Tree) *Tree {
+	return &Tree{Red: true, Key: yk, Val: yv,
+		Left:  &Tree{Key: xk, Val: xv, Left: a, Right: b},
+		Right: &Tree{Key: zk, Val: zv, Left: c, Right: d}}
+}
+
+// Get returns the value stored under key.
+func Get(t *Tree, key int) (int, bool) {
+	for t != nil {
+		switch {
+		case key < t.Key:
+			t = t.Left
+		case key > t.Key:
+			t = t.Right
+		default:
+			return t.Val, true
+		}
+	}
+	return 0, false
+}
+
+// Scale multiplies every value by k. It rebuilds the whole tree, which is
+// in place when t is not shared.
+func Scale(t *Tree, k int) *Tree {
+	if t == nil {
+		return nil
+	}
+	return &Tree{Red: t.Red, Key: t.Key, Val: t.Val * k, Left: Scale(t.Left, k), Right: Scale(t.Right, k)}
+}
+
+func Len(t *Tree) int {
+	if t == nil {
+		return 0
+	}
+	return 1 + Len(t.Left) + Len(t.Right)
+}
+
+func Sum(t *Tree) int {
+	if t == nil {
+		return 0
+	}
+	return t.Val + Sum(t.Left) + Sum(t.Right)
+}
+
+// blackHeight checks the red-black invariants and returns the number of
+// black nodes on every path to a leaf.
+func blackHeight(t *Tree) int {
+	if t == nil {
+		return 1
+	}
+	if t.Red && (t.Left != nil && t.Left.Red || t.Right != nil && t.Right.Red) {
+		panic("red node with a red child")
+	}
+	l, r := blackHeight(t.Left), blackHeight(t.Right)
+	if l != r {
+		panic("unbalanced")
+	}
+	if t.Red {
+		return l
+	}
+	return l + 1
+}
+
+const n = 1_000_000
+
+func key(i int) int { return i * 7919 % n } // every key once, shuffled
+
+// timer reports how long a step took, how many nogc objects are live
+// after it, how many allocations reused memory, and how many GC cycles ran.
+type timer struct {
+	start  time.Time
+	reuses int
+	gcs    uint32
+}
+
+func numGC() uint32 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.NumGC
+}
+
+func begin() timer { return timer{time.Now(), nogc.Reuses(), numGC()} }
+
+func (s timer) end(what string) {
+	elapsed := time.Since(s.start)
+	fmt.Printf("%-30s %7.1fms %8d live %8d reused %3d GCs\n", what,
+		float64(elapsed.Microseconds())/1000, nogc.Live(), nogc.Reuses()-s.reuses, numGC()-s.gcs)
+}
+
+func check(ok bool, what string) {
+	if !ok {
+		panic(what)
+	}
+}
+
+//fgo:nogc
+func main() {
+	var t *Tree
+	s := begin()
+	for i := range n {
+		t = Insert(t, key(i), i)
+	}
+	s.end("insert 1,000,000 keys")
+	check(Len(t) == n && blackHeight(t) > 0, "bad tree")
+	v, ok := Get(t, key(12345))
+	check(ok && v == 12345, "lookup")
+
+	s = begin()
+	for i := range n {
+		t = Insert(t, i, i)
+	}
+	s.end("overwrite every key")
+	check(Sum(t) == n*(n-1)/2, "bad sum after overwrite")
+
+	s = begin()
+	t = Scale(t, 2)
+	s.end("scale every value")
+	check(Sum(t) == n*(n-1), "bad sum after scale")
+
+	// Keep the old version: now the rebuild copies instead of reusing,
+	// and both versions stay valid.
+	s = begin()
+	old := t
+	t = Scale(t, 3)
+	s.end("scale, keeping the old version")
+	check(Sum(old) == n*(n-1), "old version changed")
+	// That was old's last use, so it is already gone.
+	fmt.Printf("%-30s %18d live\n", "after old's last use", nogc.Live())
+	check(Sum(t) == 3*n*(n-1), "new version wrong")
+	fmt.Printf("%-30s %18d live\n", "after t's last use", nogc.Live())
+	check(nogc.Live() == 0, "leaked")
+}

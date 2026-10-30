@@ -456,6 +456,10 @@ const (
 
 	RegisterParams // TODO(register args) remove after register abi is working
 
+	// forgo: //fgo:nogc. FgoNogc compiles the function's allocations and
+	// pointers as reference counted (see cmd/compile/internal/noder's
+	// forgo_nogc.go).
+	FgoNogc
 )
 
 var BlankNode *Name

@@ -1,0 +1,288 @@
+// Reference counted (nogc) memory: functions marked //fgo:nogc, and
+// everything they call in this package, allocate their structs outside
+// the GC heap and free each one the moment its last reference dies, with
+// no free call. The types are ordinary structs: the same types are
+// garbage collected wherever other code allocates them.
+//
+// Every check below panics on a mismatch, so running the example is also a
+// test of the compiler's reference counting.
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+
+	"fgo/nogc"
+)
+
+// Tree is never mutated after construction, so the compiler can prove a
+// child stays alive as long as its parent does: walking it costs no
+// reference count operations at all.
+type Tree struct {
+	Val         int
+	Left, Right *Tree
+}
+
+func build(depth, v int) *Tree {
+	if depth == 0 {
+		return &Tree{Val: v}
+	}
+	return &Tree{Val: v, Left: build(depth-1, 2*v), Right: build(depth-1, 2*v+1)}
+}
+
+func sum(t *Tree) int {
+	if t == nil {
+		return 0
+	}
+	return t.Val + sum(t.Left) + sum(t.Right)
+}
+
+// List.Next can lead back to List: nogc code that assigns it anywhere
+// but in a composite literal hands the cell to the GC, which can collect
+// a cycle. "Updating" a list rebuilds it instead, and because rev owns l,
+// each cell of an unshared list is reused for the new cell built from
+// it, so this reverses the list in place.
+type List struct {
+	Val  int
+	Next *List
+}
+
+func push(l *List, v int) *List { return &List{Val: v, Next: l} }
+
+func rev(l, acc *List) *List {
+	if l == nil {
+		return acc
+	}
+	return rev(l.Next, &List{Val: l.Val, Next: acc})
+}
+
+func length(l *List) int {
+	n := 0
+	for ; l != nil; l = l.Next {
+		n++
+	}
+	return n
+}
+
+type Counter struct {
+	N int
+}
+
+// Series owns its name and samples, in buffers outside the GC heap.
+// Storing into a string or slice field copies; reading one gives a view
+// into the buffer, or a copy on the GC heap if the value escapes. The
+// buffers are freed with the object.
+type Series struct {
+	Name    string
+	Samples []float64
+}
+
+var kept []float64
+
+// Dir holds its children in a slice of pointers: in a nogc object, the
+// slice owns a reference to each. Nogc code never assigns its elements;
+// a slice literal or append builds a new slice where it is stored into
+// the field.
+type Dir struct {
+	Name string
+	Size int
+	Kids []*Dir
+}
+
+func du(d *Dir) int {
+	n := d.Size
+	for _, k := range d.Kids {
+		n += du(k)
+	}
+	return n
+}
+
+func expect(what string, got, want int) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %d, want %d", what, got, want))
+	}
+	fmt.Printf("%-28s %d\n", what, got)
+}
+
+//fgo:nogc
+func trees() {
+	t := build(12, 1)
+	expect("tree nodes live", nogc.Live(), 1<<13-1)
+	expect("tree sum", sum(t), (1<<13-1)*(1<<13)/2)
+} // t dies here; the whole tree is freed
+
+//fgo:nogc
+func lists() {
+	var l *List
+	for i := range 100_000 {
+		l = push(l, i)
+	}
+	before := nogc.Reuses()
+	l = rev(l, nil)
+	expect("list head after reverse", l.Val, 0)
+	expect("cells reused by reverse", nogc.Reuses()-before, 100_000)
+	m := l
+	for range 50_000 {
+		m = m.Next
+	}
+	l = m // the first half has no references left
+	expect("list nodes live", nogc.Live(), 50_000)
+	expect("list length", length(l), 50_000)
+}
+
+//fgo:nogc
+func reuse() {
+	before := nogc.Reuses()
+	c := &Counter{} // escape analysis puts this one on the stack
+	for range 1000 {
+		// c's last use is reading c.N, so it dies just before the new
+		// Counter is allocated, and that allocation takes its memory.
+		c = &Counter{N: c.N + 1}
+	}
+	expect("counter", c.N, 1000)
+	expect("allocations reusing memory", nogc.Reuses()-before, 999)
+}
+
+func mean(xs []float64) float64 {
+	t := 0.0
+	for _, x := range xs {
+		t += x
+	}
+	return t / float64(len(xs))
+}
+
+//fgo:nogc
+func buffers() {
+	s := &Series{Name: "temp", Samples: []float64{1, 2, 3, 4}}
+	expect("objects and buffers live", nogc.Live(), 3)
+	for i := range s.Samples {
+		s.Samples[i] *= 10 // writes the object's own buffer
+	}
+	expect("mean (view, no copy)", int(mean(s.Samples)), 25)
+	s.Samples = append(s.Samples, 50) // copies into a new buffer, frees the old
+	expect("samples after append", len(s.Samples), 5)
+	kept = s.Samples // escapes: copied onto the GC heap
+	kept[0] = -1
+	expect("first sample, unchanged", int(s.Samples[0]), 10)
+	expect("name length", len(s.Name), 4)
+}
+
+// Job holds GC values: a map, a func, an interface and a channel. They
+// stay on the GC heap; while a Job is alive the GC scans it as a root.
+type Job struct {
+	Name   string
+	Env    map[string]string
+	Run    func(env map[string]string) string
+	Result any
+	Done   chan bool
+}
+
+//fgo:nogc
+func jobs() {
+	j := &Job{
+		Name: "greet",
+		Env:  map[string]string{"WHO": "world"},
+		Run:  func(env map[string]string) string { return "hello " + env["WHO"] },
+		Done: make(chan bool, 1),
+	}
+	runtime.GC() // what j holds survives a collection
+	j.Result = j.Run(j.Env)
+	j.Done <- true
+	<-j.Done
+	expect("job result length", len(j.Result.(string)), len("hello world"))
+}
+
+// A nogc pointer can go anywhere a Go pointer can. Stored in a map (or a
+// channel, closure, interface, global), its object is handed to the GC,
+// which frees it after a cycle that no longer finds it.
+//
+//fgo:nogc
+func shared() {
+	index := map[string]*Counter{}
+	for _, k := range []string{"a", "b", "c"} {
+		index[k] = &Counter{N: len(k)}
+	}
+	results := make(chan int)
+	for _, c := range index {
+		go func() { results <- c.N }() // another goroutine reads it
+	}
+	sum := 0
+	for range index {
+		sum += <-results
+	}
+	expect("sum from goroutines", sum, 3)
+	clear(index)
+	runtime.GC() // the map no longer holds them
+}
+
+//fgo:nogc
+func dirs() {
+	lib := &Dir{Name: "lib", Size: 30}
+	src := &Dir{Name: "src", Size: 50, Kids: []*Dir{lib}}
+	root := &Dir{Name: "/", Kids: []*Dir{src, {Name: "doc", Size: 20}}}
+	expect("du /", du(root), 100)
+	// Adding a child rebuilds the parent's slice; root keeps sharing src.
+	src2 := &Dir{Name: src.Name, Size: src.Size, Kids: append(src.Kids, &Dir{Name: "bin", Size: 5})}
+	root2 := &Dir{Name: "/", Kids: append([]*Dir{src2}, root.Kids[1:]...)}
+	expect("du / after adding bin", du(root2), 105)
+	expect("old version unchanged", du(root), 100)
+}
+
+// Package sync's Mutex comes from another package, and the same Dir type
+// is used both ways here: allocated by nogc code it is counted, allocated
+// by ordinary code it is garbage collected.
+type Guarded struct {
+	mu sync.Mutex
+	n  int
+}
+
+func newDir(name string) *Dir { return &Dir{Name: name, Size: 1} }
+
+// mixed gets b from main, ordinary code, whose call to newDir runs the
+// garbage collected newDir. Its own call runs newDir's nogc copy.
+//
+//fgo:nogc
+func mixed(b *Dir) {
+	a := newDir("a")
+	expect("counted references to a", nogc.Count(a), 1)
+	expect("counted references to b", nogc.Count(b), 0)
+	// A nogc object cannot count a garbage collected one, so holding b
+	// hands both, and a with it, to the GC.
+	both := &Dir{Name: "both", Kids: []*Dir{a, b}}
+	expect("du of both", du(both), 2)
+	expect("both handed to the GC", bool2int(nogc.HandedOff(both) && nogc.HandedOff(a)), 1)
+	g := &Guarded{}
+	g.mu.Lock() // a field's address, for a struct with no pointers: still counted
+	g.n++
+	g.mu.Unlock()
+	expect("guarded still counted", nogc.Count(g), 1)
+}
+
+func bool2int(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func main() {
+	mixed(newDir("b"))
+	runtime.GC() // frees what was handed to it
+	expect("live after mixed", nogc.Live(), 0)
+	trees()
+	expect("live after trees", nogc.Live(), 0)
+	lists()
+	expect("live after lists", nogc.Live(), 0)
+	reuse()
+	expect("live after reuse", nogc.Live(), 0)
+	buffers()
+	expect("live after buffers", nogc.Live(), 0)
+	dirs()
+	expect("live after dirs", nogc.Live(), 0)
+	jobs()
+	expect("live after jobs", nogc.Live(), 0)
+	shared()
+	runtime.GC() // the goroutines' closures are gone too
+	expect("live after shared", nogc.Live(), 0)
+}

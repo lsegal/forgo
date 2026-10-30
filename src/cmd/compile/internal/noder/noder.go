@@ -181,6 +181,7 @@ type pragmas struct {
 	// forgo.go's pragma-text handling.
 	IsComptime bool
 	IsMacro    bool
+	IsNogc     bool // //fgo:nogc, see forgo_nogc.go
 }
 
 func (p *pragmas) Nointerface() bool {

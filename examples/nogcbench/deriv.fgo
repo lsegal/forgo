@@ -1,0 +1,108 @@
+package main
+
+// deriv differentiates a large expression several times, simplifying as
+// it goes, and evaluates each result: the shape of a compiler or computer
+// algebra system rewriting syntax trees.
+
+const (
+	opConst = iota
+	opVar
+	opAdd
+	opMul
+)
+
+type Expr struct {
+	Op   int
+	Val  int
+	L, R *Expr
+}
+
+func num(v int) *Expr { return &Expr{Op: opConst, Val: v} }
+
+func isConst(e *Expr, v int) bool { return e.Op == opConst && e.Val == v }
+
+// add and mul build a node, folding constants and identities.
+func add(a, b *Expr) *Expr {
+	switch {
+	case a.Op == opConst && b.Op == opConst:
+		return num(a.Val + b.Val)
+	case isConst(a, 0):
+		return b
+	case isConst(b, 0):
+		return a
+	}
+	return &Expr{Op: opAdd, L: a, R: b}
+}
+
+func mul(a, b *Expr) *Expr {
+	switch {
+	case a.Op == opConst && b.Op == opConst:
+		return num(a.Val * b.Val)
+	case isConst(a, 0), isConst(b, 0):
+		return num(0)
+	case isConst(a, 1):
+		return b
+	case isConst(b, 1):
+		return a
+	}
+	return &Expr{Op: opMul, L: a, R: b}
+}
+
+func deriv(e *Expr) *Expr {
+	switch e.Op {
+	case opConst:
+		return num(0)
+	case opVar:
+		return num(1)
+	case opAdd:
+		return add(deriv(e.L), deriv(e.R))
+	}
+	return add(mul(deriv(e.L), e.R), mul(e.L, deriv(e.R)))
+}
+
+func eval(e *Expr, x int) int {
+	switch e.Op {
+	case opConst:
+		return e.Val
+	case opVar:
+		return x
+	case opAdd:
+		return eval(e.L, x) + eval(e.R, x)
+	}
+	return eval(e.L, x) * eval(e.R, x)
+}
+
+func size(e *Expr) int {
+	if e.Op == opConst || e.Op == opVar {
+		return 1
+	}
+	return 1 + size(e.L) + size(e.R)
+}
+
+// gen builds a random expression in x of the given depth.
+func gen(r *rng, depth int) *Expr {
+	if depth == 0 {
+		if r.next()%3 == 0 {
+			return num(int(r.next()%9) + 1)
+		}
+		return &Expr{Op: opVar}
+	}
+	op := opAdd
+	if r.next()%2 == 0 {
+		op = opMul
+	}
+	return &Expr{Op: op, L: gen(r, depth-1), R: gen(r, depth-1)}
+}
+
+func derivs(scale int) uint64 {
+	r := rng{42}
+	var sum uint64
+	for range 4 * scale {
+		e := gen(&r, 12)
+		for range 4 {
+			e = deriv(e)
+			sum += uint64(size(e)) + uint64(eval(e, 3))
+		}
+	}
+	return sum
+}

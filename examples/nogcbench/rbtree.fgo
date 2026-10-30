@@ -1,0 +1,77 @@
+package main
+
+// rbtree inserts keys into a persistent red-black tree map (the benchmark
+// from the Perceus paper), then overwrites every key. Every insert
+// rebuilds the path from the root.
+
+type RB struct {
+	Red         bool
+	Key, Val    int
+	Left, Right *RB
+}
+
+func rbInsert(t *RB, key, val int) *RB {
+	return rbBlacken(rbIns(t, key, val))
+}
+
+func rbIns(t *RB, key, val int) *RB {
+	if t == nil {
+		return &RB{Red: true, Key: key, Val: val}
+	}
+	switch {
+	case key < t.Key:
+		return rbBalance(&RB{Red: t.Red, Key: t.Key, Val: t.Val, Left: rbIns(t.Left, key, val), Right: t.Right})
+	case key > t.Key:
+		return rbBalance(&RB{Red: t.Red, Key: t.Key, Val: t.Val, Left: t.Left, Right: rbIns(t.Right, key, val)})
+	}
+	return &RB{Red: t.Red, Key: key, Val: val, Left: t.Left, Right: t.Right}
+}
+
+func rbBlacken(t *RB) *RB {
+	return t if !t.Red
+	return &RB{Key: t.Key, Val: t.Val, Left: t.Left, Right: t.Right}
+}
+
+func rbBalance(t *RB) *RB {
+	return t if t.Red
+	if l := t.Left; l != nil && l.Red {
+		if a := l.Left; a != nil && a.Red {
+			return rbNode(a.Left, a.Key, a.Val, a.Right, l.Key, l.Val, l.Right, t.Key, t.Val, t.Right)
+		}
+		if b := l.Right; b != nil && b.Red {
+			return rbNode(l.Left, l.Key, l.Val, b.Left, b.Key, b.Val, b.Right, t.Key, t.Val, t.Right)
+		}
+	}
+	if r := t.Right; r != nil && r.Red {
+		if b := r.Left; b != nil && b.Red {
+			return rbNode(t.Left, t.Key, t.Val, b.Left, b.Key, b.Val, b.Right, r.Key, r.Val, r.Right)
+		}
+		if c := r.Right; c != nil && c.Red {
+			return rbNode(t.Left, t.Key, t.Val, r.Left, r.Key, r.Val, c.Left, c.Key, c.Val, c.Right)
+		}
+	}
+	return t
+}
+
+func rbNode(a *RB, xk, xv int, b *RB, yk, yv int, c *RB, zk, zv int, d *RB) *RB {
+	return &RB{Red: true, Key: yk, Val: yv,
+		Left:  &RB{Key: xk, Val: xv, Left: a, Right: b},
+		Right: &RB{Key: zk, Val: zv, Left: c, Right: d}}
+}
+
+func rbSum(t *RB) int {
+	return 0 if t == nil
+	return t.Val + rbSum(t.Left) + rbSum(t.Right)
+}
+
+func rbTree(scale int) uint64 {
+	n := 100_000 * scale
+	var t *RB
+	for i := range n {
+		t = rbInsert(t, i*7919%n, i)
+	}
+	for i := range n {
+		t = rbInsert(t, i, 2*i)
+	}
+	return uint64(rbSum(t))
+}

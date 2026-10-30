@@ -34,6 +34,9 @@ func (e *escape) exprSkipInit(k hole, n ir.Node) {
 		k.dst = &e.blankLoc
 	}
 
+	if e.fgoStringRead(k, n) {
+		return
+	}
 	switch n.Op() {
 	default:
 		base.Fatalf("unexpected expr: %s %v", n.Op().String(), n)
@@ -188,6 +191,7 @@ func (e *escape) exprSkipInit(k hole, n ir.Node) {
 
 	case ir.OPTRLIT:
 		n := n.(*ir.AddrExpr)
+		e.fgoPtrLit(n)
 		e.expr(e.spill(k, n), n.X)
 
 	case ir.OARRAYLIT:
@@ -213,6 +217,9 @@ func (e *escape) exprSkipInit(k hole, n ir.Node) {
 	case ir.OSTRUCTLIT:
 		n := n.(*ir.CompLitExpr)
 		for _, elt := range n.List {
+			if e.fgoStringElt(n, elt) {
+				continue
+			}
 			e.expr(k.note(n, "struct literal element"), elt.(*ir.StructKeyExpr).Value)
 		}
 

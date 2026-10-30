@@ -20,6 +20,14 @@ func (check *Checker) indexExpr(x *operand, e *indexedExpr) (isFuncInst bool) {
 	check.exprOrType(x, e.x, true)
 	// x may be generic
 
+	// forgo: x[i] on a slice-shaped composite constant (folded by the
+	// comptime interpreter, see forgo.go) is itself a constant when i is;
+	// keep the value to fold below. (As in types2's indexExpr.)
+	var baseComposite constant.Value
+	if x.mode() == constant_ && x.val != nil && x.val.Kind() == constant.Composite && constant.CompositeIsArray(x.val) {
+		baseComposite = x.val
+	}
+
 	switch x.mode() {
 	case invalid:
 		check.use(e.indices...)
@@ -226,7 +234,13 @@ func (check *Checker) indexExpr(x *operand, e *indexedExpr) (isFuncInst bool) {
 		x.typ_ = Typ[Invalid]
 	}
 
-	check.index(index, length)
+	_, idx := check.index(index, length)
+	if baseComposite != nil && idx >= 0 {
+		if elems := constant.CompositeElems(baseComposite); idx < int64(len(elems)) {
+			x.mode_ = constant_
+			x.val = elems[idx]
+		}
+	}
 	return false
 }
 

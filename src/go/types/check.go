@@ -168,6 +168,9 @@ type Checker struct {
 	// debugging
 	posStack []positioner // stack of source positions seen; used for panic tracing
 	indent   int          // indentation for tracing
+
+	// forgo: the //fgo:comptime interpreter, see forgo.go
+	forgo *forgoInterp
 }
 
 // addDeclDep adds the dependency edge (check.decl -> to) if check.decl exists

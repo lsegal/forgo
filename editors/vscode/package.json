@@ -16,6 +16,12 @@
 	"activationEvents": ["onLanguage:forgo"],
 	"main": "./extension.js",
 	"contributes": {
+		"commands": [
+			{
+				"command": "forgo.restartLanguageServer",
+				"title": "Forgo: Restart Language Server"
+			}
+		],
 		"languages": [
 			{
 				"id": "forgo",

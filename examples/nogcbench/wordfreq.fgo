@@ -1,0 +1,96 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+// wordfreq counts words in a generated text with a skewed word
+// distribution, in a binary search tree keyed by the words, then lists
+// the most frequent ones. Nodes hold their word as a string field.
+
+type Word struct {
+	Text        string
+	Count       int
+	Left, Right *Word
+}
+
+func find(t *Word, w string) *Word {
+	for t != nil {
+		switch {
+		case w < t.Text:
+			t = t.Left
+		case w > t.Text:
+			t = t.Right
+		default:
+			return t
+		}
+	}
+	return nil
+}
+
+func insertWord(t *Word, w string) *Word {
+	if t == nil {
+		return &Word{Text: w, Count: 1}
+	}
+	if w < t.Text {
+		return &Word{Text: t.Text, Count: t.Count, Left: insertWord(t.Left, w), Right: t.Right}
+	}
+	return &Word{Text: t.Text, Count: t.Count, Left: t.Left, Right: insertWord(t.Right, w)}
+}
+
+type wordCount struct {
+	text  string
+	count int
+}
+
+// top returns the k most frequent words of t, most frequent first.
+func top(t *Word, k int, best []wordCount) []wordCount {
+	if t == nil {
+		return best
+	}
+	best = top(t.Left, k, best)
+	if len(best) < k || t.Count > best[len(best)-1].count {
+		i := len(best)
+		if i == k {
+			i--
+		} else {
+			best = append(best, wordCount{})
+		}
+		for i > 0 && best[i-1].count < t.Count {
+			best[i] = best[i-1]
+			i--
+		}
+		best[i] = wordCount{t.Text, t.Count}
+	}
+	return top(t.Right, k, best)
+}
+
+func wordFreq(scale int) uint64 {
+	r := rng{7}
+	syllables := []string{"ka", "lo", "mi", "ne", "ru", "sa", "ti", "vo", "ze", "pa", "qu", "do"}
+	vocab := make([]string, 20_000)
+	for i := range vocab {
+		var b strings.Builder
+		for n := 2 + int(r.next()%3); n > 0; n-- {
+			b.WriteString(syllables[r.next()%uint64(len(syllables))])
+		}
+		fmt.Fprint(&b, i%97)
+		vocab[i] = b.String()
+	}
+	var t *Word
+	for range 300_000 * scale {
+		x := r.next() % 1_000_000
+		w := vocab[x*x/1_000_000*uint64(len(vocab))/1_000_000] // skewed toward the front
+		if n := find(t, w); n != nil {
+			n.Count++
+		} else {
+			t = insertWord(t, w)
+		}
+	}
+	var sum uint64
+	for i, wc := range top(t, 10, nil) {
+		sum += uint64(i+1)*uint64(wc.count) + uint64(len(wc.text))
+	}
+	return sum
+}

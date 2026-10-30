@@ -85,6 +85,8 @@ type Func struct {
 
 	auxmap    auxmap             // map from aux values to opaque ids used by CSE
 	constants map[int64][]*Value // constants cache, keyed by constant value; users must check value's Op and Type
+
+	fgoNoWB map[ID]bool // forgo: stores that initialize new nogc objects, which need no write barrier
 }
 
 type LocalSlotSplitKey struct {

@@ -12,6 +12,7 @@ package types2
 import (
 	"cmd/compile/internal/forgo"
 	"cmd/compile/internal/syntax"
+	"go/constant"
 	. "internal/types/errors"
 )
 
@@ -73,6 +74,11 @@ func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 		return false
 	}
 
+	if cv, ok := forgoConstCache[init]; ok {
+		x.mode_ = constant_
+		x.val = cv
+		return true
+	}
 	v, err := in.EvalExprValue(init)
 	if err != nil {
 		check.errorf(init, InvalidConstInit, "compile-time evaluation failed: %s", err)
@@ -91,10 +97,16 @@ func forgoEvalConstCall(check *Checker, x *operand, init syntax.Expr) bool {
 		return true
 	}
 
+	forgoConstCache[init] = cv
 	x.mode_ = constant_
 	x.val = cv
 	return true
 }
+
+// forgoConstCache keeps the value each const initializer folded to, so
+// that checking the package again (as the noder does to add the nogc
+// copies of functions) does not run the comptime calls again.
+var forgoConstCache = map[syntax.Expr]constant.Value{}
 
 // forgoRootCall walks down through chained field selection (.Field) and
 // indexing ([i] / ["key"]) to find the call expression underneath, e.g.
