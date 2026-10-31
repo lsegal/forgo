@@ -159,6 +159,52 @@ PYEOF
 	echo "patched $COPYLOCK_FILE for fgo:\"nogc\" fields"
 fi
 
+# gopls loads packages by running "go list" and friends, but a forgo
+# toolchain's go command is bin/forgo (make.bash renames it), so a plain
+# "go" finds nothing, or another Go installation on PATH that knows
+# nothing of .fgo files ("no package metadata for file"). Run
+# $GOROOT/bin/forgo if it exists, else forgo on PATH, else go.
+INVOKE_FILE="$PATCHED/internal/gocommand/invoke.go"
+if ! grep -q 'forgoCommand' "$INVOKE_FILE"; then
+	"$PYTHON" - "$INVOKE_FILE" <<'PYEOF'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+
+call = '\tcmd := exec.Command("go", goArgs...)\n'
+assert call in s, 'exec.Command("go", goArgs...) not found; x/tools/internal/gocommand/invoke.go layout may have changed'
+s = s.replace(call, '\tcmd := exec.Command(forgoCommand(), goArgs...)\n', 1)
+s += '''
+// forgoCommand returns the go command to run: forgo's is bin/forgo.
+func forgoCommand() string {
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe"
+	}
+	if goroot := os.Getenv("GOROOT"); goroot != "" {
+		if p := filepath.Join(goroot, "bin", "forgo"+exe); fileExists(p) {
+			return p
+		}
+	}
+	if p, err := exec.LookPath("forgo"); err == nil {
+		return p
+	}
+	return "go"
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+'''
+for imp in ('"os"', '"path/filepath"', '"runtime"'):
+	if '\t' + imp + '\n' not in s:
+		s = s.replace('import (\n', 'import (\n\t' + imp + '\n', 1)
+open(path, "w").write(s)
+PYEOF
+	echo "patched $INVOKE_FILE to run forgo"
+fi
+
 "$FORGO" mod edit -replace "golang.org/x/tools@${TOOLS_VERSION}=${PATCHED}"
 
 # Register forgo's own gopls analyzers (see forgopls/errtry and
