@@ -63,7 +63,7 @@ if ! grep -q 'ast.TryExpr' "$WALK_FILE"; then
 	"$PYTHON" - "$WALK_FILE" <<'PYEOF'
 import sys
 path = sys.argv[1]
-s = open(path).read()
+s = open(path, encoding="utf-8", newline="").read()
 
 kv = "\tcase *ast.KeyValueExpr:\n\t\twalk(v, edge.KeyValueExpr_Key, -1, n.Key)\n\t\twalk(v, edge.KeyValueExpr_Value, -1, n.Value)\n"
 assert kv in s, "KeyValueExpr case not found; x/tools/go/ast/inspector/walk.go layout may have changed"
@@ -80,7 +80,7 @@ s = s.replace(
     1,
 )
 
-open(path, "w").write(s)
+open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
 	echo "patched $WALK_FILE for TryExpr/ThrowStmt/PostfixIfStmt/WithStmt"
 fi
@@ -90,7 +90,7 @@ if ! grep -q 'ast.ThrowStmt' "$UNREACHABLE_FILE"; then
 	"$PYTHON" - "$UNREACHABLE_FILE" <<'PYEOF'
 import sys
 path = sys.argv[1]
-s = open(path).read()
+s = open(path, encoding="utf-8", newline="").read()
 
 labels = "\tcase *ast.AssignStmt,\n\t\t*ast.BadStmt,\n\t\t*ast.DeclStmt,\n\t\t*ast.DeferStmt,\n\t\t*ast.EmptyStmt,\n\t\t*ast.ExprStmt,\n\t\t*ast.GoStmt,\n\t\t*ast.IncDecStmt,\n\t\t*ast.ReturnStmt,\n\t\t*ast.SendStmt:\n\t\t// no statements inside\n"
 assert labels in s, "findLabels leaf-statement case not found; x/tools/go/analysis/passes/unreachable/unreachable.go layout may have changed"
@@ -128,7 +128,7 @@ s = s.replace(
     1,
 )
 
-open(path, "w").write(s)
+open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
 	echo "patched $UNREACHABLE_FILE for ThrowStmt/PostfixIfStmt"
 fi
@@ -138,7 +138,7 @@ if ! grep -q 'fgo:"nogc"' "$COPYLOCK_FILE"; then
 	"$PYTHON" - "$COPYLOCK_FILE" <<'PYEOF'
 import sys
 path = sys.argv[1]
-s = open(path).read()
+s = open(path, encoding="utf-8", newline="").read()
 
 # forgo: a struct holding a field tagged fgo:"nogc" must not be copied
 # (the compiler rejects it); report copies the way copylocks reports
@@ -154,7 +154,7 @@ s = s.replace(
     1,
 )
 s = s.replace("import (\n", "import (\n\t\"reflect\"\n", 1)
-open(path, "w").write(s)
+open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
 	echo "patched $COPYLOCK_FILE for fgo:\"nogc\" fields"
 fi
@@ -169,7 +169,7 @@ if ! grep -q 'forgoCommand' "$INVOKE_FILE"; then
 	"$PYTHON" - "$INVOKE_FILE" <<'PYEOF'
 import sys
 path = sys.argv[1]
-s = open(path).read()
+s = open(path, encoding="utf-8", newline="").read()
 
 call = '\tcmd := exec.Command("go", goArgs...)\n'
 assert call in s, 'exec.Command("go", goArgs...) not found; x/tools/internal/gocommand/invoke.go layout may have changed'
@@ -200,7 +200,7 @@ func fileExists(p string) bool {
 for imp in ('"os"', '"path/filepath"', '"runtime"'):
 	if '\t' + imp + '\n' not in s:
 		s = s.replace('import (\n', 'import (\n\t' + imp + '\n', 1)
-open(path, "w").write(s)
+open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
 	echo "patched $INVOKE_FILE to run forgo"
 fi
@@ -232,7 +232,7 @@ if ! grep -q 'analysis/errtry' "$ANALYSIS_FILE"; then
 	"$PYTHON" - "$ANALYSIS_FILE" <<'PYEOF'
 import sys
 path = sys.argv[1]
-s = open(path).read()
+s = open(path, encoding="utf-8", newline="").read()
 
 deprecated_import = '\t"golang.org/x/tools/gopls/internal/analysis/deprecated"\n'
 assert deprecated_import in s, "deprecated import not found; gopls/internal/settings/analysis.go layout may have changed"
@@ -256,7 +256,7 @@ forgo_entries = (
 )
 s = s.replace(unusedwrite, unusedwrite + forgo_entries, 1)
 
-open(path, "w").write(s)
+open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
 	echo "patched $ANALYSIS_FILE to register errtry/comptimeconst/postfixif"
 fi
