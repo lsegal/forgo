@@ -328,7 +328,41 @@ func copyUpper(dst, src string) (err error) {
   when it's followed directly by a name, which is never valid Go, so code
   using `with` as an identifier is unaffected.
 
-See [examples/with](examples/with/main.fgo) for a runnable version.
+**Freeing nogc objects.** In [nogc code](#fgonogc--reference-counted-memory-no-gc),
+`with` also takes a pointer to an object with no `Close` method, and
+frees the object by the end of the block, however it's left: the
+object's lifetime is the block, the way a resource's is.
+
+```go
+//fgo:nogc
+func mean(xs []int) int {
+	m := 0
+	with s := new(stats) {
+		for _, x := range xs {
+			s.add(x)
+		}
+		m = s.sum / s.n
+	} // s is freed here
+	return m
+}
+```
+
+- The value must be a new object: an allocation (`new(T)`, or
+  `(&T{...})` in parentheses, as in an `if` statement's header) or a
+  function's result.
+- Nothing may keep a reference to it past the block. Storing it in
+  another object or a global, returning it, passing it to code that isn't
+  nogc, copying it to a variable declared outside the block, assigning
+  to `NAME`, or using it in a function literal is a compile error.
+  Reading its fields, passing it to nogc functions, and walking it
+  (`for p := t; p != nil; p = p.next`) are fine.
+- If code the compiler can't follow still kept a reference at the end of
+  the block (a callee that hands the object to the GC), the program
+  panics there rather than leave the object to the GC silently.
+- Outside nogc code, a value without `Close` is a compile error.
+
+See [examples/with](examples/with/main.fgo) for a runnable version, and
+[nogc.fgo](examples/with/nogc.fgo) there for freeing.
 
 ### Postfix `if` — one-line guard clauses
 

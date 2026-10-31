@@ -1,0 +1,64 @@
+package main
+
+import "fgo/nogc"
+
+// In nogc code, with also takes a pointer to a nogc object that has no
+// Close method, and frees the object by the end of the block, however
+// the block is left. Nothing may keep a reference to it past the block:
+// storing it elsewhere, returning it, copying it to a variable declared
+// outside, or using it in a function literal is a compile error (see
+// outlives.fgo and escapes.fgo, built with -tags outlives or -tags
+// escapes). The value must be a new object: an allocation (new(T), or
+// &T{...} in parentheses, as in an if statement) or a function's
+// result. If code the compiler cannot follow still kept a reference at
+// the end of the block (a callee handing the object to the GC), it
+// panics.
+
+// stats accumulates numbers.
+type stats struct{ n, sum, max int }
+
+func (s *stats) add(v int) {
+	s.n++
+	s.sum += v
+	s.max = max(s.max, v)
+}
+
+// mean averages xs in a stats that lives only as long as the with
+// block: nogc.Live counts the nogc objects alive, and nogc.Count the
+// references to one.
+//
+//fgo:nogc
+func mean(xs []int) int {
+	base := nogc.Live()
+	m := 0
+	with s := new(stats) {
+		for _, x := range xs {
+			s.add(x)
+		}
+		m = s.sum / s.n
+		expect("nogc: live in the block", nogc.Live()-base, 1)
+		expect("nogc: the block's reference", nogc.Count(s), 1)
+	}
+	expect("nogc: live after the block", nogc.Live()-base, 0)
+	return m
+}
+
+// maxes does the same for each row: each iteration's stats is freed
+// before the next is allocated, however the iteration ends.
+//
+//fgo:nogc
+func maxes(rows [][]int) []int {
+	base := nogc.Live()
+	var out []int
+	for _, row := range rows {
+		with s := (&stats{max: -1}) {
+			continue if len(row) == 0
+			for _, x := range row {
+				s.add(x)
+			}
+			out = append(out, s.max)
+		}
+		expect("nogc: freed every iteration", nogc.Live()-base, 0)
+	}
+	return out
+}

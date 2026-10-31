@@ -1881,6 +1881,26 @@ func fgo_nogc_count(p unsafe.Pointer) int {
 	return int(atomic.Loaduintptr(&fgoHdrOf(p).rc) &^ (fgoHeld | fgoSharedBit))
 }
 
+// fgoWithEnd is called at the end of a with statement that frees the
+// nogc object at p (see cmd/compile/internal/noder's forgo_with.go),
+// right before the statement drops its reference. The compiler rejects
+// the uses it can see that would keep another reference; code it cannot
+// see, such as a callee handing the object to the GC, could still have.
+func fgoWithEnd(p unsafe.Pointer) {
+	if p == nil || raceenabled { // under the race detector, the GC has everything
+		return
+	}
+	switch fgoState(p) {
+	case fgoNone:
+		return // not a nogc object: there is nothing to free
+	case fgoHanded:
+		panic(plainError("with: the object it frees was handed to the garbage collector (//fgo:nogc strict reports where)"))
+	}
+	if fgo_nogc_count(p) != 1 {
+		panic(plainError("with: the object it frees is still referenced at the end of the with statement"))
+	}
+}
+
 //go:linkname fgo_nogc_handedOff fgo/nogc.handedOff
 func fgo_nogc_handedOff(p unsafe.Pointer) bool {
 	return fgoState(p) == fgoHanded

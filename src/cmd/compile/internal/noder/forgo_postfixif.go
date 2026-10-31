@@ -60,6 +60,11 @@ func postfixIfStmt(s syntax.Stmt) syntax.Stmt {
 		postfixIfBlock(x)
 		return x
 
+	case *syntax.WithStmt:
+		postfixIfExprFuncLits(x.Value)
+		postfixIfBlock(x.Body)
+		return x
+
 	case *syntax.IfStmt:
 		if x.Init != nil {
 			x.Init = postfixIfSimpleStmt(x.Init)

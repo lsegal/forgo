@@ -167,6 +167,10 @@ type fgoRCPass struct {
 	refused map[src.XPos]bool // strict errors already reported
 	vets    []fgoVet
 
+	withEnds   map[*Value]*Value // with statement scope end marker call -> the object it frees
+	withBegins map[*Value]*Value // with statement scope begin marker call -> its result
+	withRoots  map[*Value]bool   // the objects with statements free
+
 	chain   map[*Block][]*Value // memory values in order
 	idx     map[*Value]int      // memory value -> 1-based index in its block's chain
 	callMem map[*Value]*Value   // call -> its memory result
@@ -231,6 +235,7 @@ func (p *fgoRCPass) run() {
 
 	p.splitCritical()
 	p.stripFreshZero()
+	p.findWithEnds()
 	if p.failed {
 		return
 	}
@@ -244,6 +249,7 @@ func (p *fgoRCPass) run() {
 		return
 	}
 	p.collectDefs()
+	p.checkWithRoots()
 	p.collectUses()
 	if p.failed {
 		return
@@ -268,6 +274,7 @@ func (p *fgoRCPass) run() {
 		p.vetIf(v.objs, v.m, v.masks, v.keep)
 	}
 	p.inlineCounts()
+	p.removeWithEnds()
 	if len(p.shadow)+len(p.tokens)+len(p.bufs) > 0 {
 		var owned []*ir.Name
 		for _, n := range p.shadow {
@@ -1396,6 +1403,9 @@ func (p *fgoRCPass) valPos(v *Value) int {
 // escapeAt hands root's object to the GC (runtime.fgoRCHandoff) at slot
 // of b, for a use that takes it where the counting pass cannot follow.
 func (p *fgoRCPass) escapeAt(root *Value, b *Block, slot int) {
+	if p.withRoots[root] {
+		p.withOutlives(root, fgoEscapeReason(p.cur))
+	}
 	if p.strict && p.cur != nil {
 		p.refuse(root, p.cur)
 	}
@@ -1452,6 +1462,9 @@ func (p *fgoRCPass) markCall(root *Value) {
 }
 
 func (p *fgoRCPass) addUse(root *Value, u fgoUse) {
+	if u.consuming && p.withRoots[root] && p.cur != nil && p.cur.Op != OpPhi {
+		p.withOutlives(root, "")
+	}
 	if d := p.defs[root]; d != nil {
 		d.uses = append(d.uses, u)
 	}
@@ -1502,6 +1515,17 @@ func (p *fgoRCPass) use(u *Value, i int, root *Value, direct bool) {
 	b := u.Block
 	p.cur = u
 	defer func() { p.cur = nil }()
+	if p.withEnds[u] != nil {
+		// The end of a with statement's scope: a use that only keeps
+		// the object alive up to there.
+		p.addUse(root, fgoUse{b: b, pos: p.opPos(u)})
+		return
+	}
+	if p.withBegins[u] != nil {
+		// The beginning: the result takes the reference over.
+		p.addUse(root, fgoUse{b: b, pos: p.opPos(u), call: true, consuming: direct})
+		return
+	}
 	// handOff hands root's object to the GC right before (or, for a
 	// value, right after) u, which takes the pointer, or one into the
 	// object, where the pass cannot follow it.
@@ -1636,6 +1660,15 @@ func (p *fgoRCPass) refuseAt(pos src.XPos, root *Value, why string) {
 	}
 	if p.refused == nil {
 		p.refused = map[src.XPos]bool{}
+	}
+	p.refused[pos] = true
+	p.errorf(pos, "strict: %s escapes to the garbage collector: %s", p.nameOf(root), why)
+}
+
+// nameOf names root for an error message: a variable holding it, or
+// "a nogc object".
+func (p *fgoRCPass) nameOf(root *Value) string {
+	if p.names == nil {
 		p.names = map[*Value]string{}
 		for _, n := range p.f.Names {
 			for _, v := range p.f.NamedValues[*n] {
@@ -1645,12 +1678,139 @@ func (p *fgoRCPass) refuseAt(pos src.XPos, root *Value, why string) {
 			}
 		}
 	}
-	p.refused[pos] = true
-	what := "a nogc object"
 	if name := p.names[root]; name != "" && !strings.HasPrefix(name, "~") && !strings.Contains(name, ".") {
-		what = name
+		return name
 	}
-	p.errorf(pos, "strict: %s escapes to the garbage collector: %s", what, why)
+	return "a nogc object"
+}
+
+// findWithEnds finds the calls marking where the scope of a with
+// statement freeing its value begins and ends (see
+// cmd/compile/internal/noder's forgo_with.go), and the objects they
+// free: the results of the begin calls, which take the value over.
+func (p *fgoRCPass) findWithEnds() {
+	for _, b := range p.f.Blocks {
+		for _, v := range b.Values {
+			switch fn := fgoWithMarker(v); fn {
+			case "_fgoWithBegin", "_fgoWithEnd":
+				if p.withEnds == nil {
+					p.withEnds = map[*Value]*Value{}
+					p.withBegins = map[*Value]*Value{}
+					p.withRoots = map[*Value]bool{}
+				}
+				if fn == "_fgoWithEnd" {
+					p.withEnds[v] = fgoAlias(v.Args[len(v.Args)-2])
+					continue
+				}
+				for _, u := range b.Values {
+					if u.Op == OpSelectN && u.Args[0] == v && !u.Type.IsMemory() {
+						u.Type = v.Args[len(v.Args)-2].Type // not the shape
+						p.withBegins[v] = u
+						p.withRoots[u] = true
+					}
+				}
+			}
+		}
+	}
+}
+
+// fgoWithMarker returns the name of the with statement scope marker v
+// calls, or "".
+func fgoWithMarker(v *Value) string {
+	if !fgoIsCall(v) {
+		return ""
+	}
+	aux, ok := v.Aux.(*AuxCall)
+	if !ok || aux.Fn == nil {
+		return ""
+	}
+	name := aux.Fn.Name
+	for _, m := range []string{"_fgoWithBegin", "_fgoWithEnd"} {
+		if strings.Contains(name, "."+m+"[") {
+			return m
+		}
+	}
+	return ""
+}
+
+// checkWithRoots reports each object a with statement frees that is not
+// one nogc code allocated, or got from a nogc function's result: the
+// with statement would not hold its only reference.
+func (p *fgoRCPass) checkWithRoots() {
+	for call, res := range p.withBegins {
+		root := fgoAlias(call.Args[len(call.Args)-2])
+		d := p.defs[root]
+		if d == nil || d.kind != fgoOwned || root.Op == OpLoad || !p.fromNogc(root, map[*Value]bool{}) {
+			p.errorf(call.Pos, "with: %s is not a new nogc object (an allocation, or a nogc function's result), so the with statement cannot free it", p.nameOf(res))
+		}
+	}
+}
+
+// withOutlives reports that the use being looked at keeps a reference
+// to root, an object a with statement frees, past the statement.
+func (p *fgoRCPass) withOutlives(root *Value, why string) {
+	if u := p.cur; u != nil {
+		aux, _ := u.Aux.(*AuxCall)
+		switch {
+		case u.Op == OpMakeResult:
+			why = "returned"
+		case aux != nil && aux.Fn != nil && strings.HasPrefix(aux.Fn.Name, "runtime.fgoRCStore"):
+			why = "stored in another object"
+		case why == "" || u.Op == OpStore:
+			why = "passed to a function that keeps it"
+			if u.Op == OpStore {
+				why = "stored in another object"
+			}
+		}
+	}
+	pos := root.Pos
+	if p.cur != nil && p.cur.Pos.IsKnown() {
+		pos = p.cur.Pos
+	}
+	pos = pos.WithNotStmt()
+	if p.refused[pos] {
+		return
+	}
+	if p.refused == nil {
+		p.refused = map[src.XPos]bool{}
+	}
+	p.refused[pos] = true
+	p.errorf(pos, "with: %s outlives its with statement: %s", p.nameOf(root), why)
+}
+
+// removeWithEnds removes the begin marker calls: each handed its
+// argument's reference over to its result, which now is the argument
+// again. It turns each end marker into a call to runtime.fgoWithEnd,
+// which checks that the with statement holds the object's only
+// reference, right before its release: code the pass cannot see, such
+// as a callee handing the object to the GC, could have kept another.
+func (p *fgoRCPass) removeWithEnds() {
+	f := p.f
+	for _, b := range f.Blocks {
+		for _, v := range b.Values {
+			if v.Op == OpSelectN && p.withBegins[v.Args[0]] != nil {
+				call := v.Args[0]
+				if v.Type.IsMemory() {
+					v.copyOf(call.MemoryArg())
+				} else {
+					v.copyOf(call.Args[len(call.Args)-2])
+				}
+			}
+		}
+	}
+	for call := range p.withBegins {
+		call.reset(OpInvalid)
+	}
+	fn := p.lookup("fgoWithEnd")
+	for call := range p.withEnds {
+		x, mem := call.Args[len(call.Args)-2], call.MemoryArg()
+		aux := StaticAuxCall(fn, f.ABIDefault.ABIAnalyzeTypes([]*types.Type{x.Type}, nil))
+		call.resetArgs()
+		call.Aux = aux
+		call.Type = aux.LateExpansionResultType()
+		call.AddArgs(x, mem)
+		call.AuxInt = types.RoundUp(f.Config.ctxt.Arch.FixedFrameSize+int64(types.PtrSize), int64(types.RegSize))
+	}
 }
 
 // fromNogc reports whether v points to an object nogc code allocated or
@@ -3141,8 +3301,9 @@ func (p *fgoRCPass) materialize() {
 	ins := map[*Block]map[int][]*Value{}
 	slices.SortStableFunc(p.reqs, func(x, y *fgoReq) int { return x.order - y.order })
 	reuse := map[*Value]*fgoReq{}
-	isSet := map[*Value]bool{}    // shadow stores recording a newly owned value
-	clones := map[*Value]*Value{} // string load -> its copy
+	isSet := map[*Value]bool{}      // shadow stores recording a newly owned value
+	clones := map[*Value]*Value{}   // string load -> its copy
+	cloneMem := map[*Value]*Value{} // a copy -> the memory after making it
 	cloneCalls := map[*Value]bool{}
 	for _, r := range p.reqs {
 		pos := r.b.Pos.WithNotStmt()
@@ -3181,6 +3342,7 @@ func (p *fgoRCPass) materialize() {
 				call, mem, res = p.call(r.b, pos, p.syms.strClone, []*Value{r.v}, []*types.Type{r.v.Type})
 			}
 			clones[r.v] = res[0]
+			cloneMem[res[0]] = mem
 			cloneCalls[call] = true
 		case r.reuse != nil && r.keepOf != 0:
 			fn := p.syms.dropReuseKeep
@@ -3359,6 +3521,55 @@ func (p *fgoRCPass) materialize() {
 				v.SetArg(len(v.Args)-1, s)
 			}
 		}
+		// A value using a copy, directly or through pure ops such as
+		// SlicePtr, reads memory no older than the copy's: a Convert of
+		// the copied pointer that kept the memory the original read would
+		// have to be scheduled both before the copy and after it.
+		if len(cloneMem) > 0 {
+			ord := map[*Value]int{s: -1}
+			for i, m := range ch {
+				ord[m] = i
+			}
+			after := map[*Value]*Value{} // value -> the latest copy's memory it depends on
+			var dep func(v *Value) *Value
+			dep = func(v *Value) *Value {
+				if m, ok := after[v]; ok {
+					return m
+				}
+				after[v] = nil
+				var m *Value
+				if cm := cloneMem[v]; cm != nil && cm.Block == b {
+					m = cm
+				} else if v.Block == b && v.Op != OpPhi && v.Type != types.TypeMem && !v.Type.IsTuple() {
+					for _, a := range v.Args {
+						if x := dep(a); x != nil && (m == nil || ord[x] > ord[m]) {
+							m = x
+						}
+					}
+				}
+				after[v] = m
+				return m
+			}
+			for _, v := range b.Values {
+				ma := fgoMemIn(v)
+				if ma == nil || holders[v] || v.Op == OpPhi {
+					continue
+				}
+				i, ok := ord[ma]
+				if !ok {
+					continue
+				}
+				var m *Value
+				for _, a := range v.Args[:len(v.Args)-1] {
+					if x := dep(a); x != nil && (m == nil || ord[x] > ord[m]) {
+						m = x
+					}
+				}
+				if m != nil && i < ord[m] {
+					v.SetArg(len(v.Args)-1, m)
+				}
+			}
+		}
 		for ci, c := range b.ControlValues() {
 			if c.Type == types.TypeMem {
 				b.ReplaceControl(ci, end[b])
@@ -3427,6 +3638,9 @@ func (p *fgoRCPass) ownedResults(call *Value) bool {
 		return false
 	}
 	fn := call.Aux.(*AuxCall).Fn
+	if p.withBegins[call] != nil {
+		return true
+	}
 	return fgoNogcCallee(fn) || p.isNew(fn) || fn == p.syms.newAt || fn == p.syms.take || fn == p.syms.newInit || fn == p.syms.newAtInit
 }
 

@@ -1,0 +1,133 @@
+// A with statement on a nogc object without a Close method frees the
+// object by the end of the statement, however it is left.
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"fgo/nogc"
+)
+
+type node struct {
+	val  int
+	next *node
+}
+
+func build(n int) *node {
+	var l *node
+	for i := range n {
+		l = &node{val: i, next: l}
+	}
+	return l
+}
+
+func sum(l *node) int {
+	t := 0
+	for ; l != nil; l = l.next {
+		t += l.val
+	}
+	return t
+}
+
+func expect(what string, got, want int) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %d, want %d", what, got, want))
+	}
+}
+
+// Pool is a nogc type: its methods are nogc code.
+//
+//fgo:nogc
+type Pool struct{ n int }
+
+func (p *Pool) Use(k int) int {
+	with l := build(k) {
+		p.n += sum(l)
+	}
+	return nogc.Live()
+}
+
+//fgo:nogc
+func run(base int) {
+	// Freed at the end of the block, not at the last use.
+	with l := build(10) {
+		t := sum(l)
+		expect("live in the block", nogc.Live()-base, 10)
+		expect("sum", t, 45)
+	}
+	expect("live after the block", nogc.Live()-base, 0)
+
+	// Each iteration frees its own; break and continue free too.
+	for i := range 6 {
+		with l := build(i) {
+			continue if i%2 == 0
+			break if i == 5
+			expect("live in a loop", nogc.Live()-base, i)
+		}
+	}
+	expect("live after the loop", nogc.Live()-base, 0)
+
+	// Nested, and a function literal using neither.
+	with a := build(3) {
+		with b := (&node{val: 7}) {
+			f := func(x int) int { return x * 2 }
+			expect("nested", f(sum(a)+b.val), 20)
+			expect("live, nested", nogc.Live()-base, 4)
+		}
+		expect("live, inner freed", nogc.Live()-base, 3)
+	}
+	expect("live after nesting", nogc.Live()-base, 0)
+
+	// A goto out of the block.
+	with l := build(2) {
+		if sum(l) == 1 {
+			goto out
+		}
+		panic("unreachable")
+	}
+out:
+	expect("live after goto", nogc.Live()-base, 0)
+
+	p := &Pool{}
+	expect("live in a method", p.Use(4)-base, 0)
+	expect("pool total", p.n, 6)
+}
+
+// early returns from inside the block: its object is freed too.
+//
+//fgo:nogc
+func early(base, k int) int {
+	with l := build(k) {
+		if k > 2 {
+			return sum(l)
+		}
+	}
+	return nogc.Live() - base
+}
+
+// mutate assigns a field of t that could lead back to it: nogc code
+// hands t to the GC for that, which the compiler cannot see from the
+// with statement calling it.
+func mutate(t *node) { t.next = &node{val: 1} }
+
+//fgo:nogc
+func handedOff() (msg string) {
+	defer func() { msg = fmt.Sprint(recover()) }()
+	with l := build(2) {
+		mutate(l)
+	}
+	return ""
+}
+
+func main() {
+	if msg := handedOff(); !strings.Contains(msg, "handed to the garbage collector") {
+		panic("handedOff: " + msg)
+	}
+	base := nogc.Live()
+	run(base)
+	expect("early return", early(base, 4), 6)
+	expect("live after the early return", nogc.Live()-base, 0)
+	expect("no return", early(base, 1), 0)
+	fmt.Println("ok")
+}

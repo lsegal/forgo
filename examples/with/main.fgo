@@ -1,6 +1,8 @@
 // The with statement: `with NAME := VALUE { ... }` runs the block, then
 // calls NAME.Close(), however the block is left -- by falling off its
-// end, break, continue, return, throw, ?, or a panic. NAME is scoped to
+// end, break, continue, return, throw, ?, or a panic. (In nogc code, a
+// with statement can free an object without a Close method instead: see
+// nogc.fgo.) NAME is scoped to
 // the statement. In a function whose last result is a named error (as ?
 // requires), an error from Close is not lost: it is returned like ?
 // would, or, if the function is already returning, becomes its error
@@ -177,4 +179,7 @@ func main() {
 
 	expect("panic", panics(), any("boom"))
 	expectLog("closed on panic", "open panic", "close panic")
+
+	expect("nogc: mean", mean([]int{1, 2, 6}), 3)
+	expect("nogc: maxes", fmt.Sprint(maxes([][]int{{1, 5, 2}, nil, {7}})), "[5 7]")
 }

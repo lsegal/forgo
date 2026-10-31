@@ -97,6 +97,11 @@ func (tl *forgoThrowLowerer) stmt(fn forgoThrowCtx, s syntax.Stmt) syntax.Stmt {
 		tl.block(fn, x)
 		return x
 
+	case *syntax.WithStmt:
+		tl.scanExprsForFuncLits(fn, x.Value)
+		tl.block(fn, x.Body)
+		return x
+
 	case *syntax.IfStmt:
 		tl.scanExprsForFuncLits(fn, simpleStmtExpr(x.Init), x.Cond)
 		tl.block(fn, x.Then)

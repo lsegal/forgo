@@ -1,0 +1,51 @@
+// A slice of pointers read from a field is copied before a loop over it,
+// and the loop's pointer arithmetic reads the copy. Building this for
+// riscv64 once failed with "schedule does not include all values".
+package main
+
+import (
+	"fmt"
+
+	"fgo/nogc"
+)
+
+type Dir struct {
+	Name string
+	Size int
+	Kids []*Dir
+}
+
+func du(d *Dir) int {
+	n := d.Size
+	for _, k := range d.Kids {
+		n += du(k)
+	}
+	return n
+}
+
+func expect(what string, got, want int) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %d, want %d", what, got, want))
+	}
+}
+
+//fgo:nogc
+func dirs() int {
+	lib := &Dir{Name: "lib", Size: 30}
+	src := &Dir{Name: "src", Size: 50, Kids: []*Dir{lib}}
+	root := &Dir{Name: "/", Kids: []*Dir{src, {Name: "doc", Size: 20}}}
+	expect("du /", du(root), 100)
+	src2 := &Dir{Name: src.Name, Size: src.Size, Kids: append(src.Kids, &Dir{Name: "bin", Size: 5})}
+	root2 := &Dir{Name: "/", Kids: append([]*Dir{src2}, root.Kids[1:]...)}
+	return du(root)*1000 + du(root2)
+}
+
+func main() {
+	base := nogc.Live()
+	if got := dirs(); got != 100105 {
+		panic(fmt.Sprintf("du: got %d, want 100105", got))
+	}
+	if live := nogc.Live() - base; live != 0 {
+		panic(fmt.Sprintf("live after dirs: %d", live))
+	}
+}

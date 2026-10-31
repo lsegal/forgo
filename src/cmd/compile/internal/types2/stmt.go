@@ -585,6 +585,28 @@ func (check *Checker) stmt(ctxt stmtContext, s syntax.Stmt) {
 
 		check.stmtList(inner, s.List)
 
+	case *syntax.WithStmt:
+		// forgo: with Name := Value { Body } declares Name, scoped to the
+		// statement, runs Body, then calls Name.Close(), or, for a pointer
+		// without a Close method (in nogc code), frees it (see the
+		// compiler's noder/forgo_with.go, which lowers it after checking).
+		check.openScope(s, "with")
+		defer check.closeScope()
+		check.shortVarDecl(s.Name, []syntax.Expr{s.Name}, []syntax.Expr{s.Value})
+		if v, _ := check.scope.Lookup(s.Name.Value).(*Var); v != nil {
+			check.usedVars[v] = true // by the implicit Close call
+			if v.typ != nil && isValid(v.typ) {
+				if m, _, _ := lookupFieldOrMethod(v.typ, true, check.pkg, "Close", false); m == nil {
+					if _, ok := v.typ.Underlying().(*Pointer); !ok {
+						check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s (type %s) has no Close method", s.Name.Value, v.typ)
+					}
+				} else if _, ok := m.(*Func); !ok {
+					check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s.Close is not a method", s.Name.Value)
+				}
+			}
+		}
+		check.stmt(inner, s.Body)
+
 	case *syntax.IfStmt:
 		check.openScope(s, "if")
 		defer check.closeScope()

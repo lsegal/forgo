@@ -253,6 +253,16 @@ func countLines(paths []string) (n int, err error) {
   resource, where a failed `Close` means lost data.
 - Keep `defer x.Close()` when the resource lives for the whole function
   anyway; `with` is for narrower scopes.
+- In nogc code, `with t := build() { ... }` on a pointer without a
+  `Close` method frees the object by the end of the block. Use it for a
+  structure that lives for part of a function (a per-iteration index, a
+  scratch tree). The value must be an allocation or a call's result, and
+  nothing may keep a reference past the block (no storing it elsewhere,
+  returning it, copying it to an outer variable, or capturing it): the
+  compiler rejects those, and the end of the block panics if a callee
+  handed the object to the GC anyway. Build such structures without
+  assigning a field that could lead back to its object (rebuild the path
+  instead, as `examples/rbtree` does), or nogc hands them to the GC.
 
 ## Rule 2: use `//fgo:comptime` for values that can be computed once, at compile time
 
@@ -471,12 +481,23 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/forgo/` — the comptime/macro interpreter.
 - `src/cmd/compile/internal/noder/forgo_try.go` — lowers `?` to plain
   `:=`/`if`/`return` statements.
-- `src/cmd/compile/internal/noder/forgo_with.go` — lowers `with` to a
-  block with a flag-guarded `defer` (return and panic paths) and an
+- `src/cmd/compile/internal/noder/forgo_with.go` — lowers `with` once
+  the package is type checked (types2 checks `*syntax.WithStmt` itself;
+  postfix `if`, `throw` and `?` are lowered before that, inside it), then
+  the package is checked again. A value with a `Close` method lowers to
+  a block with a flag-guarded `defer` (return and panic paths) and an
   explicit close at the end and before each `break`/`continue`/`goto`
-  leaving it; runs first, before postfix `if`, `throw` and `?`, whose own
-  passes then lower the code it generates. Its terminating-statement check
-  must agree with `go/types/return.go`'s `*ast.WithStmt` case.
+  leaving it; the `?` after each close is lowered by running
+  `forgoLowerTry` again. A nogc pointer without one lowers to
+  `NAME := _fgoWithBegin(VALUE)` and `_fgoWithEnd(NAME)` at each exit,
+  generic markers it declares once per package; it reports copies of
+  NAME into outer variables and function literals itself. The nogc pass
+  (`ssa/forgo_rc.go`, `findWithEnds`) treats the begin call's result as
+  the object, reports every use of it that keeps a reference, removes
+  the begin call, and turns each end call into `runtime.fgoWithEnd`, a
+  run-time check that the reference is the only one. Its
+  terminating-statement check must agree with `go/types/return.go`'s and
+  `types2/return.go`'s `WithStmt` cases.
 - `src/cmd/compile/internal/noder/forgo_postfixif.go` — lowers postfix
   `if` (`STMT if COND`) to a plain `if COND { STMT }`; runs before
   `forgo_throw.go`/`forgo_try.go`.

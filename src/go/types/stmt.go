@@ -590,7 +590,8 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 
 	case *ast.WithStmt:
 		// forgo: with Name := Value { Body } declares Name, scoped to the
-		// statement, runs Body, then calls Name.Close() (see the
+		// statement, runs Body, then calls Name.Close(), or, for a pointer
+		// without a Close method (in nogc code), frees it (see the
 		// compiler's noder/forgo_with.go).
 		check.openScope(s, "with")
 		defer check.closeScope()
@@ -599,7 +600,11 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			check.usedVars[v] = true // by the implicit Close call
 			if v.typ != nil && isValid(v.typ) {
 				if m, _, _ := lookupFieldOrMethod(v.typ, true, check.pkg, "Close", false); m == nil {
-					check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s (type %s) has no Close method", s.Name.Name, v.typ)
+					// A pointer without a Close method is freed instead,
+					// in nogc code (which the compiler checks).
+					if _, ok := v.typ.Underlying().(*Pointer); !ok {
+						check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s (type %s) has no Close method", s.Name.Name, v.typ)
+					}
 				} else if _, ok := m.(*Func); !ok {
 					check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s.Close is not a method", s.Name.Name)
 				}

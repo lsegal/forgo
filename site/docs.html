@@ -153,7 +153,26 @@ func makeThing2(s string) (*Thing, error) {
       <li style="margin-bottom:14px">Nested <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> statements close innermost first.</li>
       <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> is a <strong>contextual</strong> keyword like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>: it’s only the statement when followed directly by a name, which is never valid Go, so code using <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> as an identifier is unaffected.</li>
     </ul>
-    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/with</code>.</p>
+    <h3 id="with-nogc" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Freeing nogc objects</h3>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:14px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">In <a href="#nogc">nogc code</a>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> also takes a pointer to an object with no <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code> method, and frees the object by the end of the block, however it’s left: the object’s lifetime is the block, the way a resource’s is.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)">//fgo:nogc</span>
+func mean(xs []int) int {
+	m := 0
+	<span style="color:var(--color-accent-2-700);font-weight:600">with</span> s := new(stats) {
+		for _, x := range xs {
+			s.add(x)
+		}
+		m = s.sum / s.n
+	} <span style="color:var(--color-neutral-600)">// s is freed here</span>
+	return m
+}</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:64ch;margin:24px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">The value must be a new object: an allocation (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">new(T)</code>, or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">(&amp;T{...})</code> in parentheses, as in an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">if</code> statement’s header) or a function’s result.</li>
+      <li style="margin-bottom:14px">Nothing may keep a reference to it past the block. Storing it in another object or a global, returning it, passing it to code that isn’t nogc, copying it to a variable declared outside the block, assigning to <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">NAME</code>, or using it in a function literal is a compile error. Reading its fields, passing it to nogc functions, and walking it are fine.</li>
+      <li style="margin-bottom:14px">If code the compiler can’t follow still kept a reference at the end of the block (a callee that hands the object to the GC), the program panics there rather than leave the object to the GC silently.</li>
+      <li>Outside nogc code, a value without <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code> is a compile error.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/with</code> (freeing in <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">nogc.fgo</code>).</p>
   </section>
 
   <section id="postfix" style="padding:0 0 70px">

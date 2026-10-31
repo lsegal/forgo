@@ -231,6 +231,9 @@ func (check *Checker) blockBranches(all *Scope, parent *block, lstmt *syntax.Lab
 			// become forward jumps in the current block.
 			fwdJumps = append(fwdJumps, check.blockBranches(all, b, lstmt, s.List)...)
 
+		case *syntax.WithStmt: // forgo
+			fwdJumps = append(fwdJumps, check.blockBranches(all, b, lstmt, s.Body.List)...)
+
 		case *syntax.IfStmt:
 			stmtBranches(lstmt, s.Then)
 			if s.Else != nil {

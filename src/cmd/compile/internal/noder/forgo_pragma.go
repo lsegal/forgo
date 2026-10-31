@@ -34,10 +34,11 @@ func (p *pragmas) ForgoComptime() bool { return p != nil && p.IsComptime }
 func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 
 // forgoTransform rewrites every forgo-specific construct (macro calls, the
-// with statement, the postfix-if statement modifier, the throw statement, the ? operator)
+// postfix-if statement modifier, the throw statement, the ? operator)
 // found across noders' parsed files into ordinary syntax the rest of the
 // compiler already understands. It must run after parsing and before type
-// checking.
+// checking. With statements stay, lowered inside: their lowering depends
+// on types (see forgoLowerWith, which checkFiles runs).
 //
 // forgoLowerPostfixIf runs before forgoLowerThrow/forgoLowerTry: it
 // unwraps `STMT if COND` into `if COND { STMT }` first, so those two
@@ -45,7 +46,6 @@ func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 // *syntax.IfStmt, which they already know how to walk into.
 func forgoTransform(m posMap, noders []*noder) {
 	forgoExpandMacros(noders)
-	forgoLowerWith(m, noders)
 	forgoLowerPostfixIf(noders)
 	forgoLowerThrow(m, noders)
 	forgoLowerTry(m, noders)

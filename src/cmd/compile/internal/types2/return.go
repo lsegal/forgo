@@ -42,6 +42,11 @@ func (check *Checker) isTerminating(s syntax.Stmt, label string) bool {
 	case *syntax.BlockStmt:
 		return check.isTerminatingList(s.List, "")
 
+	case *syntax.WithStmt:
+		// forgo: with lowers to a block ending in its body, when the body
+		// is terminating.
+		return check.isTerminating(s.Body, "")
+
 	case *syntax.IfStmt:
 		if s.Else != nil &&
 			check.isTerminating(s.Then, "") &&
@@ -130,6 +135,9 @@ func hasBreak(s syntax.Stmt, label string, implicit bool) bool {
 
 	case *syntax.BlockStmt:
 		return hasBreakList(s.List, label, implicit)
+
+	case *syntax.WithStmt: // forgo
+		return hasBreak(s.Body, label, implicit)
 
 	case *syntax.IfStmt:
 		if hasBreak(s.Then, label, implicit) ||

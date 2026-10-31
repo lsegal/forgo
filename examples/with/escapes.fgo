@@ -1,0 +1,26 @@
+//go:build escapes
+
+// Each with statement here keeps a reference to the stats it frees
+// past the statement. `forgo run -tags escapes .` reports every one.
+package main
+
+import "fmt"
+
+type holder struct{ b *stats }
+
+//fgo:nogc
+func escapes(h *holder) {
+	with b := new(stats) {
+		h.b = b        // stored in another object
+		fmt.Println(b) // converted to an interface, for code that is not nogc
+	}
+}
+
+//fgo:nogc
+func returns() *stats {
+	with b := new(stats) {
+		return b // returned
+	}
+}
+
+func init() { escapes(&holder{}); returns() }

@@ -48,6 +48,7 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 	}
 
 	didMidway := false
+	didWith := false
 	didNogc := false
 
 recheck:
@@ -203,6 +204,18 @@ recheck:
 
 	if len(base.Debug.AstDump) > 0 {
 		dumpSyntax(pkg, info, files, "midway after recheck")
+	}
+
+	if !didWith {
+		didWith = true
+		// forgo: lower with statements, which depends on their types.
+		if forgoLowerWith(m, info, noders) {
+			for _, p := range types.PkgMap() {
+				p.Direct = false
+			}
+			typecheck.Target.Imports = nil
+			goto recheck
+		}
 	}
 
 	if !didNogc {

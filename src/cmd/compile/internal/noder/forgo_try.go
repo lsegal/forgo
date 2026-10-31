@@ -94,6 +94,20 @@ func (tl *forgoTryLowerer) stmt(fn forgoFuncCtx, s syntax.Stmt) []syntax.Stmt {
 		tl.block(fn, x)
 		return []syntax.Stmt{x}
 
+	case *syntax.WithStmt:
+		// A ? in the value is lowered into statements before the with
+		// statement, in a block of their own, so they stay scoped to it
+		// and a label on it still labels a single statement.
+		var pre []syntax.Stmt
+		x.Value = tl.expr(fn, x.Value, &pre)
+		tl.block(fn, x.Body)
+		if len(pre) == 0 {
+			return []syntax.Stmt{x}
+		}
+		blk := &syntax.BlockStmt{List: append(pre, x), Rbrace: x.Body.Rbrace}
+		blk.SetPos(x.Pos())
+		return []syntax.Stmt{blk}
+
 	case *syntax.ExprStmt:
 		if try, ok := x.X.(*syntax.TryExpr); ok {
 			var pre []syntax.Stmt

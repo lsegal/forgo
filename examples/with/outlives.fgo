@@ -1,0 +1,21 @@
+//go:build outlives
+
+// Each with statement here lets a copy of the stats it frees outlive
+// it. `forgo run -tags outlives .` reports every one. (See escapes.fgo
+// for the uses the nogc pass reports.)
+package main
+
+var last *stats
+
+//fgo:nogc
+func outlives() *stats {
+	var kept *stats
+	with b := new(stats) {
+		kept = b              // copied to a variable declared outside
+		last = b              // a global
+		go func() { _ = b }() // used by a function literal
+	}
+	return kept
+}
+
+func init() { outlives() }
