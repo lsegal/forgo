@@ -50,6 +50,9 @@ language client backed by **forgopls** — a build of
 well enough to type-check it correctly, and folds `//fgo:comptime`
 constants the way the compiler does. `//fgo:macro` is still
 compiler-only: macro calls show as false-positive diagnostics.
+The extension also builds a package when you save one of its files, to
+show the errors only the compiler finds (`//fgo:nogc`, `with`, comptime
+evaluation), since forgopls only type-checks.
 `forgopls` ships in the toolchain install above; download the extension's
 `.vsix` from the [latest release](https://github.com/lsegal/forgo/releases)
 and install it with:

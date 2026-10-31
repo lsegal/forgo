@@ -50,6 +50,11 @@
 					"default": true,
 					"description": "Start a language server for .fgo files. Disable to use syntax highlighting only."
 				},
+				"forgo.buildOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Build a .fgo file's package with forgo when it is saved or opened, and show the errors only the compiler finds (//fgo:nogc, with, comptime evaluation), which forgopls doesn't report because it only type-checks. Uses GOROOT and PATH from forgo.languageServerEnv like the language server."
+				},
 				"forgo.languageServerEnv": {
 					"type": "object",
 					"default": {},

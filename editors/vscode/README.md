@@ -34,6 +34,11 @@ instead of just tolerating or choking on them.
   does). `//fgo:macro` is compiler-only either way, so macro calls still
   show false-positive diagnostics; disable `forgo.enableLanguageServer`
   if that's noisier than it's worth.
+- `forgo.buildOnSave` (default `true`) — build a `.fgo` file's package with
+  `forgo build` when it's saved or opened, and show the errors only the
+  compiler finds (`//fgo:nogc`, `with`, comptime evaluation) as `forgo build`
+  diagnostics. forgopls only type-checks, so it can't report those. The
+  build uses `GOROOT`/`PATH` from `forgo.languageServerEnv`.
 - `forgo.languageServerEnv` (default `{}`) — extra environment variables for
   the forgopls/gopls process, merged over VS Code's own environment.
   forgopls resolves packages by shelling out to `go list`/`go build` using
