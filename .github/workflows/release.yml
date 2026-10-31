@@ -63,7 +63,7 @@ jobs:
             goos: linux
             goarch: amd64
             ext: tar.gz
-          - os: macos-14
+          - os: macos-15
             goos: darwin
             goarch: arm64
             ext: tar.gz
@@ -74,7 +74,7 @@ jobs:
         # Intel Mac (darwin/amd64) is deliberately not built here: GitHub's
         # hosted macos-13 (Intel) runner pool has been drawn down as Apple
         # Silicon has taken over, and jobs targeting it can sit queued
-        # indefinitely instead of ever starting. Apple Silicon (macos-14,
+        # indefinitely instead of ever starting. Apple Silicon (macos-15,
         # darwin/arm64) covers virtually all current Macs; an Intel Mac can
         # run the arm64 build under Rosetta 2, or build from source
         # (see README.md).
