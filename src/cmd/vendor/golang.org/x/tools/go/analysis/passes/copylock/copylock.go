@@ -12,6 +12,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"reflect"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -360,6 +361,12 @@ func lockPath(tpkg *types.Package, typ types.Type, seen map[types.Type]bool) typ
 
 	nfields := styp.NumFields()
 	for i := range nfields {
+		// forgo: a field tagged fgo:"nogc" holds a counted reference,
+		// which a copy would hold uncounted; the compiler rejects
+		// copies of such structs.
+		if reflect.StructTag(styp.Tag(i)).Get("fgo") == "nogc" {
+			return []string{typ.String() + "." + styp.Field(i).Name() + ` (fgo:"nogc")`}
+		}
 		ftyp := styp.Field(i).Type()
 		subpath := lockPath(tpkg, ftyp, seen)
 		if subpath != nil {

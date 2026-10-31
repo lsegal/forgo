@@ -16,7 +16,27 @@ import (
 // object would have to hand every pointer stored into it to the GC, and
 // keep copies of its strings on the GC heap.)
 func fgoHeapAllocReason(fn *ir.Func, n ir.Node) string {
-	if n != nil && fn.FgoNogc() && (n.Op() == ir.ONEW || n.Op() == ir.OPTRLIT) {
+	if n == nil {
+		return ""
+	}
+	// A value holding a field tagged `fgo:"nogc"` must be where the GC
+	// can release the field's reference when it frees the value (see
+	// runtime/forgo_rc_tag.go), unless nogc code allocates it.
+	switch n.Op() {
+	case ir.ONAME:
+		if n.(*ir.Name).Class == ir.PAUTO && n.Type().FgoPinned() {
+			return "fgo:\"nogc\" field"
+		}
+	case ir.ONEW, ir.OPTRLIT:
+		if !fn.FgoNogc() && n.Type().Elem().FgoPinned() {
+			return "fgo:\"nogc\" field"
+		}
+	case ir.OMAKESLICE, ir.OMAKESLICECOPY, ir.OSLICELIT:
+		if n.Type().Elem().FgoPinned() {
+			return "fgo:\"nogc\" field"
+		}
+	}
+	if fn.FgoNogc() && (n.Op() == ir.ONEW || n.Op() == ir.OPTRLIT) {
 		if t := n.Type().Elem(); t.FgoIsRC() && types.FgoHasRCFields(t) {
 			return "nogc object"
 		}

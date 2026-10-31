@@ -430,7 +430,7 @@ func (s *NameSet) Add(n *Name) {
 	(*s)[n] = struct{}{}
 }
 
-type PragmaFlag uint16
+type PragmaFlag uint32
 
 const (
 	// Func pragmas.
@@ -460,6 +460,9 @@ const (
 	// pointers as reference counted (see cmd/compile/internal/noder's
 	// forgo_nogc.go).
 	FgoNogc
+	// forgo: //fgo:nogc strict. FgoNogcStrict makes each hand-off of a
+	// nogc object to the garbage collector a compile error.
+	FgoNogcStrict
 )
 
 var BlankNode *Name

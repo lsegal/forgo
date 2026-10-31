@@ -208,6 +208,11 @@ func Walk(v Visitor, node Node) {
 	case *ThrowStmt:
 		Walk(v, n.X)
 
+	case *WithStmt:
+		Walk(v, n.Name)
+		Walk(v, n.Value)
+		Walk(v, n.Body)
+
 	case *PostfixIfStmt:
 		Walk(v, n.Stmt)
 		Walk(v, n.Cond)

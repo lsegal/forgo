@@ -565,6 +565,9 @@ func (p *printer) printRawNode(n Node) {
 	case *ThrowStmt:
 		p.print(_Name, "throw", blank, n.X)
 
+	case *WithStmt:
+		p.print(_Name, "with", blank, n.Name, blank, _Define, blank, n.Value, blank, n.Body)
+
 	case *PostfixIfStmt:
 		p.print(n.Stmt, blank, _If, blank, n.Cond)
 

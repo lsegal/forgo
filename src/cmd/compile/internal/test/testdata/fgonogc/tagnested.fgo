@@ -1,0 +1,112 @@
+// Fields tagged fgo:"nogc" nested in struct fields and array elements,
+// in GC and nogc allocated containers and GC allocated slices.
+package main
+
+import (
+	"fmt"
+	"runtime"
+
+	"fgo/nogc"
+)
+
+type item struct {
+	val  int
+	next *item
+}
+
+type list struct {
+	head *item `fgo:"nogc"`
+	n    int
+}
+
+//fgo:nogc
+type Bag struct {
+	name  string
+	lists [3]list
+	extra list
+}
+
+func (b *Bag) Add(i, v int) {
+	l := &b.lists[i]
+	l.head = &item{val: v, next: l.head}
+	l.n++
+}
+
+func (b *Bag) AddExtra(v int) { b.extra.head = &item{val: v, next: b.extra.head} }
+
+func (b *Bag) Pop(i int) int {
+	l := &b.lists[i]
+	it := l.head
+	l.head = it.next
+	l.n--
+	return it.val
+}
+
+func (b *Bag) Sum() int {
+	s := 0
+	for i := range b.lists {
+		for it := b.lists[i].head; it != nil; it = it.next {
+			s += it.val
+		}
+	}
+	for it := b.extra.head; it != nil; it = it.next {
+		s += it.val
+	}
+	return s
+}
+
+//fgo:nogc
+func inNogc() (sum, live int) {
+	b := &Bag{name: "nogc"}
+	for i := range 30 {
+		b.Add(i%3, i)
+	}
+	b.AddExtra(1000)
+	live = nogc.Live()
+	return b.Sum(), live
+}
+
+func check(what string, got, want int) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %d want %d", what, got, want))
+	}
+	fmt.Println(what, got)
+}
+
+func main() {
+	base := nogc.Live()
+	sum, live := inNogc()
+	check("nogc bag sum", sum, 435+1000)
+	check("nogc bag live", live-base, 33) // bag, its name buffer, 31 items
+	check("nogc bag freed", nogc.Live()-base, 0)
+
+	b := &Bag{name: "gc"}
+	for i := range 30 {
+		b.Add(i%3, i)
+	}
+	b.AddExtra(7)
+	check("gc bag sum", b.Sum(), 435+7)
+	check("gc bag live", nogc.Live()-base, 31)
+	for range 5 {
+		b.Pop(1)
+	}
+	check("after pops", nogc.Live()-base, 26)
+	b = nil
+	runtime.GC()
+	check("gc bag freed", nogc.Live()-base, 0)
+
+	// A slice of lists, allocated by GC code.
+	ls := make([]list, 50)
+	for i := range ls {
+		for j := range 3 {
+			push(&ls[i], j)
+		}
+	}
+	check("slice live", nogc.Live()-base, 150)
+	ls = nil
+	runtime.GC()
+	check("slice freed", nogc.Live()-base, 0)
+}
+
+//fgo:nogc
+func push(l *list, v int) { l.head = &item{val: v, next: l.head} }

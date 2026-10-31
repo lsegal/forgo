@@ -182,6 +182,7 @@ type pragmas struct {
 	IsComptime bool
 	IsMacro    bool
 	IsNogc     bool // //fgo:nogc, see forgo_nogc.go
+	IsStrict   bool // //fgo:nogc strict
 }
 
 func (p *pragmas) Nointerface() bool {

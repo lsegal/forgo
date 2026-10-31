@@ -1,0 +1,23 @@
+//go:build copy
+
+// Each function here copies a Stack, which holds a field tagged
+// `fgo:"nogc"`, or misuses the tag. `forgo run -tags copy .` reports
+// every one.
+package main
+
+type Wrong struct {
+	n int `fgo:"nogc"` // only pointers to structs can be tagged
+}
+
+func copies(s *Stack) {
+	t := *s       // a copy
+	use(t)        // passed by value
+	_ = []Stack{} // fine: a slice header
+	var a [2]Stack
+	for _, x := range a { // copies each element
+		_ = x
+	}
+	_ = &s.top // the field's address
+}
+
+func use(s Stack) {} // a Stack parameter

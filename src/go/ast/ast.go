@@ -717,6 +717,16 @@ type (
 		X     Expr
 	}
 
+	// A WithStmt node represents a forgo "with Name := Value { Body }"
+	// statement, which runs Body and then calls Name's Close method,
+	// however Body is left.
+	WithStmt struct {
+		With  token.Pos // position of "with"
+		Name  *Ident
+		Value Expr
+		Body  *BlockStmt
+	}
+
 	// A BranchStmt node represents a break, continue, goto,
 	// or fallthrough statement.
 	//
@@ -860,6 +870,8 @@ func (s *ReturnStmt) End() token.Pos {
 }
 func (s *ThrowStmt) Pos() token.Pos     { return s.Throw }
 func (s *ThrowStmt) End() token.Pos     { return s.X.End() }
+func (s *WithStmt) Pos() token.Pos      { return s.With }
+func (s *WithStmt) End() token.Pos      { return s.Body.End() }
 func (s *PostfixIfStmt) Pos() token.Pos { return s.Stmt.Pos() }
 func (s *PostfixIfStmt) End() token.Pos { return s.Cond.End() }
 func (s *BranchStmt) End() token.Pos {
@@ -915,6 +927,7 @@ func (*GoStmt) stmtNode()         {}
 func (*DeferStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()     {}
 func (*ThrowStmt) stmtNode()      {}
+func (*WithStmt) stmtNode()       {}
 func (*PostfixIfStmt) stmtNode()  {}
 func (*BranchStmt) stmtNode()     {}
 func (*BlockStmt) stmtNode()      {}

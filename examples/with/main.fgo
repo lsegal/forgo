@@ -1,0 +1,180 @@
+// The with statement: `with NAME := VALUE { ... }` runs the block, then
+// calls NAME.Close(), however the block is left -- by falling off its
+// end, break, continue, return, throw, ?, or a panic. NAME is scoped to
+// the statement. In a function whose last result is a named error (as ?
+// requires), an error from Close is not lost: it is returned like ?
+// would, or, if the function is already returning, becomes its error
+// unless that is already set.
+//
+// Every check below panics on a mismatch, so running the example is also a
+// test of the compiler's lowering.
+package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+)
+
+// log records what happened, in order, for the checks.
+var log []string
+
+// Conn is a resource whose Close can fail.
+type Conn struct {
+	name string
+	fail bool
+}
+
+func dial(name string) (*Conn, error) {
+	throw errors.New("dial: no name") if name == ""
+	log = append(log, "open "+name)
+	return &Conn{name: name}, nil
+}
+
+func mustDial(name string) *Conn {
+	c, err := dial(name)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func (c *Conn) Close() error {
+	log = append(log, "close "+c.name)
+	throw errors.New("close " + c.name + ": broken pipe") if c.fail
+	return nil
+}
+
+// copyUpper writes src to dst in upper case. Both files are closed on
+// every path out; a failed Close of dst (lost buffered data) is an error.
+func copyUpper(dst, src string) (err error) {
+	with in := os.Open(src)? {
+		with out := os.Create(dst)? {
+			w := bufio.NewWriter(out)
+			sc := bufio.NewScanner(in)
+			for sc.Scan() {
+				fmt.Fprintln(w, strings.ToUpper(sc.Text()))
+			}
+			sc.Err()?
+			w.Flush()?
+		}
+	}
+	return nil
+}
+
+// nested closes the innermost resource first.
+func nested() (err error) {
+	with a := dial("a")? {
+		with b := dial("b")? {
+			log = append(log, "use "+a.name+b.name)
+		}
+	}
+	return nil
+}
+
+// early returns from inside the block: the result is computed first,
+// then the connection is closed.
+func early() (n int, err error) {
+	with c := dial("early")? {
+		return len(c.name), nil
+	}
+}
+
+// loop opens one connection per iteration and closes it before the next,
+// however the iteration ends.
+func loop() (err error) {
+	for i := range 4 {
+		with c := dial(fmt.Sprint("loop", i))? {
+			continue if i == 0
+			break if i == 2
+			log = append(log, "use "+c.name)
+		}
+	}
+	return nil
+}
+
+// failingClose shows that an error from Close is returned.
+func failingClose() (err error) {
+	with c := dial("flaky")? {
+		c.fail = true
+	}
+	return nil
+}
+
+// firstErrorWins returns while Close also fails: the error being
+// returned is kept.
+func firstErrorWins() (err error) {
+	with c := dial("both")? {
+		c.fail = true
+		throw "work failed"
+	}
+}
+
+// panics still closes the connection on the way out.
+func panics() (recovered any) {
+	defer func() { recovered = recover() }()
+	with c := mustDial("panic") {
+		_ = c
+		panic("boom")
+	}
+}
+
+func expect[T comparable](what string, got, want T) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %v, want %v", what, got, want))
+	}
+	fmt.Printf("%-28s %v\n", what, got)
+}
+
+func expectLog(what string, want ...string) {
+	if !slices.Equal(log, want) {
+		panic(fmt.Sprintf("%s: log %q, want %q", what, log, want))
+	}
+	fmt.Printf("%-28s %s\n", what, strings.Join(log, ", "))
+	log = nil
+}
+
+func errText(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
+	return err.Error()
+}
+
+func main() {
+	dir, err := os.MkdirTemp("", "with")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(dir)
+	src, dst := filepath.Join(dir, "in.txt"), filepath.Join(dir, "out.txt")
+	if err := os.WriteFile(src, []byte("hello\nwith\n"), 0o666); err != nil {
+		panic(err)
+	}
+	expect("copyUpper", errText(copyUpper(dst, src)), "<nil>")
+	out, _ := os.ReadFile(dst)
+	expect("copied", string(out), "HELLO\nWITH\n")
+	expect("copy missing file", errors.Is(copyUpper(dst, filepath.Join(dir, "none")), os.ErrNotExist), true)
+
+	expect("nested", errText(nested()), "<nil>")
+	expectLog("nested order", "open a", "open b", "use ab", "close b", "close a")
+
+	n, err := early()
+	expect("early return", n, 5)
+	expectLog("closed after return", "open early", "close early")
+
+	expect("loop", errText(loop()), "<nil>")
+	expectLog("loop", "open loop0", "close loop0", "open loop1", "use loop1", "close loop1", "open loop2", "close loop2")
+
+	expect("failing Close", errText(failingClose()), "close flaky: broken pipe")
+	log = nil
+	expect("first error wins", errText(firstErrorWins()), "work failed")
+	expectLog("both closed", "open both", "close both")
+
+	expect("panic", panics(), any("boom"))
+	expectLog("closed on panic", "open panic", "close panic")
+}

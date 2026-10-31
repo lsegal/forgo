@@ -89,6 +89,58 @@ func (s *state) fgoStringStore(left ir.Node, right *ssa.Value, deref bool) bool 
 	return true
 }
 
+// fgoTaggedField reports whether n selects a struct field tagged
+// `fgo:"nogc"`, which holds a counted reference (see
+// runtime/forgo_rc_tag.go).
+func fgoTaggedField(n ir.Node) bool {
+	if n.Op() != ir.ODOT && n.Op() != ir.ODOTPTR {
+		return false
+	}
+	sel := n.(*ir.SelectorExpr)
+	return sel.Selection != nil && types.FgoTagged(sel.Selection)
+}
+
+// fgoTagStore stores right into tagged field left, in code that is not
+// nogc, through runtime.fgoTagStore, which counts the field's reference.
+// (nogc code's stores are the counting pass's.)
+func (s *state) fgoTagStore(left ir.Node, right *ssa.Value, deref bool) bool {
+	if s.curfn.FgoNogc() || !fgoTaggedField(left) {
+		return false
+	}
+	t := left.Type()
+	switch {
+	case right == nil:
+		right = s.zeroVal(t)
+	case deref:
+		right = s.load(t, right)
+	}
+	fn := typecheck.LookupRuntimeFunc("fgoTagStore")
+	s.rtcall(fn, true, nil, s.addr(left), right)
+	return true
+}
+
+// fgoTagRead hands the object v points to, just read from tagged field
+// n by code that is not nogc, to the GC: that code keeps v without
+// counting it. Comparing the field with nil reads it as is.
+func (s *state) fgoTagRead(n ir.Node, v *ssa.Value) *ssa.Value {
+	if s.curfn.FgoNogc() || s.fgoTagRaw || !fgoTaggedField(n) {
+		return v
+	}
+	fn := typecheck.LookupRuntimeFunc("fgoTagLoad")
+	return s.rtcall(fn, true, []*types.Type{v.Type}, v)[0]
+}
+
+// fgoCompared evaluates x, an operand of a comparison, which keeps no
+// pointer it reads from a tagged field.
+func (s *state) fgoCompared(x ir.Node) *ssa.Value {
+	if !fgoTaggedField(x) {
+		return s.expr(x)
+	}
+	s.fgoTagRaw = true
+	defer func() { s.fgoTagRaw = false }()
+	return s.expr(x)
+}
+
 // fgoFieldAddr returns the address of field n (p.f or (*p).f) and p.
 func (s *state) fgoFieldAddr(n ir.Node) (addr, base *ssa.Value) {
 	sel := n.(*ir.SelectorExpr)

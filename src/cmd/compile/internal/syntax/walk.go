@@ -257,6 +257,11 @@ func (w walker) node(n Node) {
 	case *ThrowStmt:
 		w.node(n.X)
 
+	case *WithStmt:
+		w.node(n.Name)
+		w.node(n.Value)
+		w.node(n.Body)
+
 	case *PostfixIfStmt:
 		w.node(n.Stmt)
 		w.node(n.Cond)

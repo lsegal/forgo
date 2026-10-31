@@ -226,6 +226,7 @@ type mheap struct {
 	specialWeakHandleAlloc     fixalloc // allocator for specialWeakHandle
 	specialBubbleAlloc         fixalloc // allocator for specialBubble
 	specialSecretAlloc         fixalloc // allocator for specialSecret
+	specialFgoTagAlloc         fixalloc // allocator for specialFgoTag
 	speciallock                mutex    // lock for special record allocators.
 	arenaHintAlloc             fixalloc // allocator for arenaHints
 
@@ -790,6 +791,7 @@ func (h *mheap) init() {
 	h.specialReachableAlloc.init(unsafe.Sizeof(specialReachable{}), nil, nil, &memstats.other_sys)
 	h.specialPinCounterAlloc.init(unsafe.Sizeof(specialPinCounter{}), nil, nil, &memstats.other_sys)
 	h.specialSecretAlloc.init(unsafe.Sizeof(specialSecret{}), nil, nil, &memstats.other_sys)
+	h.specialFgoTagAlloc.init(unsafe.Sizeof(specialFgoTag{}), nil, nil, &memstats.other_sys)
 	h.specialWeakHandleAlloc.init(unsafe.Sizeof(specialWeakHandle{}), nil, nil, &memstats.gcMiscSys)
 	h.specialBubbleAlloc.init(unsafe.Sizeof(specialBubble{}), nil, nil, &memstats.other_sys)
 	h.arenaHintAlloc.init(unsafe.Sizeof(arenaHint{}), nil, nil, &memstats.other_sys)
@@ -1960,6 +1962,10 @@ const (
 	// _KindSpecialSecret is a special used to mark an object
 	// as needing zeroing immediately upon freeing.
 	_KindSpecialSecret = 10
+	// _KindSpecialFgoTag is forgo's: a field tagged `fgo:"nogc"`, whose
+	// counted reference is released when the object is freed (see
+	// forgo_rc_tag.go).
+	_KindSpecialFgoTag = 11
 )
 
 type special struct {
@@ -2854,6 +2860,11 @@ func freeSpecial(s *special, p unsafe.Pointer, size uintptr) {
 		memclrNoHeapPointers(p, ss.size)
 		lock(&mheap_.speciallock)
 		mheap_.specialSecretAlloc.free(unsafe.Pointer(s))
+		unlock(&mheap_.speciallock)
+	case _KindSpecialFgoTag:
+		fgoTagDead(p)
+		lock(&mheap_.speciallock)
+		mheap_.specialFgoTagAlloc.free(unsafe.Pointer(s))
 		unlock(&mheap_.speciallock)
 	default:
 		throw("bad special kind")

@@ -171,6 +171,9 @@ const (
 	PostfixIfStmt_Stmt
 	ThrowStmt_X
 	TryExpr_X
+	WithStmt_Body
+	WithStmt_Name
+	WithStmt_Value
 
 	maxKind
 )
@@ -308,4 +311,7 @@ var fieldInfos = [...]fieldInfo{
 	PostfixIfStmt_Stmt: info[*ast.PostfixIfStmt]("Stmt"),
 	ThrowStmt_X:        info[*ast.ThrowStmt]("X"),
 	TryExpr_X:          info[*ast.TryExpr]("X"),
+	WithStmt_Body:      info[*ast.WithStmt]("Body"),
+	WithStmt_Name:      info[*ast.WithStmt]("Name"),
+	WithStmt_Value:     info[*ast.WithStmt]("Value"),
 }

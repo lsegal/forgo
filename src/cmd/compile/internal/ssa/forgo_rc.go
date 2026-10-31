@@ -135,8 +135,9 @@ type fgoReq struct {
 
 // Order of inserted operations within one slot.
 const (
-	fgoOrderZero    = -2 // clear shadow slots at function entry
-	fgoOrderOwn     = -1 // record a value just owned (call result, phi, param) in its shadow slot
+	fgoOrderZero    = -3 // clear shadow slots at function entry
+	fgoOrderOwn     = -2 // record a value just owned (call result, phi, param) in its shadow slot
+	fgoOrderClone   = -1 // copy a string or slice, before anything at the slot uses the copy
 	fgoOrderInc     = 0
 	fgoOrderSet     = 1 // record a counted load, reuse token or string copy in its shadow slot
 	fgoOrderClear   = 2 // forget it, just before releasing it or handing it on
@@ -157,8 +158,13 @@ type fgoRCPass struct {
 		take, appendN                    *obj.LSym
 		slicePut                         *obj.LSym
 		store, storeGC, vet              *obj.LSym
+		storeTag, storeTagGC             *obj.LSym
 	}
-	nogcABI bool // the function follows the nogc calling convention
+	nogcABI bool              // the function follows the nogc calling convention
+	strict  bool              // //fgo:nogc strict: hand-offs are errors
+	cur     *Value            // the use being looked at
+	names   map[*Value]string // value -> a variable it is held in
+	refused map[src.XPos]bool // strict errors already reported
 	vets    []fgoVet
 
 	chain   map[*Block][]*Value // memory values in order
@@ -197,8 +203,11 @@ func (p *fgoRCPass) run() {
 	p.syms.escape = p.lookup("fgoRCHandoff")
 	p.syms.store = p.lookup("fgoRCStore")
 	p.syms.storeGC = p.lookup("fgoRCStoreGC")
+	p.syms.storeTag = p.lookup("fgoRCStoreTag")
+	p.syms.storeTagGC = p.lookup("fgoRCStoreTagGC")
 	p.syms.vet = p.lookup("fgoRCVet")
 	p.nogcABI = f.fe.Func().FgoNogcABI()
+	p.strict = f.fe.Func().FgoNogcStrict()
 	p.syms.ptrsClone = p.lookup("fgoPtrsClone")
 	p.syms.inc = p.lookup("fgoRCInc")
 	p.syms.dec = p.lookup("fgoRCDec")
@@ -418,8 +427,32 @@ func (p *fgoRCPass) lowerStores() {
 				continue
 			}
 			fn := p.syms.store
-			if fld := fgoFieldAt(base.Type.Elem(), off); fld != nil && types.FgoRecursiveField(base.Type.Elem(), fld) {
+			var fld *types.Field
+			if base != nil && off >= 0 {
+				fld = fgoFieldAt(base.Type.Elem(), off)
+			}
+			if tf := fgoTaggedAddr(st.Args[0]); tf != nil {
+				fld = tf // maybe nested in a field or array element
+			}
+			tagged := fld != nil && types.FgoTagged(fld)
+			if base == nil {
+				base = st.Args[0] // a tagged field of memory nogc code does not count
+			}
+			fromNogc := p.fromNogc(base, map[*Value]bool{})
+			if fld != nil && base.Type.Elem().IsStruct() && types.FgoRecursiveField(base.Type.Elem(), fld) {
 				fn = p.syms.storeGC
+				if tagged {
+					fn = p.syms.storeTagGC // counted unless base is a counted object
+				}
+				if p.strict && st.Args[1].Op != OpConstNil && (!tagged || fromNogc) {
+					p.refuseAt(st.Pos, st.Args[1], "assigned to field "+fld.Sym.Name+", through which the object can reach itself (reference cycles are the GC's)")
+				}
+			} else if tagged {
+				// Counted wherever base is: a GC object holds the
+				// reference itself.
+				fn = p.syms.storeTag
+			} else if p.strict && st.Args[1].Op != OpConstNil && !fromNogc {
+				p.refuseAt(st.Pos, st.Args[1], "stored in an object nogc code did not allocate, which may be garbage collected (tag the field `fgo:\"nogc\"` to count it there)")
 			}
 			_, mem, _ := p.callAt(b, st.Pos, fn, []*Value{base, st.Args[0], st.Args[1]}, nil, st.MemoryArg())
 			st.copyOf(mem)
@@ -1363,12 +1396,18 @@ func (p *fgoRCPass) valPos(v *Value) int {
 // escapeAt hands root's object to the GC (runtime.fgoRCHandoff) at slot
 // of b, for a use that takes it where the counting pass cannot follow.
 func (p *fgoRCPass) escapeAt(root *Value, b *Block, slot int) {
+	if p.strict && p.cur != nil {
+		p.refuse(root, p.cur)
+	}
 	p.reqs = append(p.reqs, &fgoReq{b: b, slot: slot, order: fgoOrderInc, escape: true, v: root})
 }
 
 // rcFieldAt reports whether address a is a nogc pointer field of a nogc
 // object, which the counting pass tracks; anything else is GC managed.
 func fgoRCFieldAt(a *Value) bool {
+	if fgoTaggedAddr(a) != nil {
+		return true
+	}
 	base, off := fgoAddrBase(a)
 	if base == nil || off < 0 {
 		return false
@@ -1379,6 +1418,30 @@ func fgoRCFieldAt(a *Value) bool {
 		}
 	}
 	return false
+}
+
+// fgoTaggedAddr returns the field tagged `fgo:"nogc"` that address a
+// points to, found from the struct (or array) pointers a is computed
+// from, or nil. Such a field may be nested in fields and array elements
+// of its object; a counted object counts it all the same.
+func fgoTaggedAddr(a *Value) *types.Field {
+	off := int64(0)
+	for {
+		if t := a.Type; t.IsPtr() && (t.Elem().IsStruct() || t.Elem().IsArray()) {
+			if f := types.FgoTaggedAt(t.Elem(), off); f != nil {
+				return f
+			}
+		}
+		switch a.Op {
+		case OpOffPtr:
+			off += a.AuxInt
+			a = a.Args[0]
+		case OpCopy, OpNilCheck:
+			a = a.Args[0]
+		default:
+			return nil
+		}
+	}
 }
 
 // markCall marks root's most recent use as a call argument.
@@ -1437,6 +1500,8 @@ func (p *fgoRCPass) collectUses() {
 
 func (p *fgoRCPass) use(u *Value, i int, root *Value, direct bool) {
 	b := u.Block
+	p.cur = u
+	defer func() { p.cur = nil }()
 	// handOff hands root's object to the GC right before (or, for a
 	// value, right after) u, which takes the pointer, or one into the
 	// object, where the pass cannot follow it.
@@ -1545,6 +1610,222 @@ func (p *fgoRCPass) use(u *Value, i int, root *Value, direct bool) {
 	}
 }
 
+// refuse reports, in strict nogc code, that use u would hand root's
+// object to the garbage collector.
+func (p *fgoRCPass) refuse(root, u *Value) {
+	pos := u.Pos
+	if !pos.IsKnown() {
+		pos = root.Pos
+	}
+	if !p.fromNogc(root, map[*Value]bool{}) {
+		return
+	}
+	why := fgoEscapeReason(u)
+	if u.Op == OpStore || u.Op == OpMove {
+		why = p.storeReason(u.Args[0])
+	}
+	p.refuseAt(pos, root, why)
+}
+
+// refuseAt reports at pos, in strict nogc code, that root's object
+// escapes to the garbage collector for the reason why.
+func (p *fgoRCPass) refuseAt(pos src.XPos, root *Value, why string) {
+	pos = pos.WithNotStmt()
+	if p.refused[pos] {
+		return
+	}
+	if p.refused == nil {
+		p.refused = map[src.XPos]bool{}
+		p.names = map[*Value]string{}
+		for _, n := range p.f.Names {
+			for _, v := range p.f.NamedValues[*n] {
+				if _, ok := p.names[v]; !ok && n.N != nil {
+					p.names[v] = n.N.Sym().Name
+				}
+			}
+		}
+	}
+	p.refused[pos] = true
+	what := "a nogc object"
+	if name := p.names[root]; name != "" && !strings.HasPrefix(name, "~") && !strings.Contains(name, ".") {
+		what = name
+	}
+	p.errorf(pos, "strict: %s escapes to the garbage collector: %s", what, why)
+}
+
+// fromNogc reports whether v points to an object nogc code allocated or
+// was given by other nogc code, rather than one it loaded from a global
+// or got from code that is not nogc.
+func (p *fgoRCPass) fromNogc(v *Value, seen map[*Value]bool) bool {
+	if seen[v] {
+		return false
+	}
+	seen[v] = true
+	switch v.Op {
+	case OpSelectN:
+		if aux, ok := v.Args[0].Aux.(*AuxCall); ok && aux.Fn != nil {
+			name := aux.Fn.Name
+			return strings.HasPrefix(name, "runtime.fgoRCNew") || strings.Contains(name, ir.FgoNogcPrefix)
+		}
+	case OpArg:
+		return p.nogcABI
+	case OpPhi:
+		for _, a := range v.Args {
+			if p.fromNogc(a, seen) {
+				return true
+			}
+		}
+	case OpCopy, OpConvert, OpNilCheck:
+		return p.fromNogc(v.Args[0], seen)
+	case OpLoad:
+		b := fgoAddrRoot(v.Args[0])
+		return b != nil && b.Type.IsPtrShaped() && p.fromNogc(b, seen)
+	}
+	return false
+}
+
+// fgoAddrRoot follows address arithmetic on a back to the pointer or
+// symbol address it starts from.
+func fgoAddrRoot(a *Value) *Value {
+	for {
+		switch a.Op {
+		case OpOffPtr, OpAddPtr, OpPtrIndex, OpCopy, OpNilCheck:
+			a = a.Args[0]
+		default:
+			return a
+		}
+	}
+}
+
+// storeReason says where a store to addr puts a nogc object.
+func (p *fgoRCPass) storeReason(addr *Value) string {
+	return p.storeReasonAt(fgoAddrRoot(addr), map[*Value]bool{})
+}
+
+func (p *fgoRCPass) storeReasonAt(base *Value, seen map[*Value]bool) string {
+	const generic = "stored in garbage collected memory"
+	if seen[base] {
+		return generic
+	}
+	seen[base] = true
+	switch {
+	case base.Op == OpPhi:
+		for _, a := range base.Args {
+			if why := p.storeReasonAt(fgoAddrRoot(a), seen); why != generic {
+				return why
+			}
+		}
+	case base.Op == OpAddr:
+		if sym, ok := base.Aux.(*obj.LSym); ok {
+			return "stored in global " + sym.Name[strings.LastIndex(sym.Name, ".")+1:]
+		}
+	case base.Op == OpSelectN && fgoIsCall(base.Args[0]):
+		if aux, ok := base.Args[0].Aux.(*AuxCall); ok && aux.Fn != nil {
+			switch {
+			case strings.HasPrefix(aux.Fn.Name, "runtime.mapassign"):
+				return "stored in a map"
+			case aux.Fn.Name == "runtime.growslice":
+				return "appended to a slice"
+			}
+		}
+		if why := p.passedOn(base); why != "" {
+			return why
+		}
+		return "stored in a garbage collected object"
+	case base.Op == OpLocalAddr:
+		if why := p.passedOn(base); why != "" {
+			return why
+		}
+	}
+	if base.Type.IsPtr() && base.Type.Elem().IsArray() {
+		return "stored in a slice"
+	}
+	for base.Op == OpSlicePtr || base.Op == OpLoad {
+		base = fgoAddrRoot(base.Args[0])
+	}
+	if sym, ok := base.Aux.(*obj.LSym); ok && base.Op == OpAddr {
+		return "stored in memory reached from global " + sym.Name[strings.LastIndex(sym.Name, ".")+1:]
+	}
+	return "stored in garbage collected memory"
+}
+
+// passedOn says where memory at ptr, holding a nogc object, is taken:
+// to a goroutine, a channel or a closure.
+func (p *fgoRCPass) passedOn(ptr *Value) string {
+	seen := map[*Value]bool{}
+	work := []*Value{ptr}
+	for len(work) > 0 {
+		v := work[len(work)-1]
+		work = work[:len(work)-1]
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		for _, w := range p.users[v] {
+			switch {
+			case w.Op == OpClosureLECall || w.Op == OpClosureCall:
+				return "captured by a closure"
+			case fgoIsCall(w):
+				if aux, ok := w.Aux.(*AuxCall); ok && aux.Fn != nil {
+					switch name := aux.Fn.Name; {
+					case strings.HasPrefix(name, "runtime.newproc"):
+						return "captured by a goroutine"
+					case strings.HasPrefix(name, "runtime.chansend"), strings.HasPrefix(name, "runtime.selectnbsend"):
+						return "sent on a channel"
+					}
+				}
+			case w.Op == OpStore && w.Args[1] == v:
+				// The closure's address, stored: follow where it goes.
+				if b, _ := fgoAddrBase(w.Args[0]); b != nil {
+					work = append(work, b)
+				}
+			case w.Op == OpOffPtr || w.Op == OpCopy || w.Op == OpConvert:
+				work = append(work, w)
+			}
+		}
+	}
+	return ""
+}
+
+// fgoEscapeReason says where use u takes a nogc object that nogc code
+// cannot follow.
+func fgoEscapeReason(u *Value) string {
+	switch u.Op {
+	case OpStore, OpMove, OpZero:
+		return "stored in garbage collected memory"
+	case OpIMake:
+		return "converted to an interface"
+	case OpMakeResult:
+		return "returned to code that is not nogc"
+	case OpPhi:
+		return "merged with a value nogc code does not count"
+	case OpLoad:
+		return "copied out of the object with counted references"
+	case OpClosureLECall, OpClosureCall:
+		return "passed to a func value"
+	case OpInterLECall, OpInterCall:
+		return "passed to an interface method"
+	}
+	if aux, ok := u.Aux.(*AuxCall); ok && aux.Fn != nil {
+		name := aux.Fn.Name
+		switch {
+		case strings.HasPrefix(name, "runtime.newproc"):
+			return "passed to a goroutine"
+		case strings.HasPrefix(name, "runtime.chansend"):
+			return "sent on a channel"
+		case strings.HasPrefix(name, "runtime.mapassign"):
+			return "stored in a map"
+		case strings.HasPrefix(name, "runtime.growslice"):
+			return "appended to a slice"
+		}
+		return "passed to " + name + ", which may keep it"
+	}
+	if fgoIsCall(u) {
+		return "passed to code that may keep it"
+	}
+	return "used where nogc code cannot follow it"
+}
+
 // fgoNogcPkgCallee reports whether call calls a function of package
 // fgo/nogc, which only inspects the objects it is given.
 func fgoNogcPkgCallee(call *Value) bool {
@@ -1631,12 +1912,14 @@ func (p *fgoRCPass) view(L, root *Value) {
 			case (u.Op == OpStore || u.Op == OpZero || u.Op == OpMove) && u.Args[0] == w,
 				u.Op == OpMove && u.Args[1] == w:
 				uses = append(uses, fgoUse{b: u.Block, pos: p.opPos(u)})
-			case w == L && fgoIsCall(u) && p.isSet(u.Aux.(*AuxCall).Fn) && u.Args[1] == L:
+			case w == L && fgoIsCall(u) && p.isSet(u.Aux.(*AuxCall).Fn) && u.Args[1] == L && u.Block == L.Block:
 				// Stored into another field: copy it right here, while
 				// the object is surely alive, and let the store take
 				// the copy. The object can then die (and give its
 				// memory to the allocation the store may be filling)
-				// before everything up to the store.
+				// before everything up to the store. (Only in the
+				// load's block: a path that left it without reaching
+				// the store would leak the copy.)
 				p.dup(L, u)
 			case fgoIsCall(u):
 				pos := p.opPos(u)
@@ -1646,7 +1929,7 @@ func (p *fgoRCPass) view(L, root *Value) {
 				return
 			default:
 				pos := p.slotAfter(L.Block, p.memPos(L.Block, L.MemoryArg()))
-				p.reqs = append(p.reqs, &fgoReq{b: L.Block, slot: pos, order: fgoOrderInc, clone: true, v: L})
+				p.reqs = append(p.reqs, &fgoReq{b: L.Block, slot: pos, order: fgoOrderClone, clone: true, v: L})
 				return
 			}
 		}
@@ -2023,7 +2306,7 @@ func (p *fgoRCPass) isSet(fn *obj.LSym) bool {
 func (p *fgoRCPass) dup(L, set *Value) {
 	b := L.Block
 	slot := p.slotAfter(b, p.memPos(b, L.MemoryArg()))
-	r := &fgoReq{b: b, slot: slot, order: fgoOrderInc, clone: true, dup: set, v: L}
+	r := &fgoReq{b: b, slot: slot, order: fgoOrderClone, clone: true, dup: set, v: L}
 	n := p.f.NewLocal(L.Pos, p.f.Config.Types.BytePtr)
 	p.bufs = append(p.bufs, n)
 	p.reqs = append(p.reqs, r,
@@ -3237,7 +3520,7 @@ func fgoArgOwnedAt(call *Value, i int) bool {
 		return false
 	}
 	switch call.Aux.(*AuxCall).Fn.Name {
-	case "runtime.fgoRCStore", "runtime.fgoRCStoreGC":
+	case "runtime.fgoRCStore", "runtime.fgoRCStoreGC", "runtime.fgoRCStoreTag", "runtime.fgoRCStoreTagGC":
 		return i == 2
 	}
 	o, ok := fgoOwnedCallees.Load(call.Aux.(*AuxCall).Fn.Name)

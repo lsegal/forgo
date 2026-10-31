@@ -472,6 +472,9 @@ func childrenOf(n ast.Node) []ast.Node {
 	case *ast.ThrowStmt:
 		children = append(children, tok(n.Throw, len("throw")))
 
+	case *ast.WithStmt:
+		children = append(children, tok(n.With, len("with")))
+
 	case *ast.TryExpr:
 		children = append(children, tok(n.Question, len("?")))
 
@@ -668,6 +671,8 @@ func NodeDescription(n ast.Node) string {
 		return "postfix if statement"
 	case *ast.ThrowStmt:
 		return "throw statement"
+	case *ast.WithStmt:
+		return "with statement"
 	case *ast.TryExpr:
 		return "error propagation (?) expression"
 

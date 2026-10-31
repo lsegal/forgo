@@ -1,0 +1,139 @@
+// //fgo:nogc on a type, and fields tagged `fgo:"nogc"`.
+//
+// //fgo:nogc on a type makes every method of the type a strict nogc
+// root: the methods count the references they hold, free what they drop,
+// and may not hand anything to the garbage collector -- that is a
+// compile error, as under //fgo:nogc strict.
+//
+// A method is often called on a value garbage collected code allocated,
+// and nogc code cannot count references held by a garbage collected
+// object: storing a nogc object in one would hand it to the GC. A field
+// tagged `fgo:"nogc"` is the exception. It holds a counted reference
+// wherever its struct lives, so a Stack that main allocates still frees
+// each node the moment Pop drops it. Without the tag, Push and Pop below
+// would not compile.
+//
+// A struct holding a tagged field is pinned: copying it by value would
+// copy the reference without counting it, so it is a compile error (see
+// copy.fgo, built with -tags copy). Use it through a pointer. Code that
+// is not nogc may store into the field (counted), but reading it hands
+// what it reads to the GC, since that code does not count the reference
+// it keeps. When the GC frees a struct holding a tagged field, the
+// reference goes with it.
+//
+// Every check below panics on a mismatch, so running the example is also a
+// test of the compiler's reference counting.
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+
+	"fgo/nogc"
+)
+
+type item struct {
+	val  int
+	next *item
+}
+
+// Stack is a LIFO stack of ints, a linked list, safe for concurrent use.
+//
+//fgo:nogc
+type Stack struct {
+	mu  sync.Mutex
+	top *item `fgo:"nogc"`
+	n   int
+}
+
+func (s *Stack) Push(v int) {
+	s.mu.Lock()
+	s.top = &item{val: v, next: s.top}
+	s.n++
+	s.mu.Unlock()
+}
+
+func (s *Stack) Pop() (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it := s.top
+	if it == nil {
+		return 0, false
+	}
+	s.top = it.next
+	s.n--
+	return it.val, true
+}
+
+func (s *Stack) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.n
+}
+
+// TopCounted reports whether the top node is reference counted (not
+// handed to the garbage collector).
+func (s *Stack) TopCounted() bool { return nogc.Count(s.top) > 0 && !nogc.HandedOff(s.top) }
+
+func expect[T comparable](what string, got, want T) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %v, want %v", what, got, want))
+	}
+	fmt.Printf("%-36s %v\n", what, got)
+}
+
+func main() {
+	base := nogc.Live()
+
+	// A Stack garbage collected code allocates: its nodes are counted.
+	s := &Stack{}
+	for i := range 10 {
+		s.Push(i)
+	}
+	expect("top counted", s.TopCounted(), true)
+	expect("live after 10 pushes", nogc.Live()-base, 10)
+	for range 4 {
+		s.Pop()
+	}
+	expect("live after 4 pops", nogc.Live()-base, 6)
+
+	// Goroutines share it: what a tagged field holds is counted
+	// atomically.
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			for i := range 10_000 {
+				s.Push(g*10_000 + i)
+				if i%2 == 1 {
+					s.Pop()
+					s.Pop()
+				}
+			}
+		})
+	}
+	wg.Wait()
+	expect("live after 8 goroutines", nogc.Live()-base, s.Len())
+	for {
+		_, ok := s.Pop()
+		break if !ok
+	}
+	expect("live after draining", nogc.Live()-base, 0)
+
+	// The GC frees a Stack nothing points to, and releases its nodes.
+	func() {
+		t := &Stack{}
+		for i := range 100 {
+			t.Push(i)
+		}
+	}()
+	expect("live, dropped stack of 100", nogc.Live()-base, 100)
+	runtime.GC()
+	expect("live after a GC", nogc.Live()-base, 0)
+
+	// Garbage collected code reading the field keeps what it reads
+	// without counting it: that node is handed to the GC.
+	s.Push(1)
+	top := s.top
+	expect("read by GC code: handed off", nogc.HandedOff(top), true)
+}

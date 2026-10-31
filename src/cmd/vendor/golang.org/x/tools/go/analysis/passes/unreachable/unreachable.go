@@ -95,6 +95,9 @@ func (d *deadState) findLabels(stmt ast.Stmt) {
 	case *ast.PostfixIfStmt: // forgo
 		d.findLabels(x.Stmt)
 
+	case *ast.WithStmt: // forgo
+		d.findLabels(x.Body)
+
 	case *ast.BlockStmt:
 		for _, stmt := range x.List {
 			d.findLabels(stmt)
@@ -285,6 +288,9 @@ func (d *deadState) findDead(stmt ast.Stmt) {
 
 	case *ast.ThrowStmt: // forgo
 		d.reachable = false
+
+	case *ast.WithStmt: // forgo
+		d.findDead(x.Body)
 
 	case *ast.PostfixIfStmt: // forgo
 		d.findDead(x.Stmt)

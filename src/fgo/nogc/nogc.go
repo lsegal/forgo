@@ -18,8 +18,8 @@
 // references that code holds, frees each object as soon as its last
 // reference dies, and reuses a dying object's memory for a following
 // allocation of the same size where it can. No free call exists. A
-// //fgo:nogc directive on a type makes its methods roots, and every
-// //fgo:comptime function is a root.
+// //fgo:nogc directive on a type makes its methods strict roots (see
+// below), and every //fgo:comptime function is a root.
 //
 // Being nogc is a property of where an object was allocated, not of its
 // type: any struct type works, including types from other packages, and
@@ -59,6 +59,20 @@
 //
 // When recover() discards frames, or Goexit ends a goroutine, the objects
 // those frames owned are released too.
+//
+// A //fgo:nogc strict root may not hand anything to the garbage
+// collector: each hand-off in it, or in a function it calls, is a
+// compile error saying what escapes and where.
+//
+// A struct field of pointer-to-struct type tagged `fgo:"nogc"` holds a
+// counted reference wherever the struct lives, including in a garbage
+// collected object. What it holds, and everything that reaches, is
+// shared: counted atomically, as other goroutines may reach it, and
+// still freed at its last reference. When the garbage collector frees an
+// object holding a tagged field, the field's reference is released. Code
+// that is not nogc may store into a tagged field; reading one hands what
+// it reads to the garbage collector. A struct holding a tagged field
+// cannot be copied: the compiler rejects every copy of one.
 package nogc
 
 import "unsafe"

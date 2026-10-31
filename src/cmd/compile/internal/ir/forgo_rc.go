@@ -15,6 +15,10 @@ import (
 // allocates and counts nogc objects.
 func (fn *Func) FgoNogc() bool { return fn != nil && fn.Pragma&FgoNogc != 0 }
 
+// FgoNogcStrict reports whether fn is nogc code reached from a
+// //fgo:nogc strict root, where handing an object to the GC is an error.
+func (fn *Func) FgoNogcStrict() bool { return fn.FgoNogc() && fn.Pragma&FgoNogcStrict != 0 }
+
 // FgoNogcPrefix starts the name of the nogc copy of a function.
 const FgoNogcPrefix = "_fgonogc_"
 

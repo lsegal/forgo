@@ -234,6 +234,12 @@ func (check *Checker) blockBranches(all *Scope, parent *block, lstmt *ast.Labele
 		case *ast.BlockStmt:
 			blockBranches(lstmt, s.List)
 
+		case *ast.WithStmt: // forgo
+			blockBranches(lstmt, s.Body.List)
+
+		case *ast.PostfixIfStmt: // forgo: STMT if COND
+			stmtBranches(lstmt, s.Stmt)
+
 		case *ast.IfStmt:
 			stmtBranches(lstmt, s.Body)
 			if s.Else != nil {

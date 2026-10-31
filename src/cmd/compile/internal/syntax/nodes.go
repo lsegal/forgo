@@ -434,6 +434,16 @@ type (
 		stmt
 	}
 
+	// forgo: with Name := Value { Body }
+	// Runs Body, then closes Name (calls its Close method) however Body
+	// is left. See cmd/compile/internal/noder/forgo_with.go.
+	WithStmt struct {
+		Name  *Name
+		Value Expr
+		Body  *BlockStmt
+		stmt
+	}
+
 	IfStmt struct {
 		Init SimpleStmt
 		Cond Expr

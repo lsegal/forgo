@@ -40,6 +40,11 @@ func (check *Checker) isTerminating(s ast.Stmt, label string) bool {
 		// forgo: throw lowers to a return.
 		return true
 
+	case *ast.WithStmt:
+		// forgo: with lowers to a block ending in its body, when the body
+		// is terminating.
+		return check.isTerminating(s.Body, "")
+
 	case *ast.PostfixIfStmt:
 		// forgo: STMT if COND lowers to `if COND { STMT }`, which has no
 		// else branch, so it is never terminating.
@@ -128,6 +133,9 @@ func hasBreak(s ast.Stmt, label string, implicit bool) bool {
 	case *ast.PostfixIfStmt:
 		// forgo: STMT if COND
 		return hasBreak(s.Stmt, label, implicit)
+
+	case *ast.WithStmt:
+		return hasBreak(s.Body, label, implicit)
 
 	case *ast.LabeledStmt:
 		return hasBreak(s.Stmt, label, implicit)

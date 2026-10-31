@@ -206,6 +206,9 @@ recheck:
 	}
 
 	if !didNogc {
+		forgoPinCheck(m, info, files)
+	}
+	if !didNogc {
 		didNogc = true
 		// forgo: add the nogc copies of functions reachable from
 		// //fgo:nogc roots, which type checking must then see too.

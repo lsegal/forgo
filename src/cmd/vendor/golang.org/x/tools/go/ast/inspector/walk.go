@@ -198,6 +198,11 @@ func walk(v *visitor, ek edge.Kind, index int, node ast.Node) {
 	case *ast.ThrowStmt: // forgo
 		walk(v, edge.ThrowStmt_X, -1, n.X)
 
+	case *ast.WithStmt: // forgo
+		walk(v, edge.WithStmt_Name, -1, n.Name)
+		walk(v, edge.WithStmt_Value, -1, n.Value)
+		walk(v, edge.WithStmt_Body, -1, n.Body)
+
 	case *ast.PostfixIfStmt: // forgo
 		walk(v, edge.PostfixIfStmt_Stmt, -1, n.Stmt)
 		walk(v, edge.PostfixIfStmt_Cond, -1, n.Cond)

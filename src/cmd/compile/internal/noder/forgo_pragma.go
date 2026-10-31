@@ -5,7 +5,7 @@
 package noder
 
 // forgoPragma recognizes forgo's own directive comments ("//fgo:comptime",
-// "//fgo:macro", "//fgo:nogc") and records them on pragma. It reports whether text was
+// "//fgo:macro", "//fgo:nogc", "//fgo:nogc strict") and records them on pragma. It reports whether text was
 // a forgo directive, so noder.pragma can skip its normal //go:... switch
 // for it.
 func forgoPragma(pragma *pragmas, text string) bool {
@@ -16,6 +16,9 @@ func forgoPragma(pragma *pragmas, text string) bool {
 		pragma.IsMacro = true
 	case "fgo:nogc":
 		pragma.IsNogc = true
+	case "fgo:nogc strict":
+		pragma.IsNogc = true
+		pragma.IsStrict = true
 	default:
 		return false
 	}
@@ -31,7 +34,7 @@ func (p *pragmas) ForgoComptime() bool { return p != nil && p.IsComptime }
 func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 
 // forgoTransform rewrites every forgo-specific construct (macro calls, the
-// postfix-if statement modifier, the throw statement, the ? operator)
+// with statement, the postfix-if statement modifier, the throw statement, the ? operator)
 // found across noders' parsed files into ordinary syntax the rest of the
 // compiler already understands. It must run after parsing and before type
 // checking.
@@ -42,6 +45,7 @@ func (p *pragmas) ForgoMacro() bool { return p != nil && p.IsMacro }
 // *syntax.IfStmt, which they already know how to walk into.
 func forgoTransform(m posMap, noders []*noder) {
 	forgoExpandMacros(noders)
+	forgoLowerWith(m, noders)
 	forgoLowerPostfixIf(noders)
 	forgoLowerThrow(m, noders)
 	forgoLowerTry(m, noders)

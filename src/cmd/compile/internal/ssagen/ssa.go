@@ -1018,6 +1018,8 @@ type openDeferInfo struct {
 }
 
 type state struct {
+	fgoTagRaw bool // reading tagged fields only to compare them (see fgoTagRead)
+
 	// configuration (arch) information
 	config *ssa.Config
 
@@ -3238,8 +3240,8 @@ func (s *state) exprCheckPtr(n ir.Node, checkPtrOK bool) *ssa.Value {
 	// binary ops
 	case ir.OLT, ir.OEQ, ir.ONE, ir.OLE, ir.OGE, ir.OGT:
 		n := n.(*ir.BinaryExpr)
-		a := s.expr(n.X)
-		b := s.expr(n.Y)
+		a := s.fgoCompared(n.X)
+		b := s.fgoCompared(n.Y)
 		if n.X.Type().IsComplex() {
 			pt := types.FloatForComplex(n.X.Type())
 			op := s.ssaOp(ir.OEQ, pt)
@@ -3512,16 +3514,16 @@ func (s *state) exprCheckPtr(n ir.Node, checkPtrOK bool) *ssa.Value {
 		// instrumentation.
 		if ir.IsAddressable(n) && !s.canSSA(n) {
 			p := s.addr(n)
-			return s.fgoStringRead(n, s.load(n.Type(), p))
+			return s.fgoTagRead(n, s.fgoStringRead(n, s.load(n.Type(), p)))
 		}
 		v := s.expr(n.X)
-		return s.newValue1I(ssa.OpStructSelect, n.Type(), int64(fieldIdx(n)), v)
+		return s.fgoTagRead(n, s.newValue1I(ssa.OpStructSelect, n.Type(), int64(fieldIdx(n)), v))
 
 	case ir.ODOTPTR:
 		n := n.(*ir.SelectorExpr)
 		p := s.exprPtr(n.X, n.Bounded(), n.Pos())
 		p = s.newValue1I(ssa.OpOffPtr, types.NewPtr(n.Type()), n.Offset(), p)
-		return s.fgoStringRead(n, s.load(n.Type(), p))
+		return s.fgoTagRead(n, s.fgoStringRead(n, s.load(n.Type(), p)))
 
 	case ir.OINDEX:
 		n := n.(*ir.IndexExpr)
@@ -4471,7 +4473,7 @@ func (s *state) assignWhichMayOverlap(left ir.Node, right *ssa.Value, deref bool
 	if left.Op() == ir.ONAME && ir.IsBlank(left) {
 		return
 	}
-	if s.fgoStringStore(left, right, deref) {
+	if s.fgoStringStore(left, right, deref) || s.fgoTagStore(left, right, deref) {
 		return
 	}
 	t := left.Type()

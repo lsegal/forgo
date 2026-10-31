@@ -1,0 +1,19 @@
+//go:build untagged
+
+// Without the tag, a method of a nogc type cannot keep a node in a
+// value that garbage collected code may have allocated: storing it there
+// would hand it to the GC, which nogc types (strict) do not allow.
+// `forgo run -tags untagged .` reports the store.
+package main
+
+type Queue struct {
+	head *item // untagged: pushing would hand nodes to the GC
+}
+
+// A method of a nogc type may not store into an untagged field of a
+// value garbage collected code may have allocated.
+//
+//fgo:nogc
+type Bag struct{ q Queue }
+
+func (b *Bag) Add(v int) { b.q.head = &item{val: v, next: b.q.head} }

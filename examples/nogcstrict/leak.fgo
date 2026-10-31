@@ -1,0 +1,65 @@
+//go:build leak
+
+// Each function here hands a nogc object to the garbage collector, which
+// //fgo:nogc strict rejects. `forgo run -tags leak .` reports:
+//
+//	./leak.fgo:24:35: nogc: strict: n escapes to the garbage collector: stored in a map
+//	./leak.fgo:29:9: nogc: strict: n escapes to the garbage collector: stored in global latest
+//	./leak.fgo:35:14: nogc: strict: n escapes to the garbage collector: converted to an interface
+//	./leak.fgo:45:5: nogc: strict: a nogc object escapes to the garbage collector: sent on a channel
+//	./leak.fgo:51:5: nogc: strict: n escapes to the garbage collector: captured by a goroutine
+//	./leak.fgo:56:2: nogc: strict: a nogc object escapes to the garbage collector: returned to code that is not nogc
+//	./leak.fgo:63:10: nogc: strict: b escapes to the garbage collector: assigned to field Right, through which the object can reach itself (reference cycles are the GC's)
+//	./leak.fgo:40:6: nogc: strict: n escapes to the garbage collector: stored in a map
+package main
+
+import "fmt"
+
+var latest *Node
+
+var index = map[int]*Node{}
+
+// save is not strict itself, but a strict root calls it, so it is
+// checked as part of that root.
+func save(n *Node) { index[n.Key] = n }
+
+//fgo:nogc strict
+func leaks(key int) {
+	n := &Node{Key: key}
+	latest = n
+}
+
+//fgo:nogc strict
+func boxes(key int) {
+	n := &Node{Key: key}
+	fmt.Println(n)
+}
+
+//fgo:nogc strict
+func viaHelper(key int) {
+	save(&Node{Key: key})
+}
+
+//fgo:nogc strict
+func sends(key int, ch chan *Node) {
+	ch <- &Node{Key: key}
+}
+
+//fgo:nogc strict
+func spawns(key int) {
+	n := &Node{Key: key}
+	go func() { fmt.Println(n.Key) }()
+}
+
+//fgo:nogc strict
+func returns(key int) *Node {
+	return &Node{Key: key}
+}
+
+//fgo:nogc strict
+func cycles(key int) int {
+	a := &Node{Key: key}
+	b := &Node{Key: key + 1, Left: a}
+	a.Right = b // a can now reach itself
+	return a.Key
+}

@@ -4,6 +4,8 @@
 
 package types
 
+import "reflect"
+
 // FgoOwnedTag marks (as its Note) a nogc pointer parameter the callee
 // takes ownership of. Other nogc pointer parameters are borrowed.
 const FgoOwnedTag = "fgo:own"
@@ -30,7 +32,7 @@ func (t *Type) FgoIsRCPtr() bool {
 // owns: nogc pointers, slices of them, strings and scalar slices.
 func FgoHasRCFields(t *Type) bool {
 	for _, f := range t.Fields() {
-		if f.Type.FgoIsRCPtr() || FgoPtrSliceType(f.Type) || FgoBufType(f.Type) {
+		if f.Type.FgoIsRCPtr() || FgoPtrSliceType(f.Type) || FgoBufType(f.Type) || f.Type.FgoPinned() {
 			return true
 		}
 	}
@@ -49,6 +51,9 @@ var FgoMutableFields = map[*Field]bool{}
 // changes counted objects; a pointer read from an object that has been
 // handed off is on the stack, where the GC sees it.)
 func FgoFieldImmutable(t *Type, f *Field) bool {
+	if FgoTagged(f) {
+		return false // any code may store into it
+	}
 	if FgoRecursiveField(t, f) {
 		return true
 	}
@@ -144,4 +149,61 @@ func FgoMixed(t *Type) bool {
 		}
 	}
 	return false
+}
+
+// FgoTagged reports whether struct field f is tagged `fgo:"nogc"`: it
+// holds a counted reference wherever its struct lives, including in a
+// garbage collected object (see runtime/forgo_rc_tag.go).
+func FgoTagged(f *Field) bool {
+	return f.Note != "" && reflect.StructTag(f.Note).Get("fgo") == "nogc"
+}
+
+// FgoPinned reports whether a value of t holds a field tagged
+// `fgo:"nogc"`, directly or in a field or array element: such values are
+// never copied (the copy would hold an uncounted reference), and live on
+// the heap, where the GC releases their references when it frees them.
+func (t *Type) FgoPinned() bool {
+	return fgoPinned(t, map[*Type]bool{})
+}
+
+func fgoPinned(t *Type, seen map[*Type]bool) bool {
+	if t == nil || seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch {
+	case t.IsStruct():
+		for _, f := range t.Fields() {
+			if FgoTagged(f) || fgoPinned(f.Type, seen) {
+				return true
+			}
+		}
+	case t.IsArray():
+		return fgoPinned(t.Elem(), seen)
+	}
+	return false
+}
+
+// FgoTaggedAt returns the field tagged `fgo:"nogc"` at offset off of a
+// value of struct type t, nested in its struct and array fields, or nil.
+// A counted object counts the references these hold, as it does its own
+// nogc pointer fields (runtime.fgoTagFill).
+func FgoTaggedAt(t *Type, off int64) *Field {
+	switch {
+	case t.IsStruct():
+		for _, f := range t.Fields() {
+			if off < f.Offset || off >= f.Offset+f.Type.Size() {
+				continue
+			}
+			if FgoTagged(f) && off == f.Offset {
+				return f
+			}
+			return FgoTaggedAt(f.Type, off-f.Offset)
+		}
+	case t.IsArray():
+		if es := t.Elem().Size(); es > 0 {
+			return FgoTaggedAt(t.Elem(), off%es)
+		}
+	}
+	return nil
 }

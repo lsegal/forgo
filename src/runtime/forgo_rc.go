@@ -68,6 +68,7 @@ const (
 	fgoHanded  = 2 // object handed off to the GC
 	fgoBufData = 4 // (in fgoArena.state) a buffer handed off to the GC: bytes
 	fgoBufPtrs = 5 // a buffer handed off to the GC: nogc pointers
+	fgoShared  = 6 // counted object other goroutines may reach (see forgo_rc_tag.go)
 )
 
 // A pointer that nogc code holds into the arena points to the start of an
@@ -114,8 +115,11 @@ func fgoQuick(p unsafe.Pointer) uint8 {
 //go:nosplit
 func fgoStateSlow(p uintptr) uint8 {
 	d := p - fgoArena.lo
-	if atomic.Load8((*uint8)(unsafe.Pointer(fgoArena.state+d/fgoRCAlign))) == fgoHanded {
+	switch atomic.Load8((*uint8)(unsafe.Pointer(fgoArena.state + d/fgoRCAlign))) {
+	case fgoHanded:
 		return fgoHanded
+	case fgoShared:
+		return fgoShared
 	}
 	if fgoHandedObj(p) != 0 {
 		return fgoNone // into the middle of one
@@ -194,10 +198,18 @@ func fgoRCDescOf(mp *m, typ *_type) *fgoRCDesc {
 	}
 	if d == nil {
 		fields := (*structtype)(unsafe.Pointer(typ)).Fields
-		d = (*fgoRCDesc)(persistentalloc(unsafe.Offsetof(fgoRCDesc{}.offs)+uintptr(len(fields))*goarch.PtrSize, goarch.PtrSize, &memstats.other_sys))
+		n := uintptr(len(fields))
+		for _, f := range fields {
+			n += fgoTagCount(f.Typ)
+		}
+		d = (*fgoRCDesc)(persistentalloc(unsafe.Offsetof(fgoRCDesc{}.offs)+n*goarch.PtrSize, goarch.PtrSize, &memstats.other_sys))
 		d.typ = typ
 		for _, f := range fields {
 			switch f.Typ.Kind() {
+			case abi.Struct, abi.Array:
+				// Tagged fields nested in it are counted too (see
+				// forgo_rc_tag.go); the rest holds GC values.
+				fgoTagFill(f.Typ, f.Offset, d)
 			case abi.Pointer:
 				if fgoIsRCPtrType(f.Typ) {
 					d.offs[d.n] = f.Offset
@@ -434,6 +446,8 @@ func fgoRCIncSlow(p unsafe.Pointer) {
 		if debug.fgoesc > 3 {
 			println("fgoesc: inc", p, "count", fgoHdrOf(p).rc&^fgoHeld)
 		}
+	case fgoShared:
+		atomic.Xadduintptr(&fgoHdrOf(p).rc, 1)
 	}
 }
 
@@ -464,6 +478,8 @@ func fgoRCDecSlow(p unsafe.Pointer) {
 		if debug.fgoesc > 3 {
 			println("fgoesc: dec", p, "count", fgoHdrOf(p).rc&^fgoHeld)
 		}
+	case fgoShared:
+		fgoSharedDec(p)
 	}
 }
 
@@ -531,7 +547,7 @@ func fgoIncObj(c unsafe.Pointer) {
 	if c == nil {
 		return
 	}
-	if h := fgoHdrOf(c); h.rc&fgoHeld == 0 {
+	if h := fgoHdrOf(c); h.rc&(fgoHeld|fgoSharedBit) == 0 {
 		h.rc++
 	} else {
 		atomic.Xadduintptr(&h.rc, 1)
@@ -550,6 +566,13 @@ func fgoDecChild(c unsafe.Pointer, pending uintptr) uintptr {
 	if ch.rc&fgoHeld != 0 {
 		atomic.Xadduintptr(&ch.rc, ^uintptr(0))
 		return pending
+	}
+	if ch.rc&fgoSharedBit != 0 {
+		if atomic.Xadduintptr(&ch.rc, ^uintptr(0)) != fgoSharedBit {
+			return pending
+		}
+		ch.rc = pending // the last reference: no other goroutine has it
+		return uintptr(c)
 	}
 	if ch.rc--; ch.rc == 0 {
 		ch.rc = pending
@@ -581,6 +604,9 @@ func fgoRCRelease(p unsafe.Pointer, free bool) {
 			}
 		}
 		if free {
+			if fgoQuick(p) == fgoMaybe && fgoKindOf(uintptr(p)) == fgoShared {
+				fgoMarkHanded(p, fgoNone)
+			}
 			if d != nil && d.typ == h.typ && d.mixed {
 				fgoRCFreeMixed(mp, p)
 			} else {
@@ -928,7 +954,7 @@ func fgoEscInsert(p uintptr, cyc uint32) {
 // fgoRCHandoff hands p's object, if it is a counted one, and every
 // counted object it reaches to the garbage collector.
 func fgoRCHandoff(p unsafe.Pointer) {
-	if fgoState(p) != fgoCounted {
+	if s := fgoState(p); s != fgoCounted && s != fgoShared {
 		return
 	}
 	if !fgoEsc.started {
@@ -937,7 +963,7 @@ func fgoRCHandoff(p unsafe.Pointer) {
 	fgoHandOne(p)
 	work := []unsafe.Pointer{p}
 	hand := func(c unsafe.Pointer) {
-		if fgoState(c) == fgoCounted {
+		if s := fgoState(c); s == fgoCounted || s == fgoShared {
 			fgoHandOne(c)
 			work = append(work, c)
 		}
@@ -1022,8 +1048,20 @@ func fgoHandOne(p unsafe.Pointer) {
 			throw("fgoesc: stopping at the first handoff")
 		}
 	}
-	atomic.Storeuintptr(&h.rc, h.rc|fgoHeld)
-	fgoMarkHanded(p, fgoHanded)
+	if h.rc&fgoSharedBit != 0 {
+		// Other goroutines may be counting it: swap the flag atomically,
+		// and keep the chunk's count, which shared already added to.
+		for {
+			old := atomic.Loaduintptr(&h.rc)
+			if atomic.Casuintptr(&h.rc, old, old&^fgoSharedBit|fgoHeld) {
+				break
+			}
+		}
+		atomic.Store8((*uint8)(unsafe.Pointer(fgoArena.state+(uintptr(p)-fgoArena.lo)/fgoRCAlign)), fgoHanded)
+	} else {
+		atomic.Storeuintptr(&h.rc, h.rc|fgoHeld)
+		fgoMarkHanded(p, fgoHanded)
+	}
 	fgoEscInsert(uintptr(p), work.cycles.Load())
 	fgoEsc.added++
 	// The GC paces itself by its own heap, which does not count nogc
@@ -1073,11 +1111,20 @@ func fgoGCPtr(p unsafe.Pointer) bool {
 // the field held. A counted object takes v as a reference, unless v is
 // a pointer it cannot count; anything else stores v as a GC value.
 func fgoRCStore(base unsafe.Pointer, slot *unsafe.Pointer, v unsafe.Pointer) {
-	if fgoState(base) == fgoCounted {
+	switch fgoState(base) {
+	case fgoCounted:
 		if !fgoGCPtr(v) {
 			old := *slot
 			*(*uintptr)(unsafe.Pointer(slot)) = uintptr(v)
 			fgoRCDec(old)
+			return
+		}
+		fgoRCHandoff(base)
+	case fgoShared:
+		if !fgoGCPtr(v) {
+			fgoShare(v) // what a shared object holds is shared too
+			old := atomic.Xchguintptr((*uintptr)(unsafe.Pointer(slot)), uintptr(v))
+			fgoRCDec(unsafe.Pointer(old))
 			return
 		}
 		fgoRCHandoff(base)
@@ -1149,7 +1196,7 @@ func fgoHandedObj(p uintptr) uintptr {
 	first := d / fgoRCChunk * (fgoRCChunk / fgoRCAlign) // objects do not cross chunks
 	for i := g; i+1 > first; i-- {
 		k := atomic.Load8((*uint8)(unsafe.Pointer(fgoArena.state + i)))
-		if k == fgoNone || k == fgoCounted {
+		if k == fgoNone || k == fgoCounted || k == fgoShared {
 			continue
 		}
 		obj := fgoArena.lo + i*fgoRCAlign
@@ -1815,6 +1862,7 @@ func fgoRCStats() (live, reuses int64) {
 
 //go:linkname fgo_nogc_Live fgo/nogc.Live
 func fgo_nogc_Live() int {
+	fgoTagDrain()
 	live, _ := fgoRCStats()
 	return int(live)
 }
@@ -1830,7 +1878,7 @@ func fgo_nogc_count(p unsafe.Pointer) int {
 	if fgoState(p) == fgoNone {
 		return 0
 	}
-	return int(atomic.Loaduintptr(&fgoHdrOf(p).rc) &^ fgoHeld)
+	return int(atomic.Loaduintptr(&fgoHdrOf(p).rc) &^ (fgoHeld | fgoSharedBit))
 }
 
 //go:linkname fgo_nogc_handedOff fgo/nogc.handedOff

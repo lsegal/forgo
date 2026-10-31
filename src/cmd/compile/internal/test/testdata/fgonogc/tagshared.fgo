@@ -1,0 +1,108 @@
+// A persistent tree in a tagged field of a GC object, replaced by many
+// goroutines; GC code reading the field hands the tree off.
+package main
+
+import (
+	"fmt"
+	"math/rand/v2"
+	"runtime"
+	"sync"
+
+	"fgo/nogc"
+)
+
+type Tree struct {
+	Key         int
+	Left, Right *Tree
+}
+
+func insert(t *Tree, k int) *Tree {
+	if t == nil {
+		return &Tree{Key: k}
+	}
+	if k < t.Key {
+		return &Tree{Key: t.Key, Left: insert(t.Left, k), Right: t.Right}
+	}
+	return &Tree{Key: t.Key, Left: t.Left, Right: insert(t.Right, k)}
+}
+
+func sum(t *Tree) int {
+	if t == nil {
+		return 0
+	}
+	return t.Key + sum(t.Left) + sum(t.Right)
+}
+
+// Map holds a persistent tree; versions are swapped in under a lock.
+type Map struct {
+	mu   sync.Mutex
+	root *Tree `fgo:"nogc"`
+}
+
+//fgo:nogc
+func (m *Map) Add(k int) {
+	m.mu.Lock()
+	m.root = insert(m.root, k)
+	m.mu.Unlock()
+}
+
+//fgo:nogc
+func (m *Map) Sum() int {
+	m.mu.Lock()
+	r := m.root
+	m.mu.Unlock()
+	return sum(r) // a version other goroutines may replace meanwhile
+}
+
+func check(what string, got, want int) {
+	if got != want {
+		panic(fmt.Sprintf("%s: got %d want %d", what, got, want))
+	}
+	fmt.Println(what, got)
+}
+
+func main() {
+	base := nogc.Live()
+	m := &Map{}
+	var wg sync.WaitGroup
+	var total int64
+	var tmu sync.Mutex
+	for g := range 6 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := rand.New(rand.NewPCG(uint64(g), 1))
+			local := 0
+			for range 3000 {
+				k := r.IntN(1 << 20)
+				m.Add(k)
+				local += k
+				if r.IntN(10) == 0 {
+					m.Sum()
+				}
+				if r.IntN(500) == 0 {
+					runtime.GC()
+				}
+			}
+			tmu.Lock()
+			total += int64(local)
+			tmu.Unlock()
+		}()
+	}
+	wg.Wait()
+	check("sum", m.Sum(), int(total))
+	check("live = nodes", nogc.Live()-base, 18000)
+
+	// GC code reads the field: the tree is handed to the GC.
+	r := m.root
+	fmt.Println("handed after GC read:", nogc.HandedOff(r))
+	r = nil
+	// GC code stores a GC tree into it.
+	m.root = &Tree{Key: 1}
+	check("gc tree sum", m.Sum(), 1)
+	m = nil
+	runtime.GC()
+	runtime.GC()
+	runtime.GC()
+	check("live after GC", nogc.Live()-base, 0)
+}

@@ -61,6 +61,7 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 	decls := map[*types2.Func]decl{}
 	var order []*types2.Func
 	var roots []*types2.Func
+	strict := map[*types2.Func]bool{}
 	for _, file := range files {
 		for _, d := range file.DeclList {
 			fd, ok := d.(*syntax.FuncDecl)
@@ -85,6 +86,11 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 				continue
 			}
 			roots = append(roots, obj)
+			// A nogc type's methods are strict: they must not hand
+			// what they hold to the GC.
+			if forgoIsStrict(fd.Pragma) || fd.Recv != nil && nogcTypes[forgoRecvTypeName(fd.Recv.Type)] {
+				strict[obj] = true
+			}
 		}
 	}
 	base.ExitIfErrors()
@@ -131,6 +137,7 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 		isRoot[r] = true
 	}
 	visited := map[*types2.Func]bool{}
+	callees := map[*types2.Func][]*types2.Func{}
 	for len(work) > 0 {
 		fn := work[len(work)-1]
 		work = work[:len(work)-1]
@@ -164,6 +171,7 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 				continue
 			}
 			inSet[c] = true
+			callees[fn] = append(callees[fn], c)
 			switch fun := syntax.Unparen(call.Fun).(type) {
 			case *syntax.Name:
 				renames[fun] = forgoNogcPrefix + fun.Value
@@ -171,6 +179,22 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 				renames[fun.Sel] = forgoNogcPrefix + fun.Sel.Value
 			}
 			work = append(work, c)
+		}
+	}
+
+	// Everything a strict root can reach is strict: the hand-offs it
+	// would make are errors, whoever calls it.
+	for work = append(work[:0], roots...); len(work) > 0; {
+		fn := work[len(work)-1]
+		work = work[:len(work)-1]
+		if !strict[fn] {
+			continue
+		}
+		for _, c := range callees[fn] {
+			if !strict[c] {
+				strict[c] = true
+				work = append(work, c)
+			}
 		}
 	}
 
@@ -183,12 +207,12 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 		d := decls[fn]
 		c := forgoCopyNode(d.fd, renames).(*syntax.FuncDecl)
 		c.Name.Value = forgoNogcPrefix + d.fd.Name.Value
-		c.Pragma = forgoWithFlag(d.fd.Pragma, ir.FgoNogc)
+		c.Pragma = forgoWithFlag(d.fd.Pragma, ir.FgoNogc|forgoStrictFlag(strict[fn]))
 		d.file.DeclList = append(d.file.DeclList, c)
 	}
 	for _, r := range roots {
 		d := decls[r]
-		d.fd.Pragma = forgoWithFlag(d.fd.Pragma, ir.FgoNogc|ir.Noinline)
+		d.fd.Pragma = forgoWithFlag(d.fd.Pragma, ir.FgoNogc|ir.Noinline|forgoStrictFlag(strict[r]))
 		syntax.Inspect(d.fd.Body, func(n syntax.Node) bool {
 			if n, ok := n.(*syntax.Name); ok {
 				if v, ok := renames[n]; ok {
@@ -204,6 +228,18 @@ func forgoNogc(m posMap, info *types2.Info, files []*syntax.File) bool {
 func forgoIsNogc(p syntax.Pragma) bool {
 	pr, _ := p.(*pragmas)
 	return pr != nil && pr.IsNogc
+}
+
+func forgoIsStrict(p syntax.Pragma) bool {
+	pr, _ := p.(*pragmas)
+	return pr != nil && pr.IsStrict
+}
+
+func forgoStrictFlag(strict bool) ir.PragmaFlag {
+	if strict {
+		return ir.FgoNogcStrict
+	}
+	return 0
 }
 
 func forgoIsComptime(p syntax.Pragma) bool {

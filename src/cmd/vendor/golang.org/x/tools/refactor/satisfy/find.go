@@ -600,6 +600,10 @@ func (f *Finder) stmt(s ast.Stmt) {
 		f.expr(s.Cond)
 		f.stmt(s.Stmt)
 
+	case *ast.WithStmt: // forgo
+		f.expr(s.Value)
+		f.stmt(s.Body)
+
 	case *ast.SelectStmt:
 		f.stmt(s.Body)
 

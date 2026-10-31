@@ -354,6 +354,11 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 	case *ast.ThrowStmt: // forgo
 		a.apply(n, "X", nil, n.X)
 
+	case *ast.WithStmt: // forgo
+		a.apply(n, "Name", nil, n.Name)
+		a.apply(n, "Value", nil, n.Value)
+		a.apply(n, "Body", nil, n.Body)
+
 	case *ast.PostfixIfStmt: // forgo
 		a.apply(n, "Stmt", nil, n.Stmt)
 		a.apply(n, "Cond", nil, n.Cond)

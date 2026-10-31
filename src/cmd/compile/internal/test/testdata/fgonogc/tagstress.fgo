@@ -1,0 +1,120 @@
+// Containers with tagged fields shared by goroutines and dropped for the
+// GC, while the GC runs continuously.
+package main
+
+import (
+	"fmt"
+	"math/rand/v2"
+	"runtime"
+	"sync"
+	"sync/atomic"
+
+	"fgo/nogc"
+)
+
+type node struct {
+	key         int
+	name        string
+	left, right *node
+}
+
+func insert(t *node, k int) *node {
+	if t == nil {
+		return &node{key: k, name: fmt.Sprint("k", k)}
+	}
+	if k < t.key {
+		return &node{key: t.key, name: t.name, left: insert(t.left, k), right: t.right}
+	}
+	return &node{key: t.key, name: t.name, left: t.left, right: insert(t.right, k)}
+}
+
+func sum(t *node) int {
+	if t == nil {
+		return 0
+	}
+	return t.key + len(t.name) + sum(t.left) + sum(t.right)
+}
+
+//fgo:nogc
+type Set struct {
+	mu   sync.Mutex
+	root *node `fgo:"nogc"`
+	keys int
+}
+
+func (s *Set) Add(k int) {
+	s.mu.Lock()
+	s.root = insert(s.root, k)
+	s.keys++
+	s.mu.Unlock()
+}
+
+func (s *Set) Snapshot(dst *node2) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dst.r = s.root
+}
+
+// node2 holds a version of a Set's tree, counted, for reading later.
+type node2 struct {
+	r *node `fgo:"nogc"`
+}
+
+//fgo:nogc
+func (n *node2) Sum() int { return sum(n.r) }
+
+func main() {
+	base := nogc.Live()
+	shared := &Set{}
+	var wg sync.WaitGroup
+	var want atomic.Int64
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				runtime.GC()
+			}
+		}
+	}()
+	for g := range 8 {
+		wg.Go(func() {
+			r := rand.New(rand.NewPCG(uint64(g), 9))
+			for round := range 300 {
+				// Short-lived sets, dropped for the GC to release.
+				local := &Set{}
+				for range 20 {
+					local.Add(r.IntN(1000))
+				}
+				// Readers of a shared version while writers replace it.
+				k := r.IntN(1 << 16)
+				shared.Add(k)
+				want.Add(int64(k + len(fmt.Sprint("k", k))))
+				if round%7 == 0 {
+					snap := &node2{}
+					shared.Snapshot(snap)
+					_ = snap.Sum()
+				}
+			}
+		})
+	}
+	wg.Wait()
+	close(stop)
+	final := &node2{}
+	shared.Snapshot(final)
+	got := final.Sum()
+	fmt.Println("sum ok:", got == int(want.Load()))
+	if got != int(want.Load()) {
+		panic("sum mismatch")
+	}
+	shared, final = nil, nil
+	for range 4 {
+		runtime.GC()
+	}
+	fmt.Println("live after:", nogc.Live()-base)
+	if nogc.Live()-base != 0 {
+		panic("leak")
+	}
+}

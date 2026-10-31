@@ -2686,6 +2686,9 @@ func (p *parser) stmtOrNilBase() Stmt {
 		if p.lit == "throw" {
 			return p.throwStmtOrSimpleStmt()
 		}
+		if p.lit == "with" {
+			return p.withStmtOrSimpleStmt()
+		}
 		p.clearPragma()
 		lhs := p.exprList()
 		if label, ok := lhs.(*Name); ok && p.tok == _Colon {
@@ -2804,9 +2807,39 @@ func (p *parser) throwStmtOrSimpleStmt() Stmt {
 	}
 
 	// Not a throw statement: "throw" was just an ordinary identifier.
-	// Reconstruct the statement starting from it, the same way stmtOrNil
-	// would have for any other identifier-led statement.
-	name := NewName(pos, "throw")
+	return p.identStmt(pos, "throw")
+}
+
+// withStmtOrSimpleStmt is called when a statement begins with the
+// identifier "with", which, like "throw", is a contextual keyword: "with"
+// followed directly by a name is never valid Go.
+//
+//	WithStmt = "with" identifier ":=" Expression Block .
+func (p *parser) withStmtOrSimpleStmt() Stmt {
+	p.clearPragma()
+	pos := p.pos()
+	p.next() // consume "with"
+
+	if p.tok == _Name {
+		s := new(WithStmt)
+		s.pos = pos
+		s.Name = p.name()
+		p.want(_Define)
+		outer := p.xnest
+		p.xnest = -1 // as in an if header: { starts the body
+		s.Value = p.expr()
+		p.xnest = outer
+		s.Body = p.blockStmt("with clause")
+		return s
+	}
+	return p.identStmt(pos, "with")
+}
+
+// identStmt parses the rest of a statement that begins with the plain
+// identifier lit at pos, already consumed, the same way stmtOrNil would
+// have for any other identifier-led statement.
+func (p *parser) identStmt(pos Pos, lit string) Stmt {
+	name := NewName(pos, lit)
 	x := p.binaryExpr(p.pexpr(name, true), 0)
 	if p.got(_Comma) {
 		list := []Expr{x, p.expr()}

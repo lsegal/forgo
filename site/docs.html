@@ -48,6 +48,7 @@ a:hover { color: var(--color-accent-600); }
       <a href="#files" style="font-size:15px;line-height:28px;text-decoration:none">.fgo files</a>
       <a href="#try" style="font-size:15px;line-height:28px;text-decoration:none">? — error propagation</a>
       <a href="#throw" style="font-size:15px;line-height:28px;text-decoration:none">throw</a>
+      <a href="#with" style="font-size:15px;line-height:28px;text-decoration:none">with</a>
       <a href="#postfix" style="font-size:15px;line-height:28px;text-decoration:none">Postfix if</a>
       <a href="#structargs" style="font-size:15px;line-height:28px;text-decoration:none">Struct literal arguments</a>
       <a href="#comptime" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:comptime</a>
@@ -128,6 +129,31 @@ func makeThing2(s string) (*Thing, error) {
       <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> is a <strong>contextual</strong> keyword, not a reserved word — plain Go code that uses <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> as an ordinary identifier or function name (like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">runtime.throw</code> in the standard library) is completely unaffected. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> is only read as the statement when immediately followed by a new operand; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw(x)</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw.field</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw = x</code>, and a bare <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> all still parse as the identifier <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>.</li>
     </ul>
     <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/chain.fgo</code> for a version using both <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">throw</code> forms.</p>
+  </section>
+
+  <section id="with" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">with</code> — close a resource however a block is left</h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with NAME := VALUE { ... }</code> runs the block, then calls <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">NAME.Close()</code>, however the block is left: by falling off its end, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">break</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">continue</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">goto</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code>, or a panic. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">NAME</code> is scoped to the statement. It’s <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">defer NAME.Close()</code> scoped to a block instead of the function, so a loop closes each iteration’s resource before the next.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func copyUpper(dst, src string) (err error) {
+	<span style="color:var(--color-accent-2-700);font-weight:600">with</span> in := os.Open(src)? {
+		<span style="color:var(--color-accent-2-700);font-weight:600">with</span> out := os.Create(dst)? {
+			w := bufio.NewWriter(out)
+			sc := bufio.NewScanner(in)
+			for sc.Scan() {
+				fmt.Fprintln(w, strings.ToUpper(sc.Text()))
+			}
+			sc.Err()?
+			w.Flush()?
+		} <span style="color:var(--color-neutral-600)">// out closed here...</span>
+	} <span style="color:var(--color-neutral-600)">// ...then in</span>
+	return nil
+}</pre>
+    <ul style="font-size:16px;line-height:28px;max-width:64ch;margin:24px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">In a function whose last result is a <strong>named</strong> <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">error</code> (as <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> requires), a failed <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code> isn’t lost. Leaving the block normally (or by <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">break</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">continue</code> or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">goto</code>) returns the <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code> error like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> would. Leaving it by <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">return</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code> or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">?</code> evaluates the results first, then closes; a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code> error becomes the function’s error only if that is still <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">nil</code>, so the first error wins. Elsewhere <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Close</code>’s results are dropped.</li>
+      <li style="margin-bottom:14px">Nested <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> statements close innermost first.</li>
+      <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> is a <strong>contextual</strong> keyword like <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">throw</code>: it’s only the statement when followed directly by a name, which is never valid Go, so code using <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">with</code> as an identifier is unaffected.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/with</code>.</p>
   </section>
 
   <section id="postfix" style="padding:0 0 70px">
@@ -399,6 +425,13 @@ func index(words []string) map[string]*Entry {
 	}
 	return m
 }</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)"><strong>Strict mode.</strong> <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:nogc strict</code> turns every one of those hand-offs into a compile error, for code that must never fall back on the garbage collector. Methods of a <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">//fgo:nogc</code> type are always strict. The functions a strict root calls are checked too, and so is a store into an object nogc code didn’t allocate (a receiver or parameter from garbage collected code), since nogc code can’t count references from it, unless the field is tagged <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fgo:"nogc"</code>. Each error names the object and where it would go:</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">$ forgo run -tags leak ./examples/nogcstrict
+./leak.fgo:29:9: nogc: strict: n escapes to the garbage collector: stored in global latest
+./leak.fgo:35:14: nogc: strict: n escapes to the garbage collector: converted to an interface
+./leak.fgo:51:5: nogc: strict: n escapes to the garbage collector: captured by a goroutine
+./leak.fgo:63:10: nogc: strict: b escapes to the garbage collector: assigned to field Right, through which the object can reach itself (reference cycles are the GC's)</pre>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/nogcstrict</code> (strict code that compiles; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-tags leak</code> adds one escape of each kind).</p>
     <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">To change a structure without handing it off, rebuild it:</p>
     <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">func insert(t *Node, v int) *Node {
 	if t == nil {
@@ -410,6 +443,27 @@ func index(words []string) map[string]*Entry {
 	return &amp;Node{Val: t.Val, Left: t.Left, Right: insert(t.Right, v)}
 }</pre>
     <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">When <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">t</code> isn’t shared, this updates in place: each node on the path dies as it’s rebuilt, and its memory goes straight to its replacement (Koka’s “functional but in-place”).</p>
+
+<h3 id="nogc-tags" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">Tagged fields</h3>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">A field of pointer-to-struct type tagged <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fgo:"nogc"</code> holds a counted reference wherever its struct lives, including in a garbage collected object, so a type that garbage collected code allocates can still own counted objects.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre"><span style="color:var(--color-neutral-600)">//fgo:nogc</span>
+type Stack struct {
+	mu  sync.Mutex
+	top *item `fgo:"nogc"`
+}
+
+func (s *Stack) Pop() (v int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it := s.top
+	if it == nil {
+		return 0, false
+	}
+	s.top = it.next <span style="color:var(--color-neutral-600)">// it is freed when Pop returns</span>
+	return it.val, true
+}</pre>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">What a tagged field holds, and everything it reaches, is <em>shared</em>: still freed at its last reference, but counted atomically, since goroutines may share the object holding it. When the GC frees that object, it releases the field’s reference. Any code may store into the field; code that isn’t nogc reading it hands what it reads to the GC (comparing it is free). A struct holding a tagged field is <em>pinned</em>: copying one would copy the reference uncounted, so every copy is a compile error (assignment, passing or returning by value, interfaces, maps, channels, type arguments, ranging by value, value receivers, and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">append</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">copy</code> or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">clear</code> on a slice of it). Use it through a pointer. <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">go vet</code> and forgopls report copies too.</p>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/nogcstruct</code> (shared by goroutines, released by the GC; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-tags copy</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">-tags untagged</code> show the compile errors).</p>
 
 <h3 id="nogc-compiler" style="font-family:var(--font-heading);font-weight:600;font-size:22px;line-height:30px;margin:42px 0 0">What the compiler does</h3>
     <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:16px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">

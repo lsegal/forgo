@@ -34,9 +34,9 @@ func (n *Ident) Sym() *types.Sym { return n.sym }
 // Name holds Node fields used only by named nodes (ONAME, OTYPE, some OLITERAL).
 type Name struct {
 	miniExpr
-	BuiltinOp Op         // uint8
-	Class     Class      // uint8
-	pragma    PragmaFlag // int16
+	BuiltinOp Op     // uint8
+	Class     Class  // uint8
+	pragma    uint16 // PragmaFlag; type pragmas fit in 16 bits
 	flags     bitset16
 	DictIndex uint16 // index of the dictionary entry describing the type of this variable declaration plus 1
 	sym       *types.Sym
@@ -172,10 +172,15 @@ func (*Name) CanBeAnSSAAux() {}
 func (n *Name) DiagName() string { return obj.TrimInlineHash(fmt.Sprint(n.Sym())) }
 
 // Pragma returns the PragmaFlag for p, which must be for an OTYPE.
-func (n *Name) Pragma() PragmaFlag { return n.pragma }
+func (n *Name) Pragma() PragmaFlag { return PragmaFlag(n.pragma) }
 
 // SetPragma sets the PragmaFlag for p, which must be for an OTYPE.
-func (n *Name) SetPragma(flag PragmaFlag) { n.pragma = flag }
+func (n *Name) SetPragma(flag PragmaFlag) {
+	if flag>>16 != 0 {
+		base.Fatalf("type pragma %#x does not fit", flag)
+	}
+	n.pragma = uint16(flag)
+}
 
 // Alias reports whether p, which must be for an OTYPE, is a type alias.
 func (n *Name) Alias() bool { return n.flags&nameAlias != 0 }

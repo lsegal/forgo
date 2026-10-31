@@ -4,15 +4,15 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the Go 1.27 release branch — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands six extra
+binary (built under `bin/`, `pkg/tool/`) that understands eight extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `throw`, postfix `if`, `//fgo:comptime`, `//fgo:macro`, or
-`//fgo:nogc`. If unsure, check for a forgo `GOROOT` (a directory with
+uses `?`, `throw`, postfix `if`, `with`, `//fgo:comptime`, `//fgo:macro`,
+or `//fgo:nogc`. If unsure, check for a forgo `GOROOT` (a directory with
 `src/cmd/compile/internal/forgo`).
 
 ## Rule 1: propagate errors with `?`, not manual `if err != nil` chains
@@ -222,6 +222,38 @@ parameter of type `*T`, both `{...}` and `&{...}` mean `&T{...}` (prefer
   being inferred (instantiate it explicitly, `f[T]({...})`, or name the
   type), builtins (`append`), or conversions.
 
+## Rule 1e: scope a resource's Close to a block with `with`
+
+When a value must be closed once a block is done with it (a file, a
+connection, a lock-like handle), write `with NAME := VALUE { ... }`
+instead of `x := ...; defer x.Close()` whenever the resource's life is
+shorter than the function — above all inside loops, where `defer` would
+keep every iteration's resource open until the function returns:
+
+```go
+func countLines(paths []string) (n int, err error) {
+	for _, p := range paths {
+		with f := os.Open(p)? {
+			sc := bufio.NewScanner(f)
+			for sc.Scan() {
+				n++
+			}
+			sc.Err()?
+		} // f closed here, every iteration
+	}
+	return n, nil
+}
+```
+
+- `NAME.Close()` runs however the block is left: falling off its end,
+  `break`/`continue`/`goto`, `return`/`throw`/`?`, or a panic.
+- In a function whose last result is a named `error`, a `Close` error is
+  returned (on normal exit) or kept as the error if none is set yet (on
+  return). Prefer that signature for functions that write through the
+  resource, where a failed `Close` means lost data.
+- Keep `defer x.Close()` when the resource lives for the whole function
+  anyway; `with` is for narrower scopes.
+
 ## Rule 2: use `//fgo:comptime` for values that can be computed once, at compile time
 
 If you're computing a `const` from a pure function of literal/constant
@@ -346,6 +378,22 @@ func checksum(d int) int {
   rebuild the path (`&Node{Val: t.Val, Left: insert(t.Left, v), Right:
   t.Right}`), which reuses the dying nodes' memory for the new ones when
   the old tree isn't shared.
+- **`//fgo:nogc strict`** makes each of those hand-offs a compile error
+  (in the root and everything it calls), naming the object and where it
+  goes. Use it where the code must never fall back on the GC, and to find
+  out why something is handed off. Stores into an object nogc code didn't
+  allocate (a receiver from GC code, say) are errors under strict too. See
+  [examples/nogcstrict](examples/nogcstrict/main.fgo).
+- **`//fgo:nogc` on a type** makes its methods strict roots. When such a
+  type is allocated by GC code and keeps nogc objects, tag the fields
+  holding them `fgo:"nogc"` (pointer-to-struct fields only): they hold
+  counted references even in a GC object, shared between goroutines
+  (counted atomically) and released when the GC frees the object. A
+  struct holding a tagged field must never be copied (compile error):
+  always use `*T`, never pass, return, assign or range over `T` by value.
+  GC code reading the field hands the object off, so keep reads inside
+  the type's methods. See
+  [examples/nogcstruct](examples/nogcstruct/main.fgo).
 - **Don't reach for this by default.** It's a targeted optimization, not a
   style preference: plain GC-backed code remains the default for anything
   that isn't on a hot, allocation-heavy path.
@@ -367,7 +415,10 @@ func checksum(d int) int {
 | Pass a struct literal to a `T` or `*T` parameter                    | `f({...})` / `f(&{...})`   |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//fgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//fgo:macro`              |
+| Close a resource when a block (often a loop body) is done with it | `with x := open()? { ... }` |
 | A hot, allocation-heavy tree/DAG that's causing measurable GC pressure | `//fgo:nogc` on the function building it |
+| nogc code that must never hand objects to the GC                    | `//fgo:nogc strict`        |
+| A GC-allocated container whose nogc methods keep counted objects    | `//fgo:nogc` type + `` `fgo:"nogc"` `` fields |
 | Anything a plain function or Go generic already does well          | plain Go — don't reach for a forgo feature just because it exists |
 
 ## Building and running
@@ -420,6 +471,12 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/forgo/` — the comptime/macro interpreter.
 - `src/cmd/compile/internal/noder/forgo_try.go` — lowers `?` to plain
   `:=`/`if`/`return` statements.
+- `src/cmd/compile/internal/noder/forgo_with.go` — lowers `with` to a
+  block with a flag-guarded `defer` (return and panic paths) and an
+  explicit close at the end and before each `break`/`continue`/`goto`
+  leaving it; runs first, before postfix `if`, `throw` and `?`, whose own
+  passes then lower the code it generates. Its terminating-statement check
+  must agree with `go/types/return.go`'s `*ast.WithStmt` case.
 - `src/cmd/compile/internal/noder/forgo_postfixif.go` — lowers postfix
   `if` (`STMT if COND`) to a plain `if COND { STMT }`; runs before
   `forgo_throw.go`/`forgo_try.go`.
@@ -455,7 +512,7 @@ Users install a release via `install/install.sh` (Linux/macOS) or
 - `src/cmd/compile/internal/syntax/{tokens,scanner,parser,nodes}.go` — the
   `?` token/operator and `//fgo:` pragma parsing.
 - `src/cmd/vendor/golang.org/x/tools` — `go vet`/`go fix` walk the
-  `go/ast` nodes for `?`, `throw`, and postfix `if` through patched
+  `go/ast` nodes for `?`, `throw`, `with`, and postfix `if` through patched
   copies of `go/ast/{inspector,edge,astutil}`, `go/cfg`,
   `refactor/satisfy`, and the `unreachable` and `httpresponse` passes,
   marked `// forgo`. `go/analysis/unitchecker` expands `//fgo:macro`
@@ -475,14 +532,35 @@ Reference counted (`//fgo:nogc`) code lives in:
   the SIMD midway one). Copies and roots get `ir.FgoNogc`; closures
   inherit it in `reader.funcLit`; roots are `Noinline`. `ir.Func.FgoNogc`
   is "this is nogc code", `FgoNogcABI` "this is a copy, called only by nogc
-  code" (owned results, maybe owned parameters).
+  code" (owned results, maybe owned parameters). `//fgo:nogc strict` roots,
+  and everything they reach, also get `ir.FgoNogcStrict` (`PragmaFlag` is
+  a `uint32`; `ir.Name` stores type pragmas in 16 bits).
 - `src/fgo/nogc/` — `Count`, `HandedOff`, `Live`, `Reuses` diagnostics.
 - `src/cmd/compile/internal/fgorc/` — checks nogc code for the remaining
   error (writing elements of a pointer-slice field) and records which
   fields nogc code reassigns.
 - `src/cmd/compile/internal/ssa/forgo_rc.go` — the SSA pass (before call
   expansion) that inserts increments, releases and reuse; runs only in
-  nogc code (`fgoRCNeeded`).
+  nogc code (`fgoRCNeeded`). In strict code, `escapeAt` (every hand-off
+  the pass inserts) and `lowerStores` (stores whose hand-off is decided at
+  run time) report errors through `refuseAt`, for objects `fromNogc` says
+  nogc code allocated or was given. `cmd/compile/internal/test`'s
+  `TestForgoNogcStrict` covers the messages, and `TestForgoNogcRun` runs
+  the programs in `testdata/fgonogc` (counts, leaks, tags, stress).
+- Fields tagged `fgo:"nogc"`: `runtime/forgo_rc_tag.go` (shared state
+  `fgoShared`/`fgoSharedBit`, `fgoShare`, `fgoTagStore` for GC code,
+  `fgoRCStoreTag`/`fgoRCStoreTagGC` for nogc code, `fgoTagLoad`, and the
+  `_KindSpecialFgoTag` heap special whose `fgoTagDead` the sweeper calls,
+  queueing releases for `fgoTagDrain`); `fgoRCDescOf` also counts tagged
+  fields nested in struct and array fields (`fgoTagFill`).
+  `noder/forgo_pin.go` rejects copies of pinned structs and misplaced
+  tags; `escape/forgo_rc.go` keeps pinned values and slices on the heap;
+  `ssagen/forgo_rc.go` (`fgoTagStore`, `fgoTagRead`, `fgoCompared`) adds
+  the barriers in GC code; the SSA pass finds tagged fields by address
+  (`fgoTaggedAddr`, `types.FgoTaggedAt`) and routes their stores to
+  `fgoRCStoreTag`. `types.FgoTagged`/`FgoPinned` are the predicates. The
+  vendored copylocks pass (and forgopls, via `build-forgopls.sh`) reports
+  copies too.
 - `src/cmd/compile/internal/types/forgo_rc.go` — type predicates shared by
   the above (`FgoIsRCPtr`: any pointer to a non-compiler struct);
   `escape/forgo_rc.go` and `ssagen/forgo_rc.go` — keep nogc allocations

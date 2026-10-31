@@ -86,6 +86,13 @@ start:
 		b.add(&ast.ReturnStmt{Return: s.Throw, Results: []ast.Expr{s.X}})
 		b.current = b.newBlock(KindUnreachable, s)
 
+	case *ast.WithStmt: // forgo
+		// with NAME := VALUE { BODY } declares NAME, runs BODY, then
+		// closes NAME.
+		b.add(s.Value)
+		b.tryReturn(s.Value, s)
+		b.stmt(s.Body)
+
 	case *ast.PostfixIfStmt: // forgo
 		// STMT if COND is shorthand for if COND { STMT }.
 		then := b.newBlock(KindPostfixIfThen, s)

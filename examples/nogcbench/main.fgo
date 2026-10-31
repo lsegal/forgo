@@ -17,7 +17,6 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
-	"syscall"
 	"time"
 )
 
@@ -125,25 +124,3 @@ func measure(w string, scale int) {
 }
 
 func ms(ns uint64) float64 { return float64(ns) / 1e6 }
-
-// cpuTime is the user and system CPU time the process has used, in
-// nanoseconds, across all its threads (including the GC's).
-func cpuTime() int64 {
-	var u syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &u) != nil {
-		return 0
-	}
-	return u.Utime.Nano() + u.Stime.Nano()
-}
-
-// peakRSS is the process's peak resident set size in bytes.
-func peakRSS() int64 {
-	var u syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &u) != nil {
-		return 0
-	}
-	if runtime.GOOS == "darwin" {
-		return int64(u.Maxrss) // bytes
-	}
-	return int64(u.Maxrss) << 10 // kilobytes elsewhere
-}

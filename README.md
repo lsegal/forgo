@@ -291,6 +291,45 @@ func makeThing(s string) (*Thing, error) {
 See [examples/tryop/chain.fgo](examples/tryop/chain.fgo) for a runnable
 version using both `throw` forms.
 
+### `with` — close a resource however a block is left
+
+`with NAME := VALUE { ... }` runs the block, then calls `NAME.Close()`,
+however the block is left: by falling off its end, `break`, `continue`,
+`goto`, `return`, `throw`, `?`, or a panic. `NAME` is scoped to the
+statement. It's `defer NAME.Close()` scoped to a block instead of to the
+function, so a loop closes each iteration's resource before the next:
+
+```go
+func copyUpper(dst, src string) (err error) {
+	with in := os.Open(src)? {
+		with out := os.Create(dst)? {
+			w := bufio.NewWriter(out)
+			sc := bufio.NewScanner(in)
+			for sc.Scan() {
+				fmt.Fprintln(w, strings.ToUpper(sc.Text()))
+			}
+			sc.Err()?
+			w.Flush()?
+		} // out closed here...
+	} // ...then in
+	return nil
+}
+```
+
+- In a function whose last result is a **named** `error` (as `?`
+  requires), a failed `Close` isn't lost. Leaving the block normally (or
+  by `break`, `continue` or `goto`) returns the `Close` error like `?`
+  would. Leaving it by `return`, `throw` or `?` evaluates the results
+  first, then closes; a `Close` error becomes the function's error only if
+  that is still `nil`, so the first error wins. Elsewhere `Close`'s results
+  are dropped.
+- Nested `with` statements close innermost first.
+- `with` is a **contextual** keyword like `throw`: it's only the statement
+  when it's followed directly by a name, which is never valid Go, so code
+  using `with` as an identifier is unaffected.
+
+See [examples/with](examples/with/main.fgo) for a runnable version.
+
 ### Postfix `if` — one-line guard clauses
 
 `STMT if COND` is shorthand for `if COND { STMT }`, Ruby/Perl-style — useful
@@ -550,8 +589,11 @@ func run() int {
 every function of the same package it calls directly (and the ones those
 call, and so on) run as nogc code: their `&T{...}` and `new(T)` of
 structs are reference counted, and they count the pointers they hold.
-A `//fgo:nogc` directive on a type makes its methods roots, and every
-`//fgo:comptime` function is a root.
+A `//fgo:nogc` directive on a type makes its methods roots, strict ones
+(see *Strict mode* below), and every `//fgo:comptime` function is a root.
+To let such a type keep counted objects in a value garbage collected
+code allocated, tag the fields that hold them `fgo:"nogc"` (see *Tagged
+fields* below).
 
 **The same code, both ways.** Being nogc belongs to where an object is
 allocated, not to its type. The compiler keeps every function a root
@@ -596,6 +638,99 @@ func index(words []string) map[string]*Entry {
 	return m
 }
 ```
+
+**Strict mode.** `//fgo:nogc strict` turns every one of those hand-offs
+into a compile error, for code that must never fall back on the garbage
+collector. Methods of a `//fgo:nogc` type are always strict. The
+functions a strict root calls are checked too, and so is a store into an
+object nogc code didn't allocate (a receiver or parameter from garbage
+collected code), since nogc code can't count references from it, unless
+the field is tagged `fgo:"nogc"`:
+
+```
+$ forgo run -tags leak ./examples/nogcstrict
+# example.com/nogcstrict
+./leak.fgo:24:35: nogc: strict: n escapes to the garbage collector: stored in a map
+./leak.fgo:29:9: nogc: strict: n escapes to the garbage collector: stored in global latest
+./leak.fgo:35:14: nogc: strict: n escapes to the garbage collector: converted to an interface
+./leak.fgo:45:5: nogc: strict: a nogc object escapes to the garbage collector: sent on a channel
+./leak.fgo:51:5: nogc: strict: n escapes to the garbage collector: captured by a goroutine
+./leak.fgo:56:2: nogc: strict: a nogc object escapes to the garbage collector: returned to code that is not nogc
+./leak.fgo:63:10: nogc: strict: b escapes to the garbage collector: assigned to field Right, through which the object can reach itself (reference cycles are the GC's)
+./leak.fgo:40:6: nogc: strict: n escapes to the garbage collector: stored in a map
+```
+
+The last error is the map store in `save`, reported again where
+`viaHelper` calls it (inlined). See
+[examples/nogcstrict](examples/nogcstrict/main.fgo): `forgo run .` runs a
+strict program that keeps every object counted, and `-tags leak` adds
+[leak.fgo](examples/nogcstrict/leak.fgo), one escape of each kind.
+
+**Tagged fields.** A field of pointer-to-struct type tagged
+`fgo:"nogc"` holds a counted reference wherever its struct lives,
+including in a garbage collected object, so a type that garbage collected
+code allocates can still own counted objects:
+
+```go
+//fgo:nogc
+type Stack struct {
+	mu  sync.Mutex
+	top *item `fgo:"nogc"`
+}
+
+func (s *Stack) Push(v int) {
+	s.mu.Lock()
+	s.top = &item{val: v, next: s.top}
+	s.mu.Unlock()
+}
+
+func (s *Stack) Pop() (v int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it := s.top
+	if it == nil {
+		return 0, false
+	}
+	s.top = it.next // it is freed when Pop returns
+	return it.val, true
+}
+
+func main() {
+	s := &Stack{} // garbage collected, but its nodes are counted
+	s.Push(1)
+	s.Pop()
+}
+```
+
+- A garbage collected object can be shared by goroutines, so what a
+  tagged field holds, and everything it reaches, becomes *shared*: still
+  freed at its last reference, but counted atomically.
+- When the GC frees an object holding a tagged field, it releases the
+  reference the field held.
+- Any code may store into a tagged field (the store is counted). Code
+  that isn't nogc reading one hands what it reads to the GC, since it
+  doesn't count the reference it keeps; comparing it, say with `nil`, is
+  free.
+- A struct holding a tagged field, directly or in a field or array
+  element, is *pinned*: a copy would hold the reference uncounted, so
+  copying one is a compile error. Use it through a pointer. It can't be
+  assigned, passed or returned by value, converted to an interface, a map
+  key or element, a channel element or a type argument, ranged over by
+  value, or have value-receiver methods; a slice of it can't be appended
+  to, copied or cleared; and a tagged field's address can't be taken.
+  `go vet`'s copylocks check (and forgopls) reports copies too.
+
+```
+$ forgo run -tags copy ./examples/nogcstruct
+./copy.fgo:9:4: fgo:"nogc": a field tagged fgo:"nogc" must be a pointer to a struct, not int
+./copy.fgo:13:7: fgo:"nogc": copies a value of type main.Stack, which holds a field tagged fgo:"nogc"; use a *main.Stack
+...
+```
+
+See [examples/nogcstruct](examples/nogcstruct/main.fgo) for a stack
+shared by goroutines, released by the GC, and the compile errors
+(`-tags copy`, and `-tags untagged` for the strict error without the
+tag).
 
 To change a structure without handing it off, rebuild it:
 
@@ -687,6 +822,10 @@ an object holding them is alive, the GC scans it as a root.
 - A handed-off object is freed after a GC cycle, not at its last use.
 - Weak pointers to nogc objects hand them off; finalizers and cleanups
   on them aren't supported.
+- Writing a tagged field through `unsafe` or `reflect` bypasses its
+  counting.
+- The race detector's instrumentation hands nogc objects to the GC, so
+  under `-race` nogc code runs, but garbage collected.
 
 **Benchmarks.** [examples/nogcbench](examples/nogcbench) runs seven
 allocation-heavy workloads (the Benchmarks Game's binary trees, a

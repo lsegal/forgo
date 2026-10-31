@@ -588,6 +588,25 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			check.errorf(s.X, InvalidSyntaxTree, "forgo: throw's operand must be a string literal or error, not %s", x.typ())
 		}
 
+	case *ast.WithStmt:
+		// forgo: with Name := Value { Body } declares Name, scoped to the
+		// statement, runs Body, then calls Name.Close() (see the
+		// compiler's noder/forgo_with.go).
+		check.openScope(s, "with")
+		defer check.closeScope()
+		check.shortVarDecl(inNode(s, s.With), []ast.Expr{s.Name}, []ast.Expr{s.Value})
+		if v, _ := check.scope.Lookup(s.Name.Name).(*Var); v != nil {
+			check.usedVars[v] = true // by the implicit Close call
+			if v.typ != nil && isValid(v.typ) {
+				if m, _, _ := lookupFieldOrMethod(v.typ, true, check.pkg, "Close", false); m == nil {
+					check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s (type %s) has no Close method", s.Name.Name, v.typ)
+				} else if _, ok := m.(*Func); !ok {
+					check.errorf(s.Name, MissingFieldOrMethod, "forgo: with: %s.Close is not a method", s.Name.Name)
+				}
+			}
+		}
+		check.stmt(inner, s.Body)
+
 	case *ast.PostfixIfStmt:
 		// forgo: STMT if COND is shorthand for `if COND { STMT }`.
 		var x operand

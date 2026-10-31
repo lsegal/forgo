@@ -1952,6 +1952,20 @@ func (p *parser) parseSimpleStmt(mode int) (ast.Stmt, bool) {
 				return &ast.ThrowStmt{Throw: id.Pos(), X: val}, false
 			}
 		}
+		// forgo: "with" is a contextual keyword too: "with" followed
+		// directly by a name is never valid Go.
+		//
+		//	WithStmt = "with" identifier ":=" Expression Block .
+		if id, ok := x[0].(*ast.Ident); ok && id.Name == "with" && p.tok == token.IDENT && mode == labelOk {
+			name := p.parseIdent()
+			p.expect(token.DEFINE)
+			prevLev := p.exprLev
+			p.exprLev = -1 // as in an if header: { starts the body
+			val := p.parseRhs()
+			p.exprLev = prevLev
+			body := p.parseBlockStmt()
+			return &ast.WithStmt{With: id.Pos(), Name: name, Value: val, Body: body}, false
+		}
 	}
 
 	switch p.tok {

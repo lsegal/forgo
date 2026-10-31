@@ -1,0 +1,87 @@
+// //fgo:nogc strict: nogc code that is not allowed to fall back on the
+// garbage collector.
+//
+// Plain //fgo:nogc code may hand any of its objects to the garbage
+// collector: storing one in a global, an interface, a map or a channel,
+// capturing it in a goroutine, returning it to code that is not nogc, or
+// assigning a field through which it can reach itself all do. The
+// program still works; that object just stops being reference counted.
+// Under //fgo:nogc strict, each of those is a compile error instead, which
+// names the object and says where it would go. The functions a strict
+// root calls are checked too.
+//
+// This file compiles: everything it allocates stays counted and is freed
+// on the spot. leak.fgo, built only with -tags leak, makes each kind of
+// escape once:
+//
+//	forgo run .             # runs
+//	forgo run -tags leak .  # fails to compile, one error per escape
+package main
+
+import (
+	"fmt"
+
+	"fgo/nogc"
+)
+
+type Node struct {
+	Key         int
+	Left, Right *Node
+}
+
+// insert returns the tree with key added. It only builds new nodes and
+// reads old ones, so every node stays counted: an assignment to n.Left
+// would make a node reachable from itself possible, which strict code
+// does not allow (reference cycles are the garbage collector's).
+func insert(n *Node, key int) *Node {
+	if n == nil {
+		return &Node{Key: key}
+	}
+	if key < n.Key {
+		return &Node{Key: n.Key, Left: insert(n.Left, key), Right: n.Right}
+	}
+	return &Node{Key: n.Key, Left: n.Left, Right: insert(n.Right, key)}
+}
+
+func height(n *Node) int {
+	if n == nil {
+		return 0
+	}
+	return 1 + max(height(n.Left), height(n.Right))
+}
+
+func sum(n *Node) int {
+	if n == nil {
+		return 0
+	}
+	return n.Key + sum(n.Left) + sum(n.Right)
+}
+
+// stats builds a tree of n keys, keeping only the newest version of it,
+// and reports its height and sum. Every older version is freed as soon
+// as insert has built the next; nothing reaches the garbage collector.
+//
+//fgo:nogc strict
+func stats(n int) (h, s, live int) {
+	var root *Node
+	k := 1
+	for range n {
+		k = k * 7919 % 10007
+		root = insert(root, k)
+	}
+	live = nogc.Live() // before root's last use, which frees the tree
+	return height(root), sum(root), live
+}
+
+func main() {
+	before := nogc.Live()
+	h, s, live := stats(1000)
+	fmt.Printf("height %d, sum %d, %d nodes live inside stats\n", h, s, live-before)
+	if live-before != 1000 {
+		panic(fmt.Sprintf("live nodes = %d, want 1000", live-before))
+	}
+	if after := nogc.Live(); after != before {
+		panic(fmt.Sprintf("%d nodes leaked", after-before))
+	}
+	fmt.Println("all freed on return")
+}

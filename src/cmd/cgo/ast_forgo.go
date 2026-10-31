@@ -8,7 +8,7 @@ package main
 
 import "go/ast"
 
-// walkForgo walks the forgo-only node types (postfix if, throw and ?) for
+// walkForgo walks the forgo-only node types (postfix if, throw, with and ?) for
 // walk, reporting whether x was one of them. The bootstrap toolchain's
 // go/ast doesn't define them, hence the separate file.
 func (f *File) walkForgo(x any, visit func(*File, any, astContext)) bool {
@@ -17,6 +17,10 @@ func (f *File) walkForgo(x any, visit func(*File, any, astContext)) bool {
 		f.walk(&n.X, ctxExpr, visit)
 	case *ast.ThrowStmt:
 		f.walk(&n.X, ctxExpr, visit)
+	case *ast.WithStmt:
+		f.walk(n.Name, ctxExpr, visit)
+		f.walk(&n.Value, ctxExpr, visit)
+		f.walk(n.Body, ctxStmt, visit)
 	case *ast.PostfixIfStmt:
 		f.walk(n.Stmt, ctxStmt, visit)
 		f.walk(&n.Cond, ctxExpr, visit)

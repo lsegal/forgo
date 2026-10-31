@@ -11,9 +11,9 @@
 # go/analysis/passes/unreachable (a vet-style check) are the two known so
 # far; both hard-fail (panic, or log.Fatal — an outright process exit) on
 # an unrecognized node type. This script patches a local copy of x/tools to
-# add cases for *ast.TryExpr, *ast.ThrowStmt, and *ast.PostfixIfStmt in
-# both, and builds gopls against that patched copy via a go.mod replace
-# directive. There may be other such switches elsewhere in x/tools not yet
+# add cases for *ast.TryExpr, *ast.ThrowStmt, *ast.PostfixIfStmt and
+# *ast.WithStmt in both, and builds gopls against that patched copy via a
+# go.mod replace directive. There may be other such switches elsewhere in x/tools not yet
 # hit/patched; if forgopls dies with "internal error" or "unexpected
 # node/statement type" pointing at one of these three from a different
 # file, that file needs the same treatment — search x/tools for other
@@ -75,13 +75,14 @@ s = s.replace(
     ret,
     ret
     + "\n\tcase *ast.ThrowStmt:\n\t\t// forgo: throw X\n\t\twalk(v, edge.Invalid, -1, n.X)\n"
-    + "\n\tcase *ast.PostfixIfStmt:\n\t\t// forgo: STMT if COND\n\t\twalk(v, edge.Invalid, -1, n.Stmt)\n\t\twalk(v, edge.Invalid, -1, n.Cond)\n",
+    + "\n\tcase *ast.PostfixIfStmt:\n\t\t// forgo: STMT if COND\n\t\twalk(v, edge.Invalid, -1, n.Stmt)\n\t\twalk(v, edge.Invalid, -1, n.Cond)\n"
+    + "\n\tcase *ast.WithStmt:\n\t\t// forgo: with NAME := VALUE { BODY }\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\twalk(v, edge.Invalid, -1, n.Value)\n\t\twalk(v, edge.Invalid, -1, n.Body)\n",
     1,
 )
 
 open(path, "w").write(s)
 PYEOF
-	echo "patched $WALK_FILE for TryExpr/ThrowStmt/PostfixIfStmt"
+	echo "patched $WALK_FILE for TryExpr/ThrowStmt/PostfixIfStmt/WithStmt"
 fi
 
 UNREACHABLE_FILE="$PATCHED/go/analysis/passes/unreachable/unreachable.go"
@@ -107,11 +108,11 @@ s = s.replace(
 # any nested labels/breaks it contains.
 findlabels_if = "\tcase *ast.IfStmt:\n\t\td.findLabels(x.Body)\n\t\tif x.Else != nil {\n\t\t\td.findLabels(x.Else)\n\t\t}\n"
 assert findlabels_if in s, "findLabels IfStmt case not found; x/tools/go/analysis/passes/unreachable/unreachable.go layout may have changed"
-s = s.replace(findlabels_if, findlabels_if + "\n\tcase *ast.PostfixIfStmt:\n\t\td.findLabels(x.Stmt)\n", 1)
+s = s.replace(findlabels_if, findlabels_if + "\n\tcase *ast.PostfixIfStmt:\n\t\td.findLabels(x.Stmt)\n\n\tcase *ast.WithStmt:\n\t\td.findLabels(x.Body)\n", 1)
 
 dead = "\tcase *ast.ReturnStmt:\n\t\td.reachable = false\n"
 assert dead in s, "findDead ReturnStmt case not found; x/tools/go/analysis/passes/unreachable/unreachable.go layout may have changed"
-s = s.replace(dead, dead + "\n\tcase *ast.ThrowStmt:\n\t\t// forgo: throw X always transfers control, like return\n\t\td.reachable = false\n", 1)
+s = s.replace(dead, dead + "\n\tcase *ast.ThrowStmt:\n\t\t// forgo: throw X always transfers control, like return\n\t\td.reachable = false\n\n\tcase *ast.WithStmt:\n\t\t// forgo: with runs its body, a block\n\t\td.findDead(x.Body)\n", 1)
 
 # findDead's *ast.IfStmt case (with an Else) is a multi-line block, not a
 # single fixed-text case like the others above, so match on its header line
@@ -130,6 +131,32 @@ s = s.replace(
 open(path, "w").write(s)
 PYEOF
 	echo "patched $UNREACHABLE_FILE for ThrowStmt/PostfixIfStmt"
+fi
+
+COPYLOCK_FILE="$PATCHED/go/analysis/passes/copylock/copylock.go"
+if ! grep -q 'fgo:"nogc"' "$COPYLOCK_FILE"; then
+	"$PYTHON" - "$COPYLOCK_FILE" <<'PYEOF'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+
+# forgo: a struct holding a field tagged fgo:"nogc" must not be copied
+# (the compiler rejects it); report copies the way copylocks reports
+# copies of locks.
+loop = "\tnfields := styp.NumFields()\n\tfor i := range nfields {\n\t\tftyp := styp.Field(i).Type()\n"
+assert loop in s, "copylock lockPath field loop not found; x/tools/go/analysis/passes/copylock/copylock.go layout may have changed"
+s = s.replace(
+    loop,
+    "\tnfields := styp.NumFields()\n\tfor i := range nfields {\n"
+    + "\t\tif reflect.StructTag(styp.Tag(i)).Get(\"fgo\") == \"nogc\" {\n"
+    + "\t\t\treturn []string{typ.String() + \".\" + styp.Field(i).Name() + ` (fgo:\"nogc\")`}\n\t\t}\n"
+    + "\t\tftyp := styp.Field(i).Type()\n",
+    1,
+)
+s = s.replace("import (\n", "import (\n\t\"reflect\"\n", 1)
+open(path, "w").write(s)
+PYEOF
+	echo "patched $COPYLOCK_FILE for fgo:\"nogc\" fields"
 fi
 
 "$FORGO" mod edit -replace "golang.org/x/tools@${TOOLS_VERSION}=${PATCHED}"

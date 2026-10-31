@@ -76,6 +76,7 @@ const (
 	nPostfixIfStmt
 	nThrowStmt
 	nTryExpr
+	nWithStmt
 )
 
 // typeOf returns a distinct single-bit value that represents the type of n.
@@ -224,6 +225,8 @@ func typeOf(n ast.Node) uint64 {
 		return 1 << nThrowStmt
 	case *ast.TryExpr:
 		return 1 << nTryExpr
+	case *ast.WithStmt:
+		return 1 << nWithStmt
 	}
 	return 0
 }
