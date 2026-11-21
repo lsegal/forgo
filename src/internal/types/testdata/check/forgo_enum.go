@@ -194,5 +194,88 @@ func Map[T, U any](o Option[T], f func(T) U) Option[U] {
 	case Option.None:
 		return Option[U].None
 	}
-	panic("unreachable")
 }
+
+// An exhaustive switch without a default whose clauses all terminate is a
+// terminating statement.
+func _(s Shape) float64 {
+	switch v := s.(type) {
+	case Shape.Circle:
+		return v.radius
+	case Shape.Rect:
+		return v.w
+	case Shape.Empty:
+		panic(0)
+	}
+}
+
+func _(s Shape) int {
+	switch s.(type) {
+	case Shape.Circle, Shape.Rect:
+		return 1
+	case Shape.Empty:
+		return 0
+	}
+}
+
+func _(c Color) int {
+	switch c {
+	case Color.Red:
+		return 0
+	case Color.Green, Color.Blue:
+		return 1
+	}
+}
+
+func _(c Color) int {
+L:
+	switch c {
+	case Color.Red:
+		return 0
+	case Color.Green:
+		return 1
+	case Color.Blue:
+		for {
+			break L
+		}
+	}
+} /* ERROR "missing return" */
+
+func _(s Shape) int {
+	switch s.(type) {
+	case Shape.Circle, Shape.Rect:
+		return 1
+	case Shape.Empty:
+		break
+	}
+} /* ERROR "missing return" */
+
+func _(s Shape) int {
+	switch /* ERROR "missing case Shape.Empty" */ s.(type) {
+	case Shape.Circle, Shape.Rect:
+		return 1
+	}
+} /* ERROR "missing return" */
+
+func _(c Color) int {
+	switch /* ERROR "missing case Color.Blue" */ c {
+	case Color.Red, Color.Green:
+		return 1
+	}
+} /* ERROR "missing return" */
+
+func _(s Shape) int {
+	switch s.(type) {
+	case Shape.Circle, Shape.Rect:
+		return 1
+	case Shape.Empty:
+	}
+} /* ERROR "missing return" */
+
+// A switch over an ordinary struct is not covered.
+func _(x struct{ a int }) int {
+	switch x {
+	case struct{ a int }{1}:
+		return 1
+	}
+} /* ERROR "missing return" */

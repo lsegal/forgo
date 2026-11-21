@@ -16,7 +16,16 @@
 //	case Shape.Rect, Shape.Empty:       v := tmp.Circle; ...
 //		...                         case 1, 2:
 //	}                                   v := tmp; ...
+//	                                default:
+//	                                    panic(...)
 //	                                }
+//
+// A switch over an enum without a default clause names every variant
+// (types2 reports an error otherwise), so it gets an implicit default
+// that panics, and types2 may treat it as a terminating statement (see
+// types2.Checker.forgoEnumTerminating). The default is only reached by a
+// value whose tag names no variant, which only unsafe code can build. An
+// expression switch over an enum of unit variants gets the same default.
 
 package noder
 
@@ -255,8 +264,50 @@ func (r *reader) forgoEnumSwitch(label *types.Sym) ir.Node {
 	}
 	r.closeScope()
 
+	// types2 accepted the switch, so without a default clause it names
+	// every variant.
+	if !forgoHasDefault(clauses) {
+		clauses = append(clauses, forgoEnumDefault(pos))
+	}
+
 	n := ir.NewSwitchStmt(pos, tag, clauses)
 	n.Label = label
 	n.SetInit(inits)
 	return n
+}
+
+// forgoEnumExprSwitchComplete reports whether stmt is an expression switch
+// over a value of enum type without a default clause, which types2 only
+// accepts when it names every variant.
+func (w *writer) forgoEnumExprSwitchComplete(stmt *syntax.SwitchStmt) bool {
+	if _, ok := stmt.Tag.(*syntax.TypeSwitchGuard); ok || stmt.Tag == nil {
+		return false
+	}
+	if types2.ForgoEnum(w.p.typeOf(stmt.Tag)) == nil {
+		return false
+	}
+	for _, clause := range stmt.Body {
+		if clause.Cases == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// forgoHasDefault reports whether clauses include a default clause.
+func forgoHasDefault(clauses []*ir.CaseClause) bool {
+	for _, clause := range clauses {
+		if clause.List == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// forgoEnumDefault returns the implicit default clause of an exhaustive
+// switch over an enum, at pos: it panics, since only a value whose tag
+// names no variant reaches it.
+func forgoEnumDefault(pos src.XPos) *ir.CaseClause {
+	msg := ir.NewBasicLit(pos, types.Types[types.TSTRING], constant.MakeString("forgo: enum value has an invalid tag"))
+	return ir.NewCaseStmt(pos, nil, []ir.Node{typecheck.Stmt(ir.NewUnaryExpr(pos, ir.OPANIC, msg))})
 }

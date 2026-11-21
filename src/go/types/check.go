@@ -120,6 +120,7 @@ type Checker struct {
 	forgoEnumCall     ast.Expr                   // function of the call being checked
 	forgoEnumUnitCase map[*ast.SelectorExpr]bool // unit variant selectors
 	forgoVariantObjs  map[*Var]Object            // see forgoVariantObj
+	forgoEnumComplete map[ast.Stmt]bool          // see forgoEnumTerminating
 
 	// package information
 	// (initialized by NewChecker, valid for the life-time of checker)

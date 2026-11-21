@@ -48,7 +48,6 @@ func (s Shape) Area() float64 {
 	case Shape.Empty:
 		return 0
 	}
-	panic("unreachable")
 }
 
 // Kind is small enough to be inlined into its callers, enum switch and all.
@@ -104,7 +103,6 @@ func Map[T, U any](o shapes.Option[T], f func(T) U) shapes.Option[U] {
 	case shapes.Option.None:
 		return shapes.Option[U].None
 	}
-	panic("unreachable")
 }
 
 type Color enum { Red; Green; Blue }
@@ -118,7 +116,6 @@ func (c Color) String() string {
 	case Color.Blue:
 		return "blue"
 	}
-	return "?"
 }
 
 func main() {
@@ -219,7 +216,6 @@ func describe(s shapes.Shape) string {
 	case shapes.Shape.Empty:
 		return "empty"
 	}
-	return ""
 }
 
 func main() { fmt.Println(describe(shapes.Shape.Empty)) }
@@ -248,5 +244,81 @@ func main() { fmt.Println(describe(shapes.Shape.Empty)) }
 	const want = "main.go:10:2: switch on shapes.Shape is not exhaustive: missing cases shapes.Shape.Triangle, shapes.Shape.Line"
 	if !strings.Contains(out, want) {
 		t.Errorf("go build output:\n%s\nwant it to contain:\n%s", out, want)
+	}
+}
+
+// TestForgoEnumInvalidTag checks that a switch over an enum without a
+// default clause, which may be a terminating statement, panics rather
+// than falling off its end for a value whose tag names no variant.
+func TestForgoEnumInvalidTag(t *testing.T) {
+	testenv.MustHaveGoRun(t)
+	t.Parallel()
+
+	const main = `package main
+
+import (
+	"fmt"
+	"unsafe"
+
+	"fgoenum/shapes"
+)
+
+type Color enum { Red; Green }
+
+func name(c Color) string {
+	switch c {
+	case Color.Red:
+		return "red"
+	case Color.Green:
+		return "green"
+	}
+}
+
+func try(what string, f func() any) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(what, "panic:", r)
+		}
+	}()
+	fmt.Println(what, f())
+}
+
+func main() {
+	s := shapes.Shape.Empty
+	try("area", func() any { return s.Area() })
+	*(*uint8)(unsafe.Pointer(&s)) = 3
+	try("area", func() any { return s.Area() })
+	try("stmt", func() any {
+		switch s.(type) {
+		case shapes.Shape.Circle, shapes.Shape.Rect, shapes.Shape.Empty:
+			return "matched"
+		}
+		return "fell through"
+	})
+
+	c := Color.Green
+	try("name", func() any { return name(c) })
+	*(*uint8)(unsafe.Pointer(&c)) = 200
+	try("name", func() any { return name(c) })
+}
+`
+	dir := forgoEnumModule(t, map[string]string{
+		"shapes/shapes.go": forgoEnumShapes,
+		"main.go":          main,
+	})
+	cmd := testenv.Command(t, testenv.GoToolPath(t), "run", ".")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run: %v\n%s", err, out)
+	}
+	const want = `area 0
+area panic: forgo: enum value has an invalid tag
+stmt panic: forgo: enum value has an invalid tag
+name green
+name panic: forgo: enum value has an invalid tag
+`
+	if got := string(out); got != want {
+		t.Errorf("output:\n%s\nwant:\n%s", got, want)
 	}
 }
