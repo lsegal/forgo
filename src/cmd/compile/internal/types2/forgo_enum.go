@@ -510,8 +510,9 @@ func forgoSameEnum(t, enum Type) bool {
 
 // forgoEnumExhaustive reports an error at switch s, naming every missing
 // variant, when the variants of enum for which covered is false are not
-// all handled. exprSwitch reports whether s is an expression switch,
-// which can only cover unit variants.
+// all handled, and otherwise records s as complete for
+// forgoEnumTerminating. exprSwitch reports whether s is an expression
+// switch, which can only cover unit variants.
 func (check *Checker) forgoEnumExhaustive(s *syntax.SwitchStmt, enum Type, es *Struct, covered func(int) bool, exprSwitch bool) {
 	var missing []string
 	payloads := false
@@ -524,6 +525,10 @@ func (check *Checker) forgoEnumExhaustive(s *syntax.SwitchStmt, enum Type, es *S
 		}
 	}
 	if len(missing) == 0 {
+		if check.forgoEnumComplete == nil {
+			check.forgoEnumComplete = make(map[*syntax.SwitchStmt]bool)
+		}
+		check.forgoEnumComplete[s] = true
 		return
 	}
 	cases := "case"
@@ -564,6 +569,24 @@ func (check *Checker) forgoEnumExprSwitch(s *syntax.SwitchStmt, x *operand) {
 		}
 	}
 	check.forgoEnumExhaustive(s, x.typ(), es, func(i int) bool { return seen[i] }, true)
+}
+
+// forgoEnumTerminating reports whether switch s, labeled label, is a
+// terminating statement because it is an exhaustive switch over an enum
+// without a default clause: it names every variant, every clause is
+// terminating, and no break refers to s. The compiler gives such a switch
+// an implicit default that panics (see noder/forgo_enum.go), so control
+// cannot fall off its end.
+func (check *Checker) forgoEnumTerminating(s *syntax.SwitchStmt, label string) bool {
+	if !check.forgoEnumComplete[s] {
+		return false
+	}
+	for _, cc := range s.Body {
+		if !check.isTerminatingList(cc.Body, "") || hasBreakList(cc.Body, label, true) {
+			return false
+		}
+	}
+	return true
 }
 
 // ForgoEnum returns the representation struct of t if t is a forgo enum

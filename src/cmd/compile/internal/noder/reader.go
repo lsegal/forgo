@@ -2160,6 +2160,9 @@ func (r *reader) switchStmt(label *types.Sym) ir.Node {
 		r.closeScope()
 	}
 	r.closeScope()
+	if r.Bool() { // forgo: exhaustive expression switch over an enum
+		clauses = append(clauses, forgoEnumDefault(pos))
+	}
 
 	n := ir.NewSwitchStmt(pos, tag, clauses)
 	n.Label = label

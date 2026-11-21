@@ -55,7 +55,7 @@ func (check *Checker) isTerminating(s syntax.Stmt, label string) bool {
 		}
 
 	case *syntax.SwitchStmt:
-		return check.isTerminatingSwitch(s.Body, label)
+		return check.isTerminatingSwitch(s.Body, label) || check.forgoEnumTerminating(s, label) // forgo
 
 	case *syntax.SelectStmt:
 		for _, cc := range s.Body {

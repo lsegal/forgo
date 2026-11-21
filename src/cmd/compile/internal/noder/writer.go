@@ -1878,6 +1878,7 @@ func (w *writer) switchStmt(stmt *syntax.SwitchStmt) {
 	}
 
 	w.closeScope(stmt.Rbrace)
+	w.Bool(w.forgoEnumExprSwitchComplete(stmt)) // forgo: implicit default
 }
 
 func (w *writer) label(label *syntax.Name) {
