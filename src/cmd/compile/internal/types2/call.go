@@ -172,7 +172,10 @@ func (check *Checker) instantiateSignature(pos syntax.Pos, expr syntax.Expr, typ
 func (check *Checker) callExpr(x *operand, call *syntax.CallExpr) exprKind {
 	var inst *syntax.IndexExpr // function instantiation, if any
 	if iexpr, _ := call.Fun.(*syntax.IndexExpr); iexpr != nil {
-		if check.indexExpr(x, iexpr) {
+		check.forgoEnumCall = syntax.Unparen(iexpr.X) // forgo: variant constructors must be called
+		ok := check.indexExpr(x, iexpr)
+		check.forgoEnumCall = nil
+		if ok {
 			// Delay function instantiation to argument checking,
 			// where we combine type and value arguments for type
 			// inference.
@@ -182,7 +185,9 @@ func (check *Checker) callExpr(x *operand, call *syntax.CallExpr) exprKind {
 		x.expr = iexpr
 		check.record(x)
 	} else {
+		check.forgoEnumCall = syntax.Unparen(call.Fun) // forgo: variant constructors must be called
 		check.exprOrType(x, call.Fun, true)
+		check.forgoEnumCall = nil
 	}
 	// x.typ may be generic
 
@@ -788,7 +793,9 @@ func (check *Checker) selector(x *operand, e *syntax.SelectorExpr, wantType bool
 		}
 	}
 
-	check.exprOrType(x, e.X, false)
+	if check.forgoEnumSelector(x, e) { // forgo: enum variants; otherwise check.exprOrType(x, e.X, false)
+		return
+	}
 	switch x.mode() {
 	case builtin:
 		check.errorf(e.Pos(), UncalledBuiltin, "invalid use of %s in selector expression", x)
@@ -856,6 +863,10 @@ func (check *Checker) selector(x *operand, e *syntax.SelectorExpr, wantType bool
 		goto Error
 	}
 	// obj != nil
+
+	if check.forgoEnumFieldSelect(x, e, obj, index) { // forgo: enum representations are closed
+		goto Error
+	}
 
 	// forgo: x.Field on a composite constant (a struct value folded by the
 	// comptime interpreter, see go/constant's Composite kind) is itself a

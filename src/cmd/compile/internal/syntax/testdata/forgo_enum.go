@@ -37,5 +37,5 @@ func _() {
 }
 
 type Bad enum {
-	X(int
-/* ERROR unexpected newline */ }
+	X(int /* ERROR unexpected newline in parameter list */
+}

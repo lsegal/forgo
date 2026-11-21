@@ -312,6 +312,9 @@ func (check *Checker) typInternal(e0 syntax.Expr, def *TypeName) (T Type) {
 		check.structType(typ, e)
 		return typ
 
+	case *syntax.EnumType: // forgo
+		return check.forgoEnumType(e)
+
 	case *syntax.Operation:
 		if e.Op == syntax.Mul && e.Y == nil {
 			typ := new(Pointer)
