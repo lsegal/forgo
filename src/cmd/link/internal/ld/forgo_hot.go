@@ -144,6 +144,10 @@ type fgohotState struct {
 	// functions that changed and so need their old entry point redirected.
 	patches []fgohotPatch
 
+	// method slots of reused itabs that the running program filled with
+	// runtime.unreachableMethod and that this image has to fill in.
+	slots []fgohotSlot
+
 	// stable entry addresses inherited from the prior generation. A symbol
 	// may be laid out fresh for dependency reasons without becoming active;
 	// its throwaway image address must never replace this one in the record.
@@ -165,6 +169,15 @@ type fgohotPatch struct {
 	name string
 	sym  loader.Sym
 	old  uint64
+}
+
+// fgohotSlot is a pointer-sized word in the running program that has to be
+// pointed at a symbol of this image.
+type fgohotSlot struct {
+	addr     uint64     // address of the word in the running program
+	sym      loader.Sym // symbol the word must point at
+	add      int64
+	writable bool // whether the word lives in a writable segment
 }
 
 var fgohot fgohotState
@@ -308,8 +321,7 @@ func fgohotHash(ldr *loader.Loader, s loader.Sym, shallow map[loader.Sym]string)
 	h.Write([]byte(shallow[s]))
 	relocs := ldr.Relocs(s)
 	for i := 0; i < relocs.Count(); i++ {
-		r := relocs.At(i)
-		rs := r.Sym()
+		rs := relocs.At(i).Sym()
 		if rs == 0 {
 			h.Write([]byte{0})
 			continue
@@ -319,14 +331,6 @@ func fgohotHash(ldr *loader.Loader, s loader.Sym, shallow map[loader.Sym]string)
 			h.Write([]byte{byte(ldr.SymVersion(rs))})
 		} else {
 			h.Write([]byte(shallow[rs]))
-		}
-		if r.Weak() && r.Type() == objabi.R_ADDR && !ldr.AttrReachable(rs) {
-			// An itab's method slot whose method dead code elimination
-			// dropped holds runtime.unreachableMethod instead (see
-			// relocsym). If the new code calls that method, the running
-			// program's copy of the itab would send it there, so the slot's
-			// contents are part of what has to match before it is reused.
-			h.Write([]byte{1})
 		}
 		h.Write([]byte{0})
 	}
@@ -437,6 +441,7 @@ func fgohotPin(ctxt *Link) {
 
 	fgohotUnpinSectionRelative(ctxt)
 	fgohotPatchFreshText(ldr, rec)
+	fgohotFillDeadSlots(ldr, rec)
 
 	if os.Getenv("FORGO_HOT_DEBUG") != "" {
 		var changed []string
@@ -501,6 +506,45 @@ func fgohotPatchFreshText(ldr *loader.Loader, rec map[fgohotKey]*fgohotSym) {
 			changed = true
 		}
 	}
+}
+
+// fgohotFillDeadSlots finds the method slots of reused itabs that this
+// image needs filled in.
+//
+// The running program's linker pointed every itab slot whose method it found
+// unreachable at runtime.unreachableMethod (see relocsym). Such a slot
+// digests the same either way, since digests name relocation targets, so the
+// itab is reused; if the new code calls the method, the call would land in
+// the running program's placeholder. The method is new to the process, so
+// this image lays it out, and the agent writes its address into the slot.
+// Reusing the itab rather than laying out a copy matters: interface values
+// compare their itab pointers, so a copy would make an interface value built
+// by the new code unequal to the same value built by the old.
+func fgohotFillDeadSlots(ldr *loader.Loader, rec map[fgohotKey]*fgohotSym) {
+	for s, cur := range fgohot.snap {
+		if !fgohot.isPinned[s] {
+			continue
+		}
+		old := rec[fgohotIdentity(cur)]
+		relocs := ldr.Relocs(s)
+		for i := 0; i < relocs.Count(); i++ {
+			r := relocs.At(i)
+			rs := r.Sym()
+			if !r.Weak() || r.Type() != objabi.R_ADDR || rs == 0 || !ldr.AttrReachable(rs) {
+				continue
+			}
+			if e := fgohot.snap[rs]; e == nil || rec[fgohotIdentity(e)] != nil {
+				continue // the running program has the method; the slot points at it
+			}
+			fgohot.slots = append(fgohot.slots, fgohotSlot{
+				addr:     old.addr + uint64(r.Off()),
+				sym:      rs,
+				add:      r.Add(),
+				writable: old.kind >= sym.SFirstWritable && old.kind < sym.SFirstUnallocated,
+			})
+		}
+	}
+	sort.Slice(fgohot.slots, func(i, j int) bool { return fgohot.slots[i].addr < fgohot.slots[j].addr })
 }
 
 func fgohotRefersToPatched(ldr *loader.Loader, s loader.Sym, patched map[loader.Sym]bool) bool {
@@ -672,7 +716,7 @@ func fgohotReadRecord(path string) (map[fgohotKey]*fgohotSym, error) {
 
 // fgohotWriteManifest tells the agent what to do with this image: which of the
 // output file's segments to map where, where the moduledata is, which inits to
-// run, and which entry points to redirect.
+// run, which entry points to redirect, and which itab slots to fill in.
 func fgohotWriteManifest(ctxt *Link) {
 	if *flagFgoHotManifest == "" {
 		return
@@ -697,6 +741,15 @@ func fgohotWriteManifest(ctxt *Link) {
 	for _, p := range fgohot.patches {
 		if v := ldr.SymValue(p.sym); v != 0 {
 			fmt.Fprintf(w, "patch %x %x # %s\n", p.old, uint64(v), p.name)
+		}
+	}
+	for _, s := range fgohot.slots {
+		prot := "r"
+		if s.writable {
+			prot = "rw"
+		}
+		if v := ldr.SymValue(s.sym); v != 0 {
+			fmt.Fprintf(w, "slot %x %x %s # %s\n", s.addr, uint64(v+s.add), prot, ldr.SymName(s.sym))
 		}
 	}
 	for _, s := range fgohot.newInitTasks {
