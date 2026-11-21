@@ -173,7 +173,10 @@ func (check *Checker) instantiateSignature(pos token.Pos, expr ast.Expr, typ *Si
 func (check *Checker) callExpr(x *operand, call *ast.CallExpr) exprKind {
 	ix := unpackIndexedExpr(call.Fun)
 	if ix != nil {
-		if check.indexExpr(x, ix) {
+		check.forgoEnumCall = ast.Unparen(ix.x) // forgo: variant constructors must be called
+		ok := check.indexExpr(x, ix)
+		check.forgoEnumCall = nil
+		if ok {
 			// Delay function instantiation to argument checking,
 			// where we combine type and value arguments for type
 			// inference.
@@ -184,7 +187,9 @@ func (check *Checker) callExpr(x *operand, call *ast.CallExpr) exprKind {
 		x.expr = call.Fun
 		check.record(x)
 	} else {
+		check.forgoEnumCall = ast.Unparen(call.Fun) // forgo: variant constructors must be called
 		check.exprOrType(x, call.Fun, true)
+		check.forgoEnumCall = nil
 	}
 	// x.typ may be generic
 
@@ -790,7 +795,9 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr, wantType bool) {
 		}
 	}
 
-	check.exprOrType(x, e.X, false)
+	if check.forgoEnumSelector(x, e) { // forgo: enum variants; otherwise check.exprOrType(x, e.X, false)
+		return
+	}
 	switch x.mode() {
 	case builtin:
 		// types2 uses the position of '.' for the error
@@ -826,7 +833,7 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr, wantType bool) {
 		goto Error
 	}
 
-	obj, index, indirect = lookupFieldOrMethod(x.typ(), x.mode() == variable, check.pkg, sel, false)
+	obj, index, indirect = lookupFieldOrMethod(x.typ(), x.mode() == variable, check.forgoLookupPkg(x.typ(), sel), sel, false) // forgo: enum positional fields
 	if obj == nil {
 		// Don't report another error if the underlying type was invalid (go.dev/issue/49541).
 		if !isValid(x.typ().Underlying()) {
@@ -859,6 +866,10 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr, wantType bool) {
 		goto Error
 	}
 	// obj != nil
+
+	if check.forgoEnumFieldSelect(x, e, obj, index) { // forgo: enum representations are closed
+		goto Error
+	}
 
 	// forgo: x.Field on a composite constant (a struct value folded by the
 	// comptime interpreter, see go/constant's Composite kind) is itself a

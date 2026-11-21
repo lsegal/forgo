@@ -18,6 +18,9 @@ import (
 // conversion type-checks the conversion T(x).
 // The result is in x.
 func (check *Checker) conversion(x *operand, T Type) {
+	if check.forgoEnumConversion(x, T) { // forgo
+		return
+	}
 	constArg := x.mode() == constant_
 
 	constConvertibleTo := func(T Type, val *constant.Value) bool {

@@ -185,6 +185,7 @@ var data = []entry{
 	{"go2numbers.input", "go2numbers.golden", idempotent},
 	{"go2numbers.input", "go2numbers.norm", normNumber | idempotent},
 	{"generics.input", "generics.golden", idempotent | allowTypeParams},
+	{"forgo_enum.input", "forgo_enum.golden", idempotent | allowTypeParams}, // forgo
 	{"gobuild1.input", "gobuild1.golden", idempotent},
 	{"gobuild2.input", "gobuild2.golden", idempotent},
 	{"gobuild3.input", "gobuild3.golden", idempotent},

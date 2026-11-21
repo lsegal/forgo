@@ -116,6 +116,10 @@ type actionDesc struct {
 // A Checker maintains the state of the type checker.
 // It must be created with [NewChecker].
 type Checker struct {
+	// forgo: enum support (see forgo_enum.go)
+	forgoEnumCall     ast.Expr                   // function of the call being checked
+	forgoEnumUnitCase map[*ast.SelectorExpr]bool // unit variant selectors
+
 	// package information
 	// (initialized by NewChecker, valid for the life-time of checker)
 	conf *Config

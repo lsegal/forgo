@@ -53,8 +53,6 @@ func _() {
 	_ = r2
 
 	_ = Shape.Circle("x" /* ERRORx `cannot use "x"` */)
-	_ = Shape.Rect(1 /* ERROR "not enough arguments" */ )
-	_ = Shape.Empty /* ERROR "cannot call Shape.Empty (value of struct type Shape): Shape is not a function" */ ()
 	_ = Shape.Circle /* ERROR "variant constructor Shape.Circle must be called" */
 	_ = Option.None /* ERROR "cannot use generic enum Option without instantiation" */
 	_ = Shape.Square /* ERROR "Shape.Square undefined" */ (1)

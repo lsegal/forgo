@@ -830,7 +830,7 @@ func (check *Checker) selector(x *operand, e *syntax.SelectorExpr, wantType bool
 		goto Error
 	}
 
-	obj, index, indirect = lookupFieldOrMethod(x.typ(), x.mode() == variable, check.pkg, sel, false)
+	obj, index, indirect = lookupFieldOrMethod(x.typ(), x.mode() == variable, check.forgoLookupPkg(x.typ(), sel), sel, false) // forgo: enum positional fields
 	if obj == nil {
 		// Don't report another error if the underlying type was invalid (go.dev/issue/49541).
 		if !isValid(x.typ().Underlying()) {

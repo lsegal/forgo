@@ -21,12 +21,15 @@
 //		Empty  struct{}
 //	}
 //
+// Positional fields are named _0, _1, and so on, and tagged `fgo:"pos"`,
+// which makes them accessible from any package (v._0).
+//
 // Only the payload of the variant named by the tag is ever non-zero, so
 // struct equality is enum equality, and the zero value is the first
-// variant with zero fields. Positional fields are named _0, _1, and so on.
-// The struct tag on the first field marks the struct as an enum, so the
-// enum survives export data and importers unchanged; everything that
-// does not know about enums (the backend, reflection) sees a plain struct.
+// variant with zero fields. The struct tag on the first field marks the
+// struct as an enum, so the enum survives export data and importers
+// unchanged; everything that does not know about enums (the backend,
+// reflection) sees a plain struct.
 //
 // The type checker keeps the representation closed: a struct literal of an
 // enum type, a selector naming one of its fields, and a conversion from a
@@ -45,6 +48,7 @@ import (
 const (
 	forgoEnumTagField = "_tag"       // name of an enum's tag field
 	forgoEnumTag      = `fgo:"enum"` // struct tag marking an enum's tag field
+	forgoPosTag       = `fgo:"pos"`  // struct tag marking a variant's positional field
 )
 
 // forgoEnumOf returns the representation struct of t if t is an enum
@@ -158,6 +162,7 @@ func (check *Checker) forgoEnumType(e *syntax.EnumType) Type {
 // forgoEnumPayloadType type-checks the fields of variant v.
 func (check *Checker) forgoEnumPayloadType(v *syntax.EnumVariant) *Struct {
 	var fields []*Var
+	var tags []string
 	var fset objset
 	var typ Type
 	var prev syntax.Expr
@@ -168,6 +173,7 @@ func (check *Checker) forgoEnumPayloadType(v *syntax.EnumVariant) *Struct {
 		}
 		if f.Name == nil {
 			fields = append(fields, NewField(f.Pos(), check.pkg, fmt.Sprintf("_%d", i), typ, false))
+			tags = append(tags, forgoPosTag)
 			continue
 		}
 		fld := NewField(f.Name.Pos(), check.pkg, f.Name.Value, typ, false)
@@ -178,8 +184,29 @@ func (check *Checker) forgoEnumPayloadType(v *syntax.EnumVariant) *Struct {
 	}
 	s := new(Struct)
 	s.fields = fields
+	if len(tags) > 0 {
+		s.tags = tags // all fields are positional, or none are
+	}
 	s.markComplete()
 	return s
+}
+
+// forgoLookupPkg returns the package in which to look up field sel of a
+// value of type T: the package declaring the enum when sel names a
+// positional field of a variant (v._0), which is accessible wherever the
+// variant is, and the current package otherwise.
+func (check *Checker) forgoLookupPkg(T Type, sel string) *Package {
+	if strings.HasPrefix(sel, "_") {
+		t, _ := deref(T)
+		if s, _ := t.Underlying().(*Struct); s != nil {
+			for i, f := range s.fields {
+				if f.name == sel && s.Tag(i) == forgoPosTag {
+					return f.pkg
+				}
+			}
+		}
+	}
+	return check.pkg
 }
 
 // forgoEnumSelector evaluates the operand e.X of a selector expression. If
@@ -218,7 +245,7 @@ func (check *Checker) forgoVariantExpr(x *operand, e *syntax.SelectorExpr, s *St
 	payload := forgoEnumPayload(s, i)
 	if len(payload.fields) == 0 {
 		if isGeneric(enum) {
-			check.errorf(e, WrongTypeArgCount, "cannot use generic enum %s without instantiation (write %s[...].%s)", e.X, e.X, fld.name)
+			check.errorf(e.Sel, WrongTypeArgCount, "cannot use generic enum %s without instantiation (write %s[...].%s)", e.X, e.X, fld.name)
 			x.invalidate()
 			return
 		}
@@ -232,7 +259,7 @@ func (check *Checker) forgoVariantExpr(x *operand, e *syntax.SelectorExpr, s *St
 	}
 
 	if check.forgoEnumCall != e {
-		check.errorf(e, UncalledBuiltin, "variant constructor %s must be called", syntax.Expr(e))
+		check.errorf(e.Sel, UncalledBuiltin, "variant constructor %s must be called", syntax.Expr(e))
 		x.invalidate()
 		return
 	}
@@ -342,7 +369,7 @@ func (check *Checker) forgoEnumTypeSwitch(inner stmtContext, s *syntax.SwitchStm
 			}
 			if other := seen[i]; other != nil {
 				err := check.newError(DuplicateCase)
-				err.addf(e, "duplicate case %s in enum switch", syntax.Expr(e))
+				err.addf(forgoCasePos(e), "duplicate case %s in enum switch", syntax.Expr(e))
 				err.addf(other, "previous case")
 				err.report()
 				continue
@@ -416,6 +443,15 @@ func (check *Checker) forgoEnumCase(e syntax.Expr, enum Type, es *Struct) int {
 	}
 	check.recordUse(sel.Sel, fld.Origin())
 	return i
+}
+
+// forgoCasePos returns the node at which to report an error about case e:
+// the variant name of a selector, and e otherwise.
+func forgoCasePos(e syntax.Expr) poser {
+	if sel, _ := syntax.Unparen(e).(*syntax.SelectorExpr); sel != nil {
+		return sel.Sel
+	}
+	return e
 }
 
 // forgoSameEnum reports whether case type t names the enum type enum. A
