@@ -18,8 +18,8 @@ import (
 )
 
 // watchReloadSource is the program TestWatchReloadUsesTypes runs. render is
-// the function the test edits: GEN0 is replaced by the body the program
-// starts with, and then by GEN1 while it is running. check and main never
+// the function the test edits: GEN is replaced by the body the program starts
+// with, and then by the new body while it is running. check and main never
 // change, so they keep running the code of the original build.
 const watchReloadSource = `package main
 
@@ -38,7 +38,7 @@ type payload struct {
 
 var hostType = reflect.TypeOf(payload{})
 
-// Keeps encoding/json imported while render does not use it yet.
+// Keeps encoding/json imported while render does not use it.
 var _ = json.Marshal
 
 // check is never reloaded: it asserts a value boxed by whatever generation
@@ -64,24 +64,17 @@ func main() {
 }
 `
 
-const (
-	watchReloadGen0 = `fmt.Println("gen0", i)
-	return false`
-
-	// The new body resolves type offsets relative to type descriptors
-	// (the struct converted to an interface, encoding/json walking its
-	// fields through reflection, fmt formatting it) and calls fresh copies
-	// of library code that does the same.
-	watchReloadGen1 = `_ = json.NewEncoder(os.Stdout).Encode(payload{OK: true, Note: fmt.Sprint("gen1 ", i*1000, len(os.Args))})
+// watchReloadGen1 is the body every case reloads into. It resolves type
+// offsets relative to type descriptors (the struct converted to an
+// interface, encoding/json walking its fields through reflection, fmt
+// formatting it) and calls fresh copies of library code that does the same.
+const watchReloadGen1 = `_ = json.NewEncoder(os.Stdout).Encode(payload{OK: true, Note: fmt.Sprint("gen1 ", i*1000, len(os.Args))})
 	fmt.Printf("%+v\n", payload{OK: true, Note: "fmt"})
 	fmt.Println(check(payload{OK: true, Note: "boxed"}))
 	return true`
-)
 
 // TestWatchReloadUsesTypes reloads a function whose new code uses type
-// descriptors (lsegal/forgo#50). The hot image used to carry its own, empty
-// copy of the runtime's module list, so the first type offset the new code
-// resolved crashed the program.
+// descriptors (lsegal/forgo#50).
 func TestWatchReloadUsesTypes(t *testing.T) {
 	switch {
 	case runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin",
@@ -90,9 +83,39 @@ func TestWatchReloadUsesTypes(t *testing.T) {
 	}
 	testenv.MustHaveGoBuild(t)
 	if testing.Short() {
-		t.Skip("builds the program twice")
+		t.Skip("builds and runs programs")
 	}
 
+	for _, tc := range []struct {
+		name string
+		gen0 string
+	}{
+		{
+			// The program from the issue. The hot image used to carry its
+			// own, empty copy of the runtime's module list, which the fresh
+			// copies of library code in it walked: the first type offset
+			// they resolved crashed the program.
+			name: "json",
+			gen0: `_ = json.NewEncoder(os.Stdout).Encode(payload{OK: true, Note: fmt.Sprint("gen0 ", i)})
+	return false`,
+		},
+		{
+			// Nothing in the original build calls reflect.Type's
+			// Implements, so its linker pointed that itab slot at
+			// runtime.unreachableMethod, and encoding/json calls it on its
+			// first use. The reload has to fill the slot in.
+			name: "deadmethod",
+			gen0: `fmt.Println("gen0", i)
+	return false`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testWatchReload(t, tc.gen0)
+		})
+	}
+}
+
+func testWatchReload(t *testing.T, gen0 string) {
 	dir := t.TempDir()
 	write := func(name, content string) {
 		t.Helper()
@@ -101,7 +124,7 @@ func TestWatchReloadUsesTypes(t *testing.T) {
 		}
 	}
 	write("go.mod", "module reload\n\ngo 1.25\n")
-	write("main.go", strings.Replace(watchReloadSource, "GEN", watchReloadGen0, 1))
+	write("main.go", strings.Replace(watchReloadSource, "GEN", gen0, 1))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -129,7 +152,7 @@ func TestWatchReloadUsesTypes(t *testing.T) {
 	for sc.Scan() {
 		line := sc.Text()
 		out = append(out, line)
-		if strings.HasPrefix(line, "gen0 ") && time.Since(saved) > 5*time.Second {
+		if strings.Contains(line, "gen0 ") && time.Since(saved) > 5*time.Second {
 			write("main.go", strings.Replace(watchReloadSource, "GEN", watchReloadGen1, 1))
 			saved = time.Now()
 		}

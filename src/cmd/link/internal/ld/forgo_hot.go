@@ -204,14 +204,13 @@ var fgohotNeverPin = map[string]bool{
 }
 
 // fgohotAlwaysPin names the runtime's module list. A hot image describes
-// itself with its own moduledata (local.pluginmoduledata, see loadlib), so
-// these are ordinary runtime variables in it, and any runtime code the image
-// carries must walk the running program's list through them. Their contents
-// still differ between links — a normal link defines runtime.firstmoduledata
-// as the moduledata itself and a hot link leaves it as the runtime declared
-// it — so they are reused by name, whatever their digest. A fresh copy would
-// be an empty module list: code in the image that resolves a type offset or
-// looks up a function would find no module at all.
+// itself with its own moduledata (local.pluginmoduledata, see loadlib), so in
+// a hot link these are ordinary runtime variables, and any runtime code the
+// image carries must walk the running program's list through them. A fresh
+// copy would be an empty list: code in the image that resolves a type offset
+// would find no module at all. They are reused by name, whatever their
+// digest, because the linker defines runtime.firstmoduledata itself in a
+// normal link but not in a hot one.
 var fgohotAlwaysPin = map[string]bool{
 	"runtime.firstmoduledata": true,
 	"runtime.lastmoduledatap": true,
