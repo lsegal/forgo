@@ -28,7 +28,7 @@ jobs:
 
   # The build-and-test matrix's macos-latest is Apple Silicon only, so this is
   # the only job that runs forgo on darwin/amd64 (for example the per-runtime
-  # g TLS slot from #17). It is a separate job, not a matrix entry, so that it
+  # g TLS slot from #17, and hot reload). It is a separate job, not a matrix entry, so that it
   # has its own time limit and can be left out of required checks: a stuck
   # Intel queue must not block merges.
   #
@@ -66,6 +66,15 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/bin:$PATH"
           cp bin/forgo bin/go
           forgo test -count=1 -v -run TestMultiRuntime cmd/cgo/internal/testcshared
+
+      - name: Hot reload tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          forgo test -count=1 -v -run TestWatch cmd/go/internal/run
 
   build-and-test:
     strategy:
@@ -213,6 +222,28 @@ jobs:
           $env:GOTOOLCHAIN = "local"
           $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
           forgo test -count=1 -v cmd/cgo/internal/teststdio
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Hot reload: `forgo run --watch` reloads code that uses types.
+      - name: Hot reload tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOROOT="$GITHUB_WORKSPACE"
+          export GOTOOLCHAIN=local
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          forgo test -count=1 -v -run TestWatch cmd/go/internal/run
+
+      - name: Hot reload tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GOROOT = "$env:GITHUB_WORKSPACE"
+          $env:GOTOOLCHAIN = "local"
+          $env:PATH = "$env:GITHUB_WORKSPACE\bin;$env:PATH"
+          forgo test -count=1 -v -run TestWatch cmd/go/internal/run
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Several Go runtimes in one process (c-shared plugins). The cgo test
