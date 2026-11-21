@@ -144,6 +144,17 @@ func Walk(v Visitor, node Node) {
 		}
 		Walk(v, n.Elt)
 
+	case *EnumType:
+		for _, x := range n.Variants {
+			Walk(v, x)
+		}
+
+	case *EnumVariant:
+		Walk(v, n.Name)
+		if n.Params != nil {
+			Walk(v, n.Params)
+		}
+
 	case *StructType:
 		Walk(v, n.Fields)
 

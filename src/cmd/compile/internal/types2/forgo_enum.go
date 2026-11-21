@@ -60,21 +60,32 @@ func forgoEnumOf(t Type) *Struct {
 	return s
 }
 
-// forgoDeclaring reports whether t names a type whose declaration is
-// being checked, so its underlying type is not yet known. The selector
-// then reports the cycle itself.
-func (check *Checker) forgoDeclaring(t Type) bool {
-	var obj Object
-	switch t := t.(type) {
-	case *Alias:
-		obj = t.obj
-	case *Named:
-		obj = t.obj
-	default:
+// forgoResolved reports whether the underlying type of t is known: t is
+// a named type (possibly through aliases) whose declaration is not still
+// being checked. Otherwise the selector reports any problem itself.
+func (check *Checker) forgoResolved(t Type) bool {
+	for {
+		a, ok := t.(*Alias)
+		if !ok {
+			break
+		}
+		if _, found := check.objPathIdx[a.obj]; found || a.fromRHS == nil {
+			return false
+		}
+		t = a.fromRHS
+	}
+	n, _ := t.(*Named)
+	if n == nil {
 		return false
 	}
-	_, found := check.objPathIdx[obj]
-	return found
+	orig := n.Origin()
+	if _, found := check.objPathIdx[orig.obj]; found {
+		return false
+	}
+	if orig.unpack(); orig.rhs() == nil {
+		return false
+	}
+	return true
 }
 
 // forgoEnumVariant returns the index of the field of enum struct s that
@@ -178,7 +189,7 @@ func (check *Checker) forgoEnumPayloadType(v *syntax.EnumVariant) *Struct {
 // would, and reports false.
 func (check *Checker) forgoEnumSelector(x *operand, e *syntax.SelectorExpr) bool {
 	check.exprOrType(x, e.X, true)
-	if x.mode() == typexpr && !check.forgoDeclaring(x.typ()) {
+	if x.mode() == typexpr && check.forgoResolved(x.typ()) {
 		if s := forgoEnumOf(x.typ()); s != nil {
 			if i := forgoEnumVariant(s, e.Sel.Value); i > 0 {
 				check.forgoVariantExpr(x, e, s, i)
@@ -474,3 +485,12 @@ func (check *Checker) forgoEnumExprSwitch(s *syntax.SwitchStmt, x *operand) {
 	}
 	check.forgoEnumExhaustive(s, x.typ(), es, func(i int) bool { return seen[i] }, true)
 }
+
+// ForgoEnum returns the representation struct of t if t is a forgo enum
+// type, and nil otherwise. Field 0 of the struct is the tag; field i > 0
+// holds the payload struct of the variant with tag value i-1.
+func ForgoEnum(t Type) *Struct { return forgoEnumOf(t) }
+
+// ForgoEnumVariant returns the index of the field of enum struct s that
+// holds the variant named name, or -1.
+func ForgoEnumVariant(s *Struct, name string) int { return forgoEnumVariant(s, name) }

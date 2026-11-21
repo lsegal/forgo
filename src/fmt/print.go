@@ -820,6 +820,9 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 			p.buf.writeByte(']')
 		}
 	case reflect.Struct:
+		if p.printEnum(f, verb, depth) { // forgo: enum values
+			break
+		}
 		if p.fmt.sharpV {
 			p.buf.writeString(f.Type().String())
 		}

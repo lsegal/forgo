@@ -2077,6 +2077,9 @@ func (r *reader) selectStmt(label *types.Sym) ir.Node {
 
 func (r *reader) switchStmt(label *types.Sym) ir.Node {
 	r.Sync(pkgbits.SyncSwitchStmt)
+	if r.Bool() { // forgo: type switch over an enum
+		return r.forgoEnumSwitch(label)
+	}
 
 	r.openScope()
 	pos := r.pos()

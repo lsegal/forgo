@@ -1715,6 +1715,9 @@ func (w *writer) selectStmt(stmt *syntax.SelectStmt) {
 
 func (w *writer) switchStmt(stmt *syntax.SwitchStmt) {
 	w.Sync(pkgbits.SyncSwitchStmt)
+	if w.forgoEnumSwitch(stmt) { // forgo: type switch over an enum
+		return
+	}
 
 	w.openScope(stmt.Pos())
 	w.pos(stmt)
@@ -1898,6 +1901,10 @@ func (w *writer) expr(expr syntax.Expr) {
 	base.Assertf(expr != nil, "missing expression")
 
 	expr = syntax.Unparen(expr) // skip parens; unneeded after typecheck
+
+	if w.forgoEnumExpr(expr) { // forgo: enum variant constructors
+		return
+	}
 
 	obj, inst := lookupObj(w.p, expr)
 	targs := asTypeSlice(inst.TypeArgs)
