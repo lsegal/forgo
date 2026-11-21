@@ -288,7 +288,6 @@ func area(s Shape) float64 {
 	case Shape.Empty:
 		return 0
 	}
-	panic("unreachable")
 }
 
 area(Shape.Circle(2))
@@ -314,8 +313,10 @@ func (Rect) isShape()   {}
   missing case Shape.Empty`), so adding a variant later points you at every
   switch that must handle it; a `default` silently swallows it instead.
   Only use `default` when the cases it covers genuinely share one meaning.
-- The switch is not yet treated as terminating, so a function returning
-  from every case still needs a final `panic("unreachable")` (or `return`).
+- An exhaustive switch (no `default`) whose cases all `return` or `panic`,
+  with no `break` out of it, is a terminating statement. **Never write a
+  trailing `panic("unreachable")` or dummy `return` after it** — the
+  compiler already panics if an invalid (unsafe-built) value reaches it.
 - The zero value is the first variant with zero fields — put the best
   default first. Enums compare with `==` when all fields are comparable,
   and `%v` prints `Circle{2}`.

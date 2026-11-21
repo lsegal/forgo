@@ -466,7 +466,6 @@ func area(s Shape) float64 {
 	case Shape.Empty:
 		return 0
 	}
-	panic("unreachable")
 }
 
 area(Shape.Circle(2))
@@ -529,10 +528,18 @@ out the type arguments, `Option.Some`):
   turns the check off, which also means a variant added later goes to
   `default` silently; prefer naming every variant.
 - Naming a variant twice is an error.
+- A switch without `default` that names every variant, whose clauses all
+  end in a terminating statement (`return`, `panic`, ...), and that no
+  `break` leaves, is itself a terminating statement, like a switch with a
+  `default`: a function that returns from every case needs nothing after
+  the switch. The compiler gives such a switch an implicit `default` that
+  panics with "forgo: enum value has an invalid tag", which only a value
+  built with `unsafe` can reach.
 
 An enum whose variants are all unit variants can also be used in an
 expression switch, `switch c { case Color.Red, Color.Green: ... }`, which
-is checked the same way: without a `default`, every variant must appear.
+is checked the same way: without a `default`, every variant must appear,
+and an exhaustive switch whose clauses all terminate is terminating.
 
 #### Values
 
@@ -569,10 +576,11 @@ is checked the same way: without a `default`, every variant must appear.
 `go vet` and other `go/types`-based tools understand them), and
 hot reload refuses a change to an enum's variants with "cannot reload
 without restarting" rather than applying it, since adding, removing or
-changing a variant changes the type's layout. Not yet included: a vet
-check that flags `default` clauses which could hide future variants, and
-treating an exhaustive switch whose cases all return as terminating (so a
-`panic` or `return` is still needed after it).
+changing a variant changes the type's layout. `go/types` treats an
+exhaustive switch whose clauses all terminate as terminating, exactly as
+the compiler does, so `go vet` and gopls don't report a missing return
+either. Not yet included: a vet check that flags `default` clauses which
+could hide future variants.
 
 #### Migrating from an interface-based sum type
 
