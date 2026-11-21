@@ -174,6 +174,9 @@ const (
 	WithStmt_Body
 	WithStmt_Name
 	WithStmt_Value
+	EnumType_Variants
+	EnumVariant_Name
+	EnumVariant_Params
 
 	maxKind
 )
@@ -314,4 +317,7 @@ var fieldInfos = [...]fieldInfo{
 	WithStmt_Body:      info[*ast.WithStmt]("Body"),
 	WithStmt_Name:      info[*ast.WithStmt]("Name"),
 	WithStmt_Value:     info[*ast.WithStmt]("Value"),
+	EnumType_Variants:  info[*ast.EnumType]("Variants"),
+	EnumVariant_Name:   info[*ast.EnumVariant]("Name"),
+	EnumVariant_Params: info[*ast.EnumVariant]("Params"),
 }

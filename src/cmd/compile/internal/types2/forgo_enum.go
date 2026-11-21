@@ -239,7 +239,7 @@ func (check *Checker) forgoVariantExpr(x *operand, e *syntax.SelectorExpr, s *St
 		check.errorf(e.Sel, UnexportedName, "variant %s of enum %s is not exported", fld.name, enum)
 		// ok to continue
 	}
-	check.recordUse(e.Sel, fld.Origin())
+	check.recordUse(e.Sel, check.forgoVariantObj(enum, i))
 	x.expr = e
 
 	payload := forgoEnumPayload(s, i)
@@ -264,6 +264,18 @@ func (check *Checker) forgoVariantExpr(x *operand, e *syntax.SelectorExpr, s *St
 		return
 	}
 
+	sig := check.forgoCtorSig(e.Pos(), enum, s, i)
+	x.mode_ = value
+	x.typ_ = sig
+}
+
+// forgoCtorSig returns the signature of the constructor of the variant
+// held by field i of enum struct s of enum type enum: func(fields) enum,
+// or, for a generic enum not yet instantiated (Option.Some), a generic
+// function func[T any](T) Option[T] whose type parameters are fresh
+// copies of the enum's.
+func (check *Checker) forgoCtorSig(pos syntax.Pos, enum Type, s *Struct, i int) *Signature {
+	payload := forgoEnumPayload(s, i)
 	params := make([]*Var, len(payload.fields))
 	for j, f := range payload.fields {
 		name := f.name
@@ -274,23 +286,48 @@ func (check *Checker) forgoVariantExpr(x *operand, e *syntax.SelectorExpr, s *St
 	}
 	sig := &Signature{
 		params:  NewTuple(params...),
-		results: NewTuple(NewParam(e.Pos(), check.pkg, "", enum)),
+		results: NewTuple(NewParam(pos, check.pkg, "", enum)),
 	}
 	if named := asNamed(enum); named != nil && isGeneric(named) {
-		// Option.Some: a generic function func[T any](T) Option[T], whose
-		// type parameters are fresh copies of the enum's.
 		tparams := named.TypeParams().list()
 		targs := make([]Type, len(tparams))
 		for j, tp := range tparams {
 			targs[j] = tp
 		}
-		sig.results = NewTuple(NewParam(e.Pos(), check.pkg, "", check.instance(e.Pos(), named, targs, nil, check.context())))
-		tparams2, typ := check.renameTParams(e.Pos(), tparams, sig)
+		sig.results = NewTuple(NewParam(pos, check.pkg, "", check.instance(pos, named, targs, nil, check.context())))
+		tparams2, typ := check.renameTParams(pos, tparams, sig)
 		sig = typ.(*Signature)
 		sig.tparams = &TypeParamList{tparams: tparams2}
 	}
-	x.mode_ = value
-	x.typ_ = sig
+	return sig
+}
+
+// forgoVariantObj returns the object recorded as the use of a variant
+// name in a selector naming field i of enum type enum (Shape.Circle): a
+// function, the variant's constructor, for a variant with fields, and a
+// variable of the enum type for a unit variant. Like a generic function,
+// the object belongs to the enum's origin type, so that every use of a
+// variant records the same object. It is not declared in any scope.
+func (check *Checker) forgoVariantObj(enum Type, i int) Object {
+	if named := asNamed(enum); named != nil {
+		enum = named.Origin()
+	}
+	s := forgoEnumOf(enum)
+	fld := s.fields[i]
+	if obj := check.forgoVariantObjs[fld]; obj != nil {
+		return obj
+	}
+	var obj Object
+	if len(forgoEnumPayload(s, i).fields) == 0 {
+		obj = NewVar(fld.pos, fld.pkg, fld.name, enum)
+	} else {
+		obj = NewFunc(fld.pos, fld.pkg, fld.name, check.forgoCtorSig(fld.pos, enum, s, i))
+	}
+	if check.forgoVariantObjs == nil {
+		check.forgoVariantObjs = make(map[*Var]Object)
+	}
+	check.forgoVariantObjs[fld] = obj
+	return obj
 }
 
 // forgoEnumFieldSelect reports (and returns true for) a selector that
@@ -441,7 +478,14 @@ func (check *Checker) forgoEnumCase(e syntax.Expr, enum Type, es *Struct) int {
 	if !fld.Exported() && fld.pkg != check.pkg {
 		check.errorf(sel.Sel, UnexportedName, "variant %s of enum %s is not exported", fld.name, enum)
 	}
-	check.recordUse(sel.Sel, fld.Origin())
+	check.recordUse(sel.Sel, check.forgoVariantObj(enum, i))
+	// Record the case as a type, like any type switch case: the type of
+	// the switch variable in a case naming just this variant.
+	T := enum
+	if len(forgoEnumPayload(es, i).fields) > 0 {
+		T = fld.typ
+	}
+	check.recordTypeAndValue(e, typexpr, T, nil)
 	return i
 }
 

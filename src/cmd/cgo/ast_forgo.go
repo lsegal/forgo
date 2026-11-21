@@ -8,9 +8,10 @@ package main
 
 import "go/ast"
 
-// walkForgo walks the forgo-only node types (postfix if, throw, with and ?) for
-// walk, reporting whether x was one of them. The bootstrap toolchain's
-// go/ast doesn't define them, hence the separate file.
+// walkForgo walks the forgo-only node types (postfix if, throw, with, ?
+// and enum types) for walk, reporting whether x was one of them. The
+// bootstrap toolchain's go/ast doesn't define them, hence the separate
+// file.
 func (f *File) walkForgo(x any, visit func(*File, any, astContext)) bool {
 	switch n := x.(type) {
 	case *ast.TryExpr:
@@ -24,6 +25,12 @@ func (f *File) walkForgo(x any, visit func(*File, any, astContext)) bool {
 	case *ast.PostfixIfStmt:
 		f.walk(n.Stmt, ctxStmt, visit)
 		f.walk(&n.Cond, ctxExpr, visit)
+	case *ast.EnumType:
+		for _, v := range n.Variants {
+			if v.Params != nil {
+				f.walk(v.Params, ctxParam, visit)
+			}
+		}
 	default:
 		return false
 	}

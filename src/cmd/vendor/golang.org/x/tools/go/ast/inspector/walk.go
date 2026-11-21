@@ -137,6 +137,15 @@ func walk(v *visitor, ek edge.Kind, index int, node ast.Node) {
 	case *ast.StructType:
 		walk(v, edge.StructType_Fields, -1, n.Fields)
 
+	case *ast.EnumType: // forgo
+		walkList(v, edge.EnumType_Variants, n.Variants)
+
+	case *ast.EnumVariant: // forgo
+		walk(v, edge.EnumVariant_Name, -1, n.Name)
+		if n.Params != nil {
+			walk(v, edge.EnumVariant_Params, -1, n.Params)
+		}
+
 	case *ast.FuncType:
 		if n.TypeParams != nil {
 			walk(v, edge.FuncType_TypeParams, -1, n.TypeParams)

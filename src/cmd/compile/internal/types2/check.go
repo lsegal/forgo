@@ -114,6 +114,7 @@ type Checker struct {
 	// forgo: enum support (see forgo_enum.go)
 	forgoEnumCall     syntax.Expr                   // function of the call being checked
 	forgoEnumUnitCase map[*syntax.SelectorExpr]bool // unit variant selectors
+	forgoVariantObjs  map[*Var]Object               // see forgoVariantObj
 
 	// package information
 	// (initialized by NewChecker, valid for the life-time of checker)

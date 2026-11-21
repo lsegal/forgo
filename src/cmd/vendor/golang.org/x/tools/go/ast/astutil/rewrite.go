@@ -297,6 +297,15 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 	case *ast.StructType:
 		a.apply(n, "Fields", nil, n.Fields)
 
+	case *ast.EnumType: // forgo
+		a.applyList(n, "Variants")
+
+	case *ast.EnumVariant: // forgo
+		a.apply(n, "Name", nil, n.Name)
+		if n.Params != nil {
+			a.apply(n, "Params", nil, n.Params)
+		}
+
 	case *ast.FuncType:
 		if tparams := n.TypeParams; tparams != nil {
 			a.apply(n, "TypeParams", nil, tparams)

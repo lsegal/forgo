@@ -456,6 +456,12 @@ func childrenOf(n ast.Node) []ast.Node {
 	case *ast.StructType:
 		children = append(children, tok(n.Struct, len("struct")))
 
+	case *ast.EnumType: // forgo
+		children = append(children,
+			tok(n.Enum, len("enum")),
+			tok(n.Lbrace, len("{")),
+			tok(n.Rbrace, len("}")))
+
 	case *ast.SwitchStmt:
 		children = append(children, tok(n.Switch, len("switch")))
 
@@ -653,6 +659,10 @@ func NodeDescription(n ast.Node) string {
 		return "*-operation" // load/store expr or pointer type
 	case *ast.StructType:
 		return "struct type"
+	case *ast.EnumType:
+		return "enum type"
+	case *ast.EnumVariant:
+		return "enum variant"
 	case *ast.SwitchStmt:
 		return "switch statement"
 	case *ast.TypeAssertExpr:
