@@ -555,7 +555,8 @@ is checked the same way: without a `default`, every variant must appear.
   struct tag `fgo:"enum"`, followed by one field per variant, named after
   it, holding a struct of its fields. Tag value `i` means the variant in
   field `i+1`; positional fields are named `_0`, `_1`, ... and tagged
-  `fgo:"pos"`.
+  `fgo:"pos"`. The `fgo:"enum"` tag on a `_tag` field is reserved: a struct
+  written that way by hand is treated as an enum, too.
 - **Encoding**: packages that work through reflection, such as
   `encoding/json` and `encoding/gob`, see that same struct, so only
   exported variant names with exported fields are encoded and the tag is
