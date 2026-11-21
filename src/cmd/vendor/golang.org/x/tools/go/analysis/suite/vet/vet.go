@@ -25,6 +25,7 @@ import (
 	"golang.org/x/tools/go/analysis/passes/copylock"
 	"golang.org/x/tools/go/analysis/passes/defers"
 	"golang.org/x/tools/go/analysis/passes/directive"
+	"golang.org/x/tools/go/analysis/passes/enumdefault" // forgo
 	"golang.org/x/tools/go/analysis/passes/errorsas"
 	"golang.org/x/tools/go/analysis/passes/framepointer"
 	"golang.org/x/tools/go/analysis/passes/hostport"
@@ -68,6 +69,7 @@ var Suite = []*analysis.Analyzer{
 	copylock.Analyzer,
 	defers.Analyzer,
 	directive.Analyzer,
+	enumdefault.Analyzer, // forgo
 	errorsas.Analyzer,
 	// fieldalignment.Analyzer omitted: too noisy
 	framepointer.Analyzer,

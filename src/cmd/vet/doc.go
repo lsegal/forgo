@@ -38,6 +38,7 @@ To list the available checks, run "go tool vet help":
 	copylocks        check for locks erroneously passed by value
 	defers           report common mistakes in defer statements
 	directive        check Go toolchain directives such as //go:debug
+	enumdefault      report default clauses that hide enum variants (forgo; off by default)
 	errorsas         report passing non-pointer or non-error values to errors.As
 	framepointer     report assembly that clobbers the frame pointer before saving it
 	hostport         check format of addresses passed to net.Dial
@@ -65,7 +66,8 @@ To list the available checks, run "go tool vet help":
 
 For details and flags of a particular check, such as printf, run "go tool vet help printf".
 
-By default, all checks are performed.
+By default, all checks except enumdefault are performed.
+Enumdefault runs only when enabled with -enumdefault, alongside the other checks.
 If any flags are explicitly set to true, only those tests are run.
 Conversely, if any flag is explicitly set to false, only those tests are disabled.
 Thus -printf=true runs the printf check,

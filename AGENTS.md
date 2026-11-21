@@ -314,6 +314,8 @@ func (Rect) isShape()   {}
   missing case Shape.Empty`), so adding a variant later points you at every
   switch that must handle it; a `default` silently swallows it instead.
   Only use `default` when the cases it covers genuinely share one meaning.
+  `forgo vet -enumdefault` lists every `default` in an enum switch and the
+  variants it hides; run it when auditing switches after adding a variant.
 - The switch is not yet treated as terminating, so a function returning
   from every case still needs a final `panic("unreachable")` (or `return`).
 - The zero value is the first variant with zero fields — put the best
