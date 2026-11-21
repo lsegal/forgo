@@ -230,6 +230,18 @@ func EndPos(n Node) Pos {
 			m = n.Elem
 		case *DotsType:
 			m = n.Elem
+		case *EnumType:
+			if l := len(n.VariantList); l > 0 {
+				m = n.VariantList[l-1]
+				continue
+			}
+			return n.Pos()
+		case *EnumVariant:
+			if l := lastField(n.ParamList); l != nil {
+				m = l
+				continue
+			}
+			return n.Name.Pos()
 		case *StructType:
 			if l := lastField(n.FieldList); l != nil {
 				m = l

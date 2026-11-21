@@ -194,6 +194,15 @@ func (w walker) node(n Node) {
 			}
 		}
 
+	case *EnumType:
+		for _, v := range n.VariantList {
+			w.node(v)
+		}
+
+	case *EnumVariant:
+		w.node(n.Name)
+		w.fieldList(n.ParamList)
+
 	case *Field:
 		if n.Name != nil {
 			w.node(n.Name)
