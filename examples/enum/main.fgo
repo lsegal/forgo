@@ -1,0 +1,96 @@
+// Command enum shows forgo's enum types: closed sum types whose variants
+// carry their own fields, taken apart with an ordinary type switch that
+// the compiler checks covers every variant.
+//
+//	forgo run ./examples/enum
+package main
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
+)
+
+// A Shape is exactly one of these variants.
+type Shape enum {
+	Circle(radius float64)
+	Rect(w, h float64)
+	Empty
+}
+
+// Area names every variant, so the switch needs no default. Add a variant
+// to Shape and this function stops compiling until it handles it:
+//
+//	switch on Shape is not exhaustive: missing case Shape.Triangle
+func (s Shape) Area() float64 {
+	switch v := s.(type) {
+	case Shape.Circle:
+		return math.Pi * v.radius * v.radius // v holds Circle's fields
+	case Shape.Rect:
+		return v.w * v.h
+	case Shape.Empty:
+		return 0
+	}
+	panic("unreachable")
+}
+
+// A case naming several variants binds the enum value itself.
+func solid(s Shape) bool {
+	switch v := s.(type) {
+	case Shape.Circle, Shape.Rect:
+		return v.Area() > 0
+	default:
+		return false
+	}
+}
+
+// Generic enums take their type arguments from the constructor's
+// arguments, or spell them out.
+type Result[T any] enum {
+	Ok(T)
+	Err(error)
+}
+
+func parse(s string) Result[int] {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return Result[int].Err(err)
+	}
+	return Result.Ok(n) // Result[int]
+}
+
+// Unit-only enums work as checked constants, in an expression switch too.
+type Level enum { Debug; Info; Warn }
+
+func (l Level) String() string {
+	switch l {
+	case Level.Debug:
+		return "debug"
+	case Level.Info:
+		return "info"
+	case Level.Warn:
+		return "warn"
+	}
+	return "?"
+}
+
+func main() {
+	for _, s := range []Shape{Shape.Circle(1), Shape.Rect(2, 3), Shape.Empty} {
+		fmt.Printf("%v %+v area %.2f solid %v\n", s, s, s.Area(), solid(s))
+	}
+
+	var zero Shape // the zero value is the first variant, with zero fields
+	fmt.Println("zero:", zero, zero == Shape.Circle(0))
+
+	for _, in := range []string{"42", "x"} {
+		switch v := parse(in).(type) {
+		case Result.Ok:
+			fmt.Println("parsed", v._0) // positional fields are _0, _1, ...
+		case Result.Err:
+			fmt.Println("error:", errors.Unwrap(v._0))
+		}
+	}
+
+	fmt.Println(Level.Info, []Level{Level.Warn, Level.Debug})
+}

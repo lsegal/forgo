@@ -443,6 +443,183 @@ run({Name: "job"})  // same as: run(&options{Name: "job"})
 See [examples/tryop/structargs.fgo](examples/tryop/structargs.fgo) for a
 runnable version.
 
+### `enum` — sum types with exhaustive `switch`
+
+An enum is a closed set of variants, each of which can carry its own
+fields, like Rust's `enum`. Values are built with variant constructors and
+taken apart with an ordinary type switch, and the compiler rejects a
+switch that doesn't handle every variant:
+
+```go
+type Shape enum {
+	Circle(radius float64)
+	Rect(w, h float64)
+	Empty
+}
+
+func area(s Shape) float64 {
+	switch v := s.(type) {
+	case Shape.Circle:
+		return math.Pi * v.radius * v.radius
+	case Shape.Rect:
+		return v.w * v.h
+	case Shape.Empty:
+		return 0
+	}
+	panic("unreachable")
+}
+
+area(Shape.Circle(2))
+area(Shape.Empty)
+```
+
+Leave out a case and the switch doesn't compile; the error is reported at
+the switch and names every missing variant:
+
+```
+./main.go:12:2: switch on Shape is not exhaustive: missing cases Shape.Rect, Shape.Empty
+```
+
+So adding a variant to an enum breaks every switch over it that doesn't
+handle the new variant, until it does (or has a `default`).
+
+#### Declaration
+
+- `type T enum { ... }` lists the variants, one per line or separated by
+  `;`. A variant is a name, optionally followed by its fields written like
+  a function's parameters: named (`Rect(w, h float64)`) or positional
+  (`Some(T)`, `Pair(int, string)`). A variant without fields is a unit
+  variant.
+- Enums can be generic: `type Option[T any] enum { Some(T); None }`,
+  `type Result[T, E any] enum { Ok(T); Err(E) }`.
+- Methods can be declared on an enum type. A method can't share a
+  variant's name.
+- An enum is always a declared (named) type, local or package-level. It
+  can't be the right-hand side of an alias. `enum` is only a keyword
+  directly after `type Name` and before `{`, so existing identifiers named
+  `enum` are unaffected.
+- Variant names follow Go's export rules: a lower-case variant can only be
+  constructed or named in a case by its own package, so other packages
+  need a `default` to switch over such an enum.
+
+#### Construction
+
+- `Shape.Circle(2)` and `Shape.Rect(1, 2)` call the variant's constructor,
+  type-checked like a function call. `Shape.Empty` is a unit variant's
+  value. A constructor must be called; `f := Shape.Circle` is an error.
+- A generic enum's constructor infers the type arguments from its
+  arguments, as a generic function does: `Option.Some(1)` is an
+  `Option[int]`. When there is nothing to infer from, write them:
+  `Option[int].None`, `Result.Ok[int, error](1)`.
+- Struct literals of an enum type (`Shape{}`), selecting its internal
+  fields, and converting another type to an enum type are errors.
+
+#### Matching
+
+The primary (and only) matching form is the type switch,
+`switch v := x.(type)`, with cases naming variants of `x`'s enum type
+(`Shape.Circle`, `pkg.Shape.Circle`; a generic enum's variants can leave
+out the type arguments, `Option.Some`):
+
+- In a case naming one variant with fields, `v` holds that variant's
+  fields: `v.radius`, and `v._0`, `v._1`, ... for positional fields.
+- In a case naming several variants, a unit variant, or `default`, `v` is
+  the enum value itself (as in a type switch over an interface).
+- A switch without `default` must name every variant. A `default` clause
+  turns the check off, which also means a variant added later goes to
+  `default` silently; prefer naming every variant.
+- Naming a variant twice is an error.
+
+An enum whose variants are all unit variants can also be used in an
+expression switch, `switch c { case Color.Red, Color.Green: ... }`, which
+is checked the same way: without a `default`, every variant must appear.
+
+#### Values
+
+- **Representation**: an enum value is a tag followed by each variant's
+  fields, stored inline — a struct, never an interface. Constructing one
+  doesn't allocate, and a switch over one compiles to a switch on the tag.
+  Only the fields of the variant the tag names are ever non-zero.
+- **Zero value**: the first variant, with zero-valued fields (`var s
+  Shape` is `Shape.Circle(0)`). Put the variant that makes the best
+  default first.
+- **Equality**: enum values are comparable when all variants' fields are,
+  and are equal when they hold the same variant with equal fields. They
+  can be map keys under the same condition.
+- **Printing**: `%v` prints the variant and its fields (`Circle{2}`,
+  `Rect{1 2}`, `Empty`), `%+v` adds field names (`Rect{w:1 h:2}`), and `%#v`
+  prints a constructor call (`main.Shape.Rect(1, 2)`). A `String` method
+  on the enum takes precedence, as for any type.
+- **Reflection**: `reflect` sees the representation: a struct whose first
+  field is `_tag` (a `uint8`, or `uint16` beyond 256 variants) with the
+  struct tag `fgo:"enum"`, followed by one field per variant, named after
+  it, holding a struct of its fields. Tag value `i` means the variant in
+  field `i+1`; positional fields are named `_0`, `_1`, ... and tagged
+  `fgo:"pos"`.
+- **Encoding**: packages that work through reflection, such as
+  `encoding/json` and `encoding/gob`, see that same struct, so only
+  exported variant names with exported fields are encoded and the tag is
+  not. Give an enum `MarshalJSON`/`UnmarshalJSON` (or the equivalent)
+  methods to control its encoding.
+
+#### Tooling
+
+`gofmt`/`forgofmt` format enum declarations, `go/types` checks them (so
+`go vet` and other `go/types`-based tools understand them), and
+hot reload refuses a change to an enum's variants with "cannot reload
+without restarting" rather than applying it, since adding, removing or
+changing a variant changes the type's layout. Not yet included: a vet
+check that flags `default` clauses which could hide future variants, and
+treating an exhaustive switch whose cases all return as terminating (so a
+`panic` or `return` is still needed after it).
+
+#### Migrating from an interface-based sum type
+
+The usual Go pattern is a sealed interface plus one struct per variant:
+
+```go
+type Shape interface{ isShape() }
+
+type Circle struct{ Radius float64 }
+type Rect struct{ W, H float64 }
+type Empty struct{}
+
+func (Circle) isShape() {}
+func (Rect) isShape()   {}
+func (Empty) isShape()  {}
+
+func area(s Shape) float64 {
+	switch v := s.(type) {
+	case Circle:
+		return math.Pi * v.Radius * v.Radius
+	case Rect:
+		return v.W * v.H
+	}
+	return 0 // Empty, nil, and any variant added later all land here
+}
+```
+
+As an enum:
+
+1. Replace the interface and the variant structs with one `enum`
+   declaration whose variants carry the structs' fields:
+   `type Shape enum { Circle(Radius float64); Rect(W, H float64); Empty }`.
+2. Replace composite literals with constructors: `Circle{Radius: 2}`
+   becomes `Shape.Circle(2)`, `Empty{}` becomes `Shape.Empty`.
+3. Keep the type switches, writing the cases as variants: `case Circle:`
+   becomes `case Shape.Circle:`. Field access through `v` is unchanged.
+4. Delete the marker methods, and the `default`/fallthrough `return` that
+   covered unknown variants and `nil`: the compiler now proves the switch
+   is complete, and an enum can't be `nil`.
+5. Methods on individual variant structs become methods on the enum that
+   switch on the variant.
+
+The enum version doesn't box values in an interface, and a variant added
+later is a compile error in every switch that misses it instead of a
+silent fallthrough.
+
+See [examples/enum](examples/enum/main.fgo) for a runnable version.
+
 ### `comptime/embed` — compile-time file reads
 
 `comptime/embed` is a small stdlib package for reading files and inspecting
@@ -1000,6 +1177,8 @@ forgo: cannot reload without restarting — the type main.Point changed shape
 
 - **A struct's layout changed.** Objects already on the heap were laid out
   by the old descriptor, and code that is not being replaced still uses it.
+  This includes an enum's variants: adding, removing, reordering or
+  changing a variant, or its fields, changes the enum's layout.
 - **A function's signature changed.** Callers that are not being replaced
   would still pass arguments the old way.
 - **A package's initialization changed.** Package `init` runs once per

@@ -12,7 +12,8 @@
 # far; both hard-fail (panic, or log.Fatal — an outright process exit) on
 # an unrecognized node type. This script patches a local copy of x/tools to
 # add cases for *ast.TryExpr, *ast.ThrowStmt, *ast.PostfixIfStmt and
-# *ast.WithStmt in both, and builds gopls against that patched copy via a
+# *ast.WithStmt in both (plus *ast.EnumType and *ast.EnumVariant in the
+# walker), and builds gopls against that patched copy via a
 # go.mod replace directive. There may be other such switches elsewhere in x/tools not yet
 # hit/patched; if forgopls dies with "internal error" or "unexpected
 # node/statement type" pointing at one of these three from a different
@@ -77,12 +78,14 @@ s = s.replace(
     + "\n\tcase *ast.ThrowStmt:\n\t\t// forgo: throw X\n\t\twalk(v, edge.Invalid, -1, n.X)\n"
     + "\n\tcase *ast.PostfixIfStmt:\n\t\t// forgo: STMT if COND\n\t\twalk(v, edge.Invalid, -1, n.Stmt)\n\t\twalk(v, edge.Invalid, -1, n.Cond)\n"
     + "\n\tcase *ast.WithStmt:\n\t\t// forgo: with NAME := VALUE { BODY }\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\twalk(v, edge.Invalid, -1, n.Value)\n\t\twalk(v, edge.Invalid, -1, n.Body)\n",
+    + "\n\tcase *ast.EnumType:\n\t\t// forgo: enum { VARIANTS }\n\t\twalkList(v, edge.Invalid, n.Variants)\n"
+    + "\n\tcase *ast.EnumVariant:\n\t\t// forgo: NAME(PARAMS)\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\tif n.Params != nil {\n\t\t\twalk(v, edge.Invalid, -1, n.Params)\n\t\t}\n",
     1,
 )
 
 open(path, "w", encoding="utf-8", newline="").write(s)
 PYEOF
-	echo "patched $WALK_FILE for TryExpr/ThrowStmt/PostfixIfStmt/WithStmt"
+	echo "patched $WALK_FILE for TryExpr/ThrowStmt/PostfixIfStmt/WithStmt/EnumType"
 fi
 
 UNREACHABLE_FILE="$PATCHED/go/analysis/passes/unreachable/unreachable.go"
