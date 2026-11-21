@@ -264,3 +264,116 @@ var arr [n]int
 		t.Errorf("ws = %v, want a 3-element composite", c.Val())
 	}
 }
+
+// TestForgoEnumInfo checks what go/types records for enum code, which
+// go/types-based tools rely on: a variant selector's Sel uses a function
+// (the constructor) or a variable (a unit variant) that is shared by
+// every use and positioned at the variant's declaration, a constructor
+// call has the enum type, and a type switch case has the type of the
+// switch variable in that case.
+func TestForgoEnumInfo(t *testing.T) {
+	const src = `
+package p
+
+type Shape enum {
+	Circle(radius float64)
+	Empty
+}
+
+type Option[T any] enum { Some(T); None }
+
+func f(s Shape) {
+	c := Shape.Circle(1)
+	e := Shape.Empty
+	o := Option.Some("x")
+	_, _, _ = c, e, o
+	switch v := s.(type) {
+	case Shape.Circle:
+		_ = v.radius
+	case Shape.Empty:
+		_ = v
+	}
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &Info{
+		Types: make(map[ast.Expr]TypeAndValue),
+		Defs:  make(map[*ast.Ident]Object),
+		Uses:  make(map[*ast.Ident]Object),
+	}
+	if _, err := (&Config{}).Check("p", fset, []*ast.File{f}, info); err != nil {
+		t.Fatal(err)
+	}
+
+	uses := make(map[string][]Object) // variant name -> objects used
+	for id, obj := range info.Uses {
+		switch id.Name {
+		case "Circle", "Empty", "Some":
+			uses[id.Name] = append(uses[id.Name], obj)
+		}
+	}
+	for _, name := range []string{"Circle", "Empty", "Some"} {
+		objs := uses[name]
+		if len(objs) == 0 {
+			t.Errorf("no use of %s recorded", name)
+			continue
+		}
+		for _, obj := range objs[1:] {
+			if obj != objs[0] {
+				t.Errorf("uses of %s record different objects %v and %v", name, objs[0], obj)
+			}
+		}
+		if line := fset.Position(objs[0].Pos()).Line; line != map[string]int{"Circle": 5, "Empty": 6, "Some": 9}[name] {
+			t.Errorf("%s is declared at line %d", name, line)
+		}
+	}
+	if fn, ok := uses["Circle"][0].(*Func); !ok || fn.Type().String() != "func(radius float64) p.Shape" {
+		t.Errorf("Circle uses %v, want the constructor func(radius float64) p.Shape", uses["Circle"][0])
+	}
+	if v, ok := uses["Empty"][0].(*Var); !ok || v.Type().String() != "p.Shape" {
+		t.Errorf("Empty uses %v, want a variable of type p.Shape", uses["Empty"][0])
+	}
+	if fn, ok := uses["Some"][0].(*Func); !ok || fn.Type().(*Signature).TypeParams().Len() != 1 {
+		t.Errorf("Some uses %v, want a generic constructor", uses["Some"][0])
+	}
+
+	want := map[string]string{
+		`Shape.Circle(1)`:   "p.Shape",
+		`Shape.Empty`:       "p.Shape",
+		`Option.Some("x")`:  "p.Option[string]",
+		`v.radius`:          "float64",
+		`Shape.Circle`:      "func(radius float64) p.Shape",
+		`case Shape.Circle`: "struct{radius float64}",
+		`case Shape.Empty`:  "p.Shape",
+	}
+	got := make(map[string]string)
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CaseClause:
+			for _, e := range n.List {
+				tv := info.Types[e]
+				if !tv.IsType() {
+					t.Errorf("case %s is not recorded as a type", ExprString(e))
+				}
+				got["case "+ExprString(e)] = tv.Type.String()
+			}
+			return true
+		case ast.Expr:
+			if tv, ok := info.Types[n]; ok {
+				if _, seen := got[ExprString(n)]; !seen {
+					got[ExprString(n)] = tv.Type.String()
+				}
+			}
+		}
+		return true
+	})
+	for expr, typ := range want {
+		if got[expr] != typ {
+			t.Errorf("type of %s = %q, want %q", expr, got[expr], typ)
+		}
+	}
+}

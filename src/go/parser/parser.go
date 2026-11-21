@@ -2689,7 +2689,7 @@ func (p *parser) parseGenericType(spec *ast.TypeSpec, openPos token.Pos, name0 *
 		spec.Assign = p.pos
 		p.next()
 	}
-	spec.Type = p.parseType()
+	spec.Type = p.parseTypeSpecType() // forgo: enum types
 }
 
 func (p *parser) parseTypeSpec(doc *ast.CommentGroup, _ token.Token, _ int) ast.Spec {
@@ -2759,7 +2759,7 @@ func (p *parser) parseTypeSpec(doc *ast.CommentGroup, _ token.Token, _ int) ast.
 			spec.Assign = p.pos
 			p.next()
 		}
-		spec.Type = p.parseType()
+		spec.Type = p.parseTypeSpecType() // forgo: enum types
 	}
 
 	spec.Comment = p.expectSemi()

@@ -51,6 +51,7 @@ a:hover { color: var(--color-accent-600); }
       <a href="#with" style="font-size:15px;line-height:28px;text-decoration:none">with</a>
       <a href="#postfix" style="font-size:15px;line-height:28px;text-decoration:none">Postfix if</a>
       <a href="#structargs" style="font-size:15px;line-height:28px;text-decoration:none">Struct literal arguments</a>
+      <a href="#enum" style="font-size:15px;line-height:28px;text-decoration:none">enum sum types</a>
       <a href="#comptime" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:comptime</a>
       <a href="#macros" style="font-size:15px;line-height:28px;text-decoration:none">//fgo:macro</a>
       <a href="#packages" style="font-size:15px;line-height:28px;text-decoration:none">comptime/embed</a>
@@ -214,6 +215,41 @@ run({Name: <span style="color:var(--color-accent-700)">"job"</span>})  <span sty
       <li><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">{...}</code> and <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">&amp;{...}</code> are only accepted as a whole call argument: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">x := &amp;{A: 1}</code> is still a syntax error.</li>
     </ul>
     <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/tryop/structargs.fgo</code></p>
+  </section>
+
+  <section id="enum" style="padding:0 0 70px">
+    <h2 style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:42px;letter-spacing:-0.015em;margin:0"><code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">enum</code> — sum types with exhaustive <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.86em">switch</code></h2>
+    <p style="font-size:16px;line-height:28px;max-width:64ch;margin:20px 0 0;color:color-mix(in srgb,var(--color-text) 84%,transparent)">An enum is a closed set of variants, each of which can carry its own fields, like Rust's <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">enum</code>. Values are taken apart with an ordinary type switch, and the compiler rejects a switch that doesn't handle every variant.</p>
+    <pre style="margin:28px 0 0;padding:22px 24px;background:var(--color-surface);border-radius:2px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:22px;white-space:pre">type Shape enum {
+	Circle(radius float64)
+	Rect(w, h float64)
+	Empty
+}
+
+func area(s Shape) float64 {
+	switch v := s.(type) {
+	case Shape.Circle:
+		return math.Pi * v.radius * v.radius
+	case Shape.Rect:
+		return v.w * v.h
+	case Shape.Empty:
+		return 0
+	}
+	panic(<span style="color:var(--color-accent-700)">"unreachable"</span>)
+}
+
+area(Shape.Circle(2))
+<span style="color:var(--color-neutral-600)">// Leave out a case:
+// switch on Shape is not exhaustive: missing case Shape.Empty</span></pre>
+    <ul style="font-size:16px;line-height:28px;max-width:70ch;margin:28px 0 0;padding-left:22px;color:color-mix(in srgb,var(--color-text) 84%,transparent)">
+      <li style="margin-bottom:14px">Variants are a name, optionally followed by fields written like parameters: named (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Rect(w, h float64)</code>) or positional (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Some(T)</code>). Enums can be generic (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">type Option[T any] enum { Some(T); None }</code>) and have methods.</li>
+      <li style="margin-bottom:14px">Build values with constructors, type-checked like calls: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Shape.Circle(2)</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Shape.Empty</code>. A generic enum infers its type arguments (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Option.Some(1)</code> is an <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Option[int]</code>), or spell them out: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Option[int].None</code>.</li>
+      <li style="margin-bottom:14px">Match with <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">switch v := x.(type)</code>. In a case naming one variant with fields, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">v</code> holds its fields (<code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">v.radius</code>; positional ones are <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">v._0</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">v._1</code>, ...). In a case naming several variants, a unit variant, or <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">default</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">v</code> is the enum value.</li>
+      <li style="margin-bottom:14px">A switch without <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">default</code> must name every variant, so adding a variant breaks every switch that misses it. An expression switch over an enum of unit variants is checked the same way.</li>
+      <li style="margin-bottom:14px">Values are a tag plus each variant's fields, stored inline: no interface boxing. The zero value is the first variant with zero fields; values compare with <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">==</code> when all fields are comparable; <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">%v</code> prints <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Circle{2}</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">%+v</code> <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">Rect{w:1 h:2}</code>, <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">%#v</code> <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">main.Shape.Rect(1, 2)</code>.</li>
+      <li>Reflection and encoders see the representation: a struct whose first field <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">_tag</code> carries the tag <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">fgo:"enum"</code>, then one field per variant. Give an enum <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14.5px">MarshalJSON</code> methods to control its encoding.</li>
+    </ul>
+    <p style="font-size:15.5px;line-height:28px;margin:24px 0 0;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Runnable: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px">examples/enum</code></p>
   </section>
 
   <section id="comptime" style="padding:0 0 70px">

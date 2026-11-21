@@ -464,6 +464,16 @@ type (
 		Incomplete bool       // true if (source) fields are missing in the Fields list
 	}
 
+	// An EnumType node represents a forgo enum type:
+	// enum { Variant(fields); ... }. It only appears as the type of a
+	// TypeSpec.
+	EnumType struct {
+		Enum     token.Pos      // position of "enum" keyword
+		Lbrace   token.Pos      // position of "{"
+		Variants []*EnumVariant // list of variants
+		Rbrace   token.Pos      // position of "}"
+	}
+
 	// Pointer types are represented via StarExpr nodes.
 
 	// A FuncType node represents a function type.
@@ -524,6 +534,7 @@ func (x *KeyValueExpr) Pos() token.Pos   { return x.Key.Pos() }
 func (x *TryExpr) Pos() token.Pos        { return x.X.Pos() }
 func (x *ArrayType) Pos() token.Pos      { return x.Lbrack }
 func (x *StructType) Pos() token.Pos     { return x.Struct }
+func (x *EnumType) Pos() token.Pos       { return x.Enum }
 func (x *FuncType) Pos() token.Pos {
 	if x.Func.IsValid() || x.Params == nil { // see issue 3870
 		return x.Func
@@ -567,6 +578,7 @@ func (x *KeyValueExpr) End() token.Pos   { return x.Value.End() }
 func (x *TryExpr) End() token.Pos        { return x.Question + 1 }
 func (x *ArrayType) End() token.Pos      { return x.Elt.End() }
 func (x *StructType) End() token.Pos     { return x.Fields.End() }
+func (x *EnumType) End() token.Pos       { return x.Rbrace + 1 }
 func (x *FuncType) End() token.Pos {
 	if x.Results != nil {
 		return x.Results.End()
@@ -600,6 +612,7 @@ func (*TryExpr) exprNode()        {}
 
 func (*ArrayType) exprNode()     {}
 func (*StructType) exprNode()    {}
+func (*EnumType) exprNode()      {}
 func (*FuncType) exprNode()      {}
 func (*InterfaceType) exprNode() {}
 func (*MapType) exprNode()       {}
@@ -1199,4 +1212,19 @@ func Unparen(e Expr) Expr {
 		}
 		e = paren.X
 	}
+}
+
+// An EnumVariant node represents one variant of a forgo enum type: a name,
+// optionally followed by a parenthesized list of fields.
+type EnumVariant struct {
+	Name   *Ident     // variant name
+	Params *FieldList // variant fields; nil for a unit variant
+}
+
+func (v *EnumVariant) Pos() token.Pos { return v.Name.Pos() }
+func (v *EnumVariant) End() token.Pos {
+	if v.Params != nil {
+		return v.Params.End()
+	}
+	return v.Name.End()
 }

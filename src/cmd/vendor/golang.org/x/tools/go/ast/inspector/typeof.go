@@ -77,6 +77,8 @@ const (
 	nThrowStmt
 	nTryExpr
 	nWithStmt
+	nEnumType
+	nEnumVariant
 )
 
 // typeOf returns a distinct single-bit value that represents the type of n.
@@ -227,6 +229,10 @@ func typeOf(n ast.Node) uint64 {
 		return 1 << nTryExpr
 	case *ast.WithStmt:
 		return 1 << nWithStmt
+	case *ast.EnumType:
+		return 1 << nEnumType
+	case *ast.EnumVariant:
+		return 1 << nEnumVariant
 	}
 	return 0
 }

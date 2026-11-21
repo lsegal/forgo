@@ -56,6 +56,10 @@ var stringTests = [][2]string{
 	dup("package p"),
 	dup("package p; type _ int; type T1 = struct{}; type ( _ *struct{}; T2 = float32 )"),
 
+	// forgo: enum types
+	dup("package p; type _ enum {A; B(int); C(x, y int, z string)}"),
+	dup("package p; type _[T any] enum {Some(T); None}"),
+
 	// generic type declarations (given type separated with blank from LHS)
 	dup("package p; type _[T any] struct{}"),
 	dup("package p; type _[A, B, C interface{m()}] struct{}"),

@@ -660,7 +660,7 @@ func (p *parser) typeDecl(group *Group) Decl {
 				// d.Name "[" pname ptype "," ...
 				d.TParamList = p.paramList(pname, ptype, _Rbrack, true, false) // ptype may be nil
 				d.Alias = p.gotAssign()
-				d.Type = p.typeOrNil()
+				d.Type = p.typeDeclType() // forgo: enum types
 			} else {
 				// d.Name "[" pname "]" ...
 				// d.Name "[" x ...
@@ -676,7 +676,7 @@ func (p *parser) typeDecl(group *Group) Decl {
 		}
 	} else {
 		d.Alias = p.gotAssign()
-		d.Type = p.typeOrNil()
+		d.Type = p.typeDeclType() // forgo: enum types
 	}
 
 	if d.Type == nil {

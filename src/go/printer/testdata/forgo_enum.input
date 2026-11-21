@@ -1,0 +1,17 @@
+package p
+
+type Shape enum {
+  Circle(radius float64)
+       Rect(w, h float64)
+
+  // A shape with no area.
+  Empty  // nothing
+}
+
+type Option[T any] enum { Some(T); None }
+
+type Pair enum{P(int,string);Q(a, b int, c string);R()}
+
+type Local enum {
+	A
+}

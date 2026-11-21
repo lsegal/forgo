@@ -519,6 +519,9 @@ func (check *Checker) typeDecl(obj *TypeName, tdecl *ast.TypeSpec) {
 
 	// alias declaration
 	if tdecl.Assign.IsValid() {
+		if _, ok := tdecl.Type.(*ast.EnumType); ok { // forgo
+			check.error(tdecl.Type, InvalidSyntaxTree, "enum type cannot be declared by an alias")
+		}
 		// Report highest version requirement first so that fixing a version issue
 		// avoids possibly two -lang changes (first to Go 1.9 and then to Go 1.23).
 		if !versionErr && tparam0 != nil && !check.verifyVersionf(tparam0, go1_23, "generic type alias") {

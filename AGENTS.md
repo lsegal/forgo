@@ -4,15 +4,15 @@ This repository is **forgo**, a real git fork of [golang/go](https://github.com/
 (currently synced to the Go 1.27 release branch — see [README.md](README.md) for
 the full design writeup and how the daily upstream sync works). Code in
 this repo is **not plain Go** — it compiles with a custom `forgo`/`compile`
-binary (built under `bin/`, `pkg/tool/`) that understands eight extra
+binary (built under `bin/`, `pkg/tool/`) that understands nine extra
 language features. When you write or edit `.go` files in a forgo project,
 use these features where they apply. Writing plain-Go idioms where a forgo
 feature fits is a style regression, not a neutral choice.
 
 Quick identification: a repo is a forgo project if it has a `bin/forgo`
 (or `bin/forgo.exe`) built from this source tree, or if its code already
-uses `?`, `throw`, postfix `if`, `with`, `//fgo:comptime`, `//fgo:macro`,
-or `//fgo:nogc`. If unsure, check for a forgo `GOROOT` (a directory with
+uses `?`, `throw`, postfix `if`, `with`, `enum`, `//fgo:comptime`,
+`//fgo:macro`, or `//fgo:nogc`. If unsure, check for a forgo `GOROOT` (a directory with
 `src/cmd/compile/internal/forgo`).
 
 ## Rule 1: propagate errors with `?`, not manual `if err != nil` chains
@@ -264,6 +264,68 @@ func countLines(paths []string) (n int, err error) {
   assigning a field that could lead back to its object (rebuild the path
   instead, as `examples/rbtree` does), or nogc hands them to the GC.
 
+## Rule 1f: model "one of these cases" as an `enum`, matched with an exhaustive type switch
+
+**Default to this** when a value is exactly one of a fixed set of cases,
+some of which carry data — instead of a sealed interface with a marker
+method and one struct per case, or an `int` kind field next to fields that
+only some kinds use.
+
+```go
+// Write this:
+type Shape enum {
+	Circle(radius float64)
+	Rect(w, h float64)
+	Empty
+}
+
+func area(s Shape) float64 {
+	switch v := s.(type) {
+	case Shape.Circle:
+		return math.Pi * v.radius * v.radius
+	case Shape.Rect:
+		return v.w * v.h
+	case Shape.Empty:
+		return 0
+	}
+	panic("unreachable")
+}
+
+area(Shape.Circle(2))
+
+// Not this:
+type Shape interface{ isShape() }
+type Circle struct{ radius float64 }
+type Rect struct{ w, h float64 }
+func (Circle) isShape() {}
+func (Rect) isShape()   {}
+```
+
+- Build values with constructors: `Shape.Circle(2)`, `Shape.Empty`. A
+  generic enum infers its type arguments from a constructor's arguments
+  (`Option.Some(x)`); spell them out when there are none
+  (`Option[int].None`). Never write a struct literal of an enum type.
+- Match with `switch v := x.(type)` and cases naming variants. In a case
+  naming one variant with fields, `v` holds that variant's fields (`v.w`;
+  positional fields are `v._0`, `v._1`, ...). In a case naming several
+  variants, a unit variant, or `default`, `v` is the enum value.
+- **Name every variant instead of writing `default`.** The compiler rejects
+  a switch that misses a variant (`switch on Shape is not exhaustive:
+  missing case Shape.Empty`), so adding a variant later points you at every
+  switch that must handle it; a `default` silently swallows it instead.
+  Only use `default` when the cases it covers genuinely share one meaning.
+- The switch is not yet treated as terminating, so a function returning
+  from every case still needs a final `panic("unreachable")` (or `return`).
+- The zero value is the first variant with zero fields — put the best
+  default first. Enums compare with `==` when all fields are comparable,
+  and `%v` prints `Circle{2}`.
+- An enum whose variants carry no data (`type Level enum { Debug; Info;
+  Warn }`) replaces an `iota` const block when the set is closed; an
+  expression switch over it is checked for exhaustiveness too.
+- Keep an interface when the set of cases is open (other packages add
+  implementations) or the cases are distinguished by behavior (methods)
+  rather than data.
+
 ## Rule 2: use `//fgo:comptime` for values that can be computed once, at compile time
 
 If you're computing a `const` from a pure function of literal/constant
@@ -423,6 +485,7 @@ func checksum(d int) int {
 | Fail a function outright with a new error                          | `throw`                    |
 | Guard clause whose body is one statement (`throw`, `return`, `continue`, ...) | postfix `if` (`STMT if COND`) |
 | Pass a struct literal to a `T` or `*T` parameter                    | `f({...})` / `f(&{...})`   |
+| A value that is exactly one of a fixed set of cases, some carrying data | `enum` + exhaustive `switch v := x.(type)` |
 | Compute a constant from literal inputs (hash, table, formatted str) | `//fgo:comptime` + `const`|
 | Generate/duplicate syntax at a call site                           | `//fgo:macro`              |
 | Close a resource when a block (often a loop body) is done with it | `with x := open()? { ... }` |

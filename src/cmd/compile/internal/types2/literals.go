@@ -149,6 +149,11 @@ func (check *Checker) compositeLit(x *operand, e *syntax.CompositeLit, hint Type
 		return
 	}
 
+	if check.forgoEnumCompositeLit(e, base) { // forgo: enums are built by variant constructors
+		x.invalidate()
+		return
+	}
+
 	switch u, _ := commonUnder(base, nil); utyp := u.(type) {
 	case *Struct:
 		if len(e.ElemList) == 0 {

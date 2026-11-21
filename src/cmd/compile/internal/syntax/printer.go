@@ -487,6 +487,35 @@ func (p *printer) printRawNode(n Node) {
 		}
 		p.print(_Rbrace)
 
+	case *EnumType:
+		p.print(_Name, "enum", blank, _Lbrace)
+		if len(n.VariantList) > 0 {
+			if p.linebreaks {
+				p.print(newline, indent)
+			}
+			for i, v := range n.VariantList {
+				if i > 0 {
+					p.print(_Semi)
+					if p.linebreaks {
+						p.print(newline)
+					} else {
+						p.print(blank)
+					}
+				}
+				p.printNode(v)
+			}
+			if p.linebreaks {
+				p.print(outdent, newline)
+			}
+		}
+		p.print(_Rbrace)
+
+	case *EnumVariant:
+		p.print(n.Name)
+		if len(n.ParamList) > 0 {
+			p.printParameterList(n.ParamList, 0)
+		}
+
 	case *FuncType:
 		p.print(_Func)
 		p.printSignature(n)

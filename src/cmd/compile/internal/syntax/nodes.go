@@ -300,6 +300,21 @@ type (
 		expr
 	}
 
+	// forgo: enum { VariantList[0]; VariantList[1]; ... }
+	// See types2/forgo_enum.go.
+	EnumType struct {
+		VariantList []*EnumVariant
+		expr
+	}
+
+	// forgo: Name
+	//        Name(ParamList)
+	EnumVariant struct {
+		Name      *Name
+		ParamList []*Field // nil or empty for a unit variant
+		node
+	}
+
 	// Name Type
 	//      Type
 	Field struct {

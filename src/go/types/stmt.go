@@ -725,6 +725,7 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 			check.stmtList(inner, clause.Body)
 			check.closeScope()
 		}
+		check.forgoEnumExprSwitch(s, &x) // forgo
 
 	case *ast.TypeSwitchStmt:
 		inner |= breakOk | inTypeSwitch
@@ -789,6 +790,9 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 					check.errorf(&x, InvalidTypeSwitch, "cannot use type switch on type parameter value %s", &x)
 				} else if IsInterface(x.typ()) {
 					sx = &x
+				} else if forgoEnumOf(x.typ()) != nil { // forgo: switch over an enum's variants
+					check.forgoEnumTypeSwitch(inner, s, lhs, &x)
+					return
 				} else {
 					check.errorf(&x, InvalidTypeSwitch, "%s is not an interface", &x)
 				}
