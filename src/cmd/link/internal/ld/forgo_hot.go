@@ -185,10 +185,23 @@ var fgohotNeverPin = map[string]bool{
 	"runtime.pclntab": true, "runtime.epclntab": true,
 	"runtime.findfunctab": true, "runtime.textsectionmap": true,
 	"runtime.typelink": true, "runtime.itablink": true,
-	"runtime.firstmoduledata": true, "runtime.lastmoduledatap": true,
 	"runtime.runtime_inittasks": true,
 	"go:func.*":                 true,
 	"go:buildid":                true,
+}
+
+// fgohotAlwaysPin names the runtime's module list. A hot image describes
+// itself with its own moduledata (local.pluginmoduledata, see loadlib), so
+// these are ordinary runtime variables in it, and any runtime code the image
+// carries must walk the running program's list through them. Their contents
+// still differ between links — a normal link defines runtime.firstmoduledata
+// as the moduledata itself and a hot link leaves it as the runtime declared
+// it — so they are reused by name, whatever their digest. A fresh copy would
+// be an empty module list: code in the image that resolves a type offset or
+// looks up a function would find no module at all.
+var fgohotAlwaysPin = map[string]bool{
+	"runtime.firstmoduledata": true,
+	"runtime.lastmoduledatap": true,
 }
 
 // fgohotNeverPinKind names symbol kinds that are never pinned regardless of
@@ -368,7 +381,7 @@ func fgohotPin(ctxt *Link) {
 		if cur.kind == sym.STEXT {
 			fgohot.stableText[s] = old.addr
 		}
-		if old.hash == cur.hash && !fgohotNeverPin[cur.name] {
+		if (old.hash == cur.hash && !fgohotNeverPin[cur.name]) || fgohotAlwaysPin[cur.name] {
 			ldr.SetSymValue(s, int64(old.addr))
 			// A pinned symbol is not part of this image, so it has no section
 			// and does not belong in the image's symbol table either.
