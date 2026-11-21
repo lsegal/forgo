@@ -569,10 +569,18 @@ is checked the same way: without a `default`, every variant must appear.
 `go vet` and other `go/types`-based tools understand them), and
 hot reload refuses a change to an enum's variants with "cannot reload
 without restarting" rather than applying it, since adding, removing or
-changing a variant changes the type's layout. Not yet included: a vet
-check that flags `default` clauses which could hide future variants, and
-treating an exhaustive switch whose cases all return as terminating (so a
-`panic` or `return` is still needed after it).
+changing a variant changes the type's layout.
+
+`forgo vet -enumdefault` adds a check, off by default, that reports a
+`default` clause in a switch over an enum, naming the variants that reach
+it (`default clause hides variants Shape.Rect, Shape.Empty and any added
+later`). A `default` in a switch whose cases already name every variant is
+reported as unreachable but still hiding variants added later. It is
+opt-in because a `default` is sometimes the right choice; `-enumdefault`
+runs it alongside the other vet checks rather than instead of them.
+
+Not yet included: treating an exhaustive switch whose cases all return as
+terminating (so a `panic` or `return` is still needed after it).
 
 #### Migrating from an interface-based sum type
 
