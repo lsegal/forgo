@@ -11,8 +11,6 @@ import (
 	"unsafe"
 )
 
-//go:cgo_import_dynamic libc_dlopen dlopen "/usr/lib/libSystem.B.dylib"
-//go:cgo_import_dynamic libc_dlsym dlsym "/usr/lib/libSystem.B.dylib"
 //go:cgo_import_dynamic libc_mach_vm_remap mach_vm_remap "/usr/lib/libSystem.B.dylib"
 
 // fgohotPatchLen is the number of bytes fgohotPatch overwrites at the entry
@@ -68,31 +66,6 @@ func fgohotFlushICachePublic(addr, size uintptr) {
 	fgohotFlushICache(addr, size)
 }
 func sys_icache_invalidate_trampoline()
-
-//go:linkname fgohotDlopen runtime/fgohot.rtdlopen
-func fgohotDlopen(name *byte, flags int32) uintptr {
-	args := struct {
-		name   *byte
-		flags  int32
-		result uintptr
-	}{name, flags, 0}
-	libcCall(unsafe.Pointer(abi.FuncPCABI0(fgohot_dlopen_trampoline)), unsafe.Pointer(&args))
-	return args.result
-}
-
-//go:linkname fgohotDlsym runtime/fgohot.rtdlsym
-func fgohotDlsym(handle uintptr, name *byte) uintptr {
-	args := struct {
-		handle uintptr
-		name   *byte
-		result uintptr
-	}{handle, name, 0}
-	libcCall(unsafe.Pointer(abi.FuncPCABI0(fgohot_dlsym_trampoline)), unsafe.Pointer(&args))
-	return args.result
-}
-
-func fgohot_dlopen_trampoline()
-func fgohot_dlsym_trampoline()
 
 //go:cgo_import_dynamic libc_sys_icache_invalidate sys_icache_invalidate "/usr/lib/libSystem.B.dylib"
 

@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 )
 
 // reserveSize is how much address space the agent asks reserve for up front
@@ -119,6 +120,16 @@ type request struct {
 	moduledata uintptr
 	segments   []segment
 	patches    []uintptr // (old, new) pairs
+	slots      []slot
+}
+
+// A slot is a pointer-sized word of the running program to point at the
+// image: an itab method slot the program's linker filled with
+// runtime.unreachableMethod because nothing called the method then.
+type slot struct {
+	addr  uintptr
+	value uintptr
+	prot  int // protection of the page the word is on
 }
 
 // A segment is one loadable piece of the image: filesz bytes taken from the
@@ -180,9 +191,35 @@ func apply(gen string) string {
 	}
 	doInitTasks(moduleInitTasks(req.moduledata))
 
+	// Fill the slots before redirecting anything, so the new code never
+	// finds a placeholder in them.
+	if len(req.slots) > 0 {
+		if msg := fillSlots(req.slots); msg != "" {
+			return msg
+		}
+	}
 	if len(req.patches) > 0 {
 		if msg := patchText(req.patches); msg != "" {
 			return msg
+		}
+	}
+	return ""
+}
+
+// fillSlots writes each slot's value with the world stopped, making its page
+// writable for just that write.
+func fillSlots(slots []slot) string {
+	beginPatch()
+	defer endPatch()
+	ps := uintptr(pageSize())
+	for _, s := range slots {
+		page := s.addr &^ (ps - 1)
+		if err := protect(page, ps, protRW); err != nil {
+			return "cannot unprotect itab: " + err.Error()
+		}
+		*(*uintptr)(unsafe.Pointer(s.addr)) = s.value
+		if err := protect(page, ps, s.prot); err != nil {
+			return "cannot reprotect itab: " + err.Error()
 		}
 	}
 	return ""
@@ -214,6 +251,7 @@ func patchBounds(patches []uintptr) (lo, hi uintptr) {
 //	moduledata <hex>
 //	segment <hex addr> <hex file offset> <hex file size> <hex mem size> r|rw|rx
 //	patch <hex old entry> <hex new entry>
+//	slot <hex address> <hex value> r|rw
 func readRequest(path string) (*request, string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -249,6 +287,15 @@ func readRequest(path string) (*request, string) {
 				return nil, "malformed patch line in manifest"
 			}
 			req.patches = append(req.patches, parseHex(f, 1), parseHex(f, 2))
+		case "slot":
+			if len(f) < 4 {
+				return nil, "malformed slot line in manifest"
+			}
+			p, ok := protByName(f[3])
+			if !ok {
+				return nil, "unknown slot protection " + f[3]
+			}
+			req.slots = append(req.slots, slot{addr: parseHex(f, 1), value: parseHex(f, 2), prot: p})
 		}
 	}
 	if req.base == 0 || req.size == 0 || req.moduledata == 0 {
