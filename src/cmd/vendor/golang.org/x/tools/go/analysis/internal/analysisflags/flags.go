@@ -103,12 +103,14 @@ func Parse(analyzers []*analysis.Analyzer, multi bool) []*analysis.Analyzer {
 
 	// If any -NAME flag is true,  run only those analyzers. Otherwise,
 	// if any -NAME flag is false, run all but those analyzers.
+	// forgo: an analyzer in forgoOptIn runs only when -NAME enables it,
+	// and enabling it does not turn off the others.
 	if multi {
 		var hasTrue, hasFalse bool
-		for _, ts := range enabled {
+		for a, ts := range enabled {
 			switch *ts {
 			case setTrue:
-				hasTrue = true
+				hasTrue = hasTrue || !forgoOptIn[a.Name] // forgo
 			case setFalse:
 				hasFalse = true
 			}
@@ -122,9 +124,9 @@ func Parse(analyzers []*analysis.Analyzer, multi bool) []*analysis.Analyzer {
 				}
 			}
 			analyzers = keep
-		} else if hasFalse {
+		} else if hasFalse || len(forgoOptIn) > 0 { // forgo
 			for _, a := range analyzers {
-				if *enabled[a] != setFalse {
+				if *enabled[a] != setFalse && (!forgoOptIn[a.Name] || *enabled[a] == setTrue) { // forgo
 					keep = append(keep, a)
 				}
 			}
@@ -291,6 +293,12 @@ func (ts triState) IsBoolFlag() bool {
 }
 
 // Legacy flag support
+
+// forgoOptIn names the analyzers that run only when explicitly enabled
+// with -NAME (forgo).
+var forgoOptIn = map[string]bool{
+	"enumdefault": true,
+}
 
 // vetLegacyFlags maps flags used by legacy vet to their corresponding
 // new names. The old names will continue to work.

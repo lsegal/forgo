@@ -313,6 +313,8 @@ func (Rect) isShape()   {}
   missing case Shape.Empty`), so adding a variant later points you at every
   switch that must handle it; a `default` silently swallows it instead.
   Only use `default` when the cases it covers genuinely share one meaning.
+  `forgo vet -enumdefault` lists every `default` in an enum switch and the
+  variants it hides; run it when auditing switches after adding a variant.
 - An exhaustive switch (no `default`) whose cases all `return` or `panic`,
   with no `break` out of it, is a terminating statement. **Never write a
   trailing `panic("unreachable")` or dummy `return` after it** — the

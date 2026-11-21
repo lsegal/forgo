@@ -579,8 +579,15 @@ without restarting" rather than applying it, since adding, removing or
 changing a variant changes the type's layout. `go/types` treats an
 exhaustive switch whose clauses all terminate as terminating, exactly as
 the compiler does, so `go vet` and gopls don't report a missing return
-either. Not yet included: a vet check that flags `default` clauses which
-could hide future variants.
+either.
+
+`forgo vet -enumdefault` adds a check, off by default, that reports a
+`default` clause in a switch over an enum, naming the variants that reach
+it (`default clause hides variants Shape.Rect, Shape.Empty and any added
+later`). A `default` in a switch whose cases already name every variant is
+reported as unreachable but still hiding variants added later. It is
+opt-in because a `default` is sometimes the right choice; `-enumdefault`
+runs it alongside the other vet checks rather than instead of them.
 
 #### Migrating from an interface-based sum type
 

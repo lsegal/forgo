@@ -77,7 +77,7 @@ s = s.replace(
     ret
     + "\n\tcase *ast.ThrowStmt:\n\t\t// forgo: throw X\n\t\twalk(v, edge.Invalid, -1, n.X)\n"
     + "\n\tcase *ast.PostfixIfStmt:\n\t\t// forgo: STMT if COND\n\t\twalk(v, edge.Invalid, -1, n.Stmt)\n\t\twalk(v, edge.Invalid, -1, n.Cond)\n"
-    + "\n\tcase *ast.WithStmt:\n\t\t// forgo: with NAME := VALUE { BODY }\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\twalk(v, edge.Invalid, -1, n.Value)\n\t\twalk(v, edge.Invalid, -1, n.Body)\n",
+    + "\n\tcase *ast.WithStmt:\n\t\t// forgo: with NAME := VALUE { BODY }\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\twalk(v, edge.Invalid, -1, n.Value)\n\t\twalk(v, edge.Invalid, -1, n.Body)\n"
     + "\n\tcase *ast.EnumType:\n\t\t// forgo: enum { VARIANTS }\n\t\twalkList(v, edge.Invalid, n.Variants)\n"
     + "\n\tcase *ast.EnumVariant:\n\t\t// forgo: NAME(PARAMS)\n\t\twalk(v, edge.Invalid, -1, n.Name)\n\t\tif n.Params != nil {\n\t\t\twalk(v, edge.Invalid, -1, n.Params)\n\t\t}\n",
     1,
