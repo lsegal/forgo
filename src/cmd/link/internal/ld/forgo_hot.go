@@ -308,7 +308,8 @@ func fgohotHash(ldr *loader.Loader, s loader.Sym, shallow map[loader.Sym]string)
 	h.Write([]byte(shallow[s]))
 	relocs := ldr.Relocs(s)
 	for i := 0; i < relocs.Count(); i++ {
-		rs := relocs.At(i).Sym()
+		r := relocs.At(i)
+		rs := r.Sym()
 		if rs == 0 {
 			h.Write([]byte{0})
 			continue
@@ -318,6 +319,14 @@ func fgohotHash(ldr *loader.Loader, s loader.Sym, shallow map[loader.Sym]string)
 			h.Write([]byte{byte(ldr.SymVersion(rs))})
 		} else {
 			h.Write([]byte(shallow[rs]))
+		}
+		if r.Weak() && r.Type() == objabi.R_ADDR && !ldr.AttrReachable(rs) {
+			// An itab's method slot whose method dead code elimination
+			// dropped holds runtime.unreachableMethod instead (see
+			// relocsym). If the new code calls that method, the running
+			// program's copy of the itab would send it there, so the slot's
+			// contents are part of what has to match before it is reused.
+			h.Write([]byte{1})
 		}
 		h.Write([]byte{0})
 	}
