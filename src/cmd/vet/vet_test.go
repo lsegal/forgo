@@ -112,6 +112,22 @@ func TestVet(t *testing.T) {
 		})
 	}
 
+	// The enumdefault analyzer (forgo) is off unless enabled with
+	// -enumdefault, which adds it to the other checks.
+	t.Run("enumdefault", func(t *testing.T) {
+		t.Parallel()
+		files, err := filepath.Glob(filepath.Join("testdata", "enumdefault", "*.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		errchk(vetCmd(t, "-enumdefault", "enumdefault"), files, t)
+
+		out, err := vetCmd(t, "-printf", "enumdefault").CombinedOutput()
+		if err != nil || bytes.Contains(out, []byte("default clause")) {
+			t.Errorf("enumdefault ran without -enumdefault: err=%v, output=<<%s>>", err, out)
+		}
+	})
+
 	// The loopclosure analyzer (aka "rangeloop" before CL 140578)
 	// is a no-op for files whose version >= go1.22, so we use a
 	// go.mod file in the rangeloop directory to "downgrade".
