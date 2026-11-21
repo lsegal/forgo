@@ -17,7 +17,13 @@
 
 package runtime
 
-import "unsafe"
+import (
+	"internal/abi"
+	"unsafe"
+)
+
+//go:cgo_import_dynamic libc_dlopen dlopen "/usr/lib/libSystem.B.dylib"
+//go:cgo_import_dynamic libc_dlsym dlsym "/usr/lib/libSystem.B.dylib"
 
 // fgohotMprotect changes the protection of the size bytes at addr. It
 // returns 0 on success or the errno on failure.
@@ -83,3 +89,32 @@ func fgohotVMRegion(addr uintptr) (regionStart, regionSize uintptr, kr int32) {
 	kr = mach_vm_region(&address, &size, unsafe.Pointer(&info))
 	return uintptr(address), uintptr(size), kr
 }
+
+// fgohotDlopen and fgohotDlsym let runtime/fgohot fill a hot image's
+// imports, which no dynamic loader ever sees (see its macho_darwin.go).
+// The trampolines are in forgo_hot_{amd64,arm64}_darwin.s.
+
+//go:linkname fgohotDlopen runtime/fgohot.rtdlopen
+func fgohotDlopen(name *byte, flags int32) uintptr {
+	args := struct {
+		name   *byte
+		flags  int32
+		result uintptr
+	}{name, flags, 0}
+	libcCall(unsafe.Pointer(abi.FuncPCABI0(fgohot_dlopen_trampoline)), unsafe.Pointer(&args))
+	return args.result
+}
+
+//go:linkname fgohotDlsym runtime/fgohot.rtdlsym
+func fgohotDlsym(handle uintptr, name *byte) uintptr {
+	args := struct {
+		handle uintptr
+		name   *byte
+		result uintptr
+	}{handle, name, 0}
+	libcCall(unsafe.Pointer(abi.FuncPCABI0(fgohot_dlsym_trampoline)), unsafe.Pointer(&args))
+	return args.result
+}
+
+func fgohot_dlopen_trampoline()
+func fgohot_dlsym_trampoline()
