@@ -148,6 +148,10 @@ type fgohotState struct {
 	// runtime.unreachableMethod and that this image has to fill in.
 	slots []fgohotSlot
 
+	// method table entries of reused type descriptors that the running
+	// program filled with -1 and that this image has to fill in.
+	methodOffs []fgohotSlot
+
 	// stable entry addresses inherited from the prior generation. A symbol
 	// may be laid out fresh for dependency reasons without becoming active;
 	// its throwaway image address must never replace this one in the record.
@@ -171,13 +175,15 @@ type fgohotPatch struct {
 	old  uint64
 }
 
-// fgohotSlot is a pointer-sized word in the running program that has to be
-// pointed at a symbol of this image.
+// fgohotSlot is a word in the running program that has to be pointed at a
+// symbol of this image: a pointer-sized address, or, in a method table, a
+// 32-bit offset from the start of its module's text or types.
 type fgohotSlot struct {
 	addr     uint64     // address of the word in the running program
 	sym      loader.Sym // symbol the word must point at
 	add      int64
 	writable bool // whether the word lives in a writable segment
+	text     bool // for a method table entry: whether it is a text offset
 }
 
 var fgohot fgohotState
@@ -441,6 +447,7 @@ func fgohotPin(ctxt *Link) {
 	fgohotUnpinSectionRelative(ctxt)
 	fgohotPatchFreshText(ldr, rec)
 	fgohotFillDeadSlots(ldr, rec)
+	fgohotFillDeadMethodOffs(ldr, rec)
 
 	if os.Getenv("FORGO_HOT_DEBUG") != "" {
 		var changed []string
@@ -544,6 +551,47 @@ func fgohotFillDeadSlots(ldr *loader.Loader, rec map[fgohotKey]*fgohotSym) {
 		}
 	}
 	sort.Slice(fgohot.slots, func(i, j int) bool { return fgohot.slots[i].addr < fgohot.slots[j].addr })
+}
+
+// fgohotFillDeadMethodOffs finds the method table entries of reused type
+// descriptors that this image needs filled in.
+//
+// It is fgohotFillDeadSlots for the other way a method is reached: through
+// the method table of the receiver's type descriptor, which the runtime reads
+// when it builds an itab at run time (getitab) and reflect reads for
+// Value.Method and friends. Each entry holds 32-bit offsets of the method's
+// type and code, and the running program's linker wrote -1 for every one whose
+// target it found unreachable (see relocsym). As with itabs, the descriptor
+// itself digests the same either way and is reused; this image lays out the
+// targets the new code reaches, and the agent writes their offsets, relative
+// to the module the descriptor lives in, into the entries.
+func fgohotFillDeadMethodOffs(ldr *loader.Loader, rec map[fgohotKey]*fgohotSym) {
+	for s, cur := range fgohot.snap {
+		if !fgohot.isPinned[s] {
+			continue
+		}
+		old := rec[fgohotIdentity(cur)]
+		relocs := ldr.Relocs(s)
+		for i := 0; i < relocs.Count(); i++ {
+			r := relocs.At(i)
+			rs := r.Sym()
+			if r.Type() != objabi.R_METHODOFF || rs == 0 || !ldr.AttrReachable(rs) {
+				continue
+			}
+			e := fgohot.snap[rs]
+			if e == nil || rec[fgohotIdentity(e)] != nil {
+				continue // the running program has the target; the entry is filled
+			}
+			fgohot.methodOffs = append(fgohot.methodOffs, fgohotSlot{
+				addr:     old.addr + uint64(r.Off()),
+				sym:      rs,
+				add:      r.Add(),
+				writable: old.kind >= sym.SFirstWritable && old.kind < sym.SFirstUnallocated,
+				text:     e.kind == sym.STEXT,
+			})
+		}
+	}
+	sort.Slice(fgohot.methodOffs, func(i, j int) bool { return fgohot.methodOffs[i].addr < fgohot.methodOffs[j].addr })
 }
 
 func fgohotRefersToPatched(ldr *loader.Loader, s loader.Sym, patched map[loader.Sym]bool) bool {
@@ -715,7 +763,8 @@ func fgohotReadRecord(path string) (map[fgohotKey]*fgohotSym, error) {
 
 // fgohotWriteManifest tells the agent what to do with this image: which of the
 // output file's segments to map where, where the moduledata is, which inits to
-// run, which entry points to redirect, and which itab slots to fill in.
+// run, which entry points to redirect, and which itab slots and method table
+// entries to fill in.
 func fgohotWriteManifest(ctxt *Link) {
 	if *flagFgoHotManifest == "" {
 		return
@@ -749,6 +798,19 @@ func fgohotWriteManifest(ctxt *Link) {
 		}
 		if v := ldr.SymValue(s.sym); v != 0 {
 			fmt.Fprintf(w, "slot %x %x %s # %s\n", s.addr, uint64(v+s.add), prot, ldr.SymName(s.sym))
+		}
+	}
+	for _, s := range fgohot.methodOffs {
+		prot := "r"
+		if s.writable {
+			prot = "rw"
+		}
+		base := "type"
+		if s.text {
+			base = "text"
+		}
+		if v := ldr.SymValue(s.sym); v != 0 {
+			fmt.Fprintf(w, "methodoff %x %x %s %s # %s\n", s.addr, uint64(v+s.add), base, prot, ldr.SymName(s.sym))
 		}
 	}
 	for _, s := range fgohot.newInitTasks {

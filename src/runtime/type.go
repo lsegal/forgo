@@ -358,6 +358,9 @@ func resolveTypeOff(ptrInModule unsafe.Pointer, off typeOff) *_type {
 		return t
 	}
 	if res > md.etypes {
+		if t := fgohotTypeAt(res); t != nil {
+			return t
+		}
 		println("runtime: typeOff", hex(off), "out of range", hex(md.types), "-", hex(md.etypes))
 		throw("runtime: type offset out of range")
 	}

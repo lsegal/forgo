@@ -121,6 +121,7 @@ type request struct {
 	segments   []segment
 	patches    []uintptr // (old, new) pairs
 	slots      []slot
+	methodOffs []methodOff
 }
 
 // A slot is a pointer-sized word of the running program to point at the
@@ -130,6 +131,16 @@ type slot struct {
 	addr  uintptr
 	value uintptr
 	prot  int // protection of the page the word is on
+}
+
+// A methodOff is a method table entry of a type descriptor in the running
+// program to point at the image: a 32-bit offset of the method's code or type
+// that the program's linker set to -1 because nothing reached the method then.
+type methodOff struct {
+	addr   uintptr
+	target uintptr // address the entry must resolve to
+	text   bool    // whether the entry is relative to text rather than types
+	prot   int     // protection of the page the entry is on
 }
 
 // A segment is one loadable piece of the image: filesz bytes taken from the
@@ -193,8 +204,8 @@ func apply(gen string) string {
 
 	// Fill the slots before redirecting anything, so the new code never
 	// finds a placeholder in them.
-	if len(req.slots) > 0 {
-		if msg := fillSlots(req.slots); msg != "" {
+	if len(req.slots) > 0 || len(req.methodOffs) > 0 {
+		if msg := fillSlots(req.slots, req.methodOffs); msg != "" {
 			return msg
 		}
 	}
@@ -206,20 +217,48 @@ func apply(gen string) string {
 	return ""
 }
 
-// fillSlots writes each slot's value with the world stopped, making its page
-// writable for just that write.
-func fillSlots(slots []slot) string {
+// fillSlots writes each slot's value and each method table entry's offset
+// with the world stopped, making its page writable for just that write.
+func fillSlots(slots []slot, methodOffs []methodOff) string {
+	// Work out every offset before writing any, so a reload that cannot be
+	// applied leaves the program as it was.
+	offs := make([]int32, len(methodOffs))
+	for i, m := range methodOffs {
+		base, msg := methodBase(m.addr, m.text)
+		if msg != "" {
+			return msg
+		}
+		off := int64(m.target) - int64(base)
+		// A text offset is read back unsigned (textAddr), and -1 is the
+		// linker's unreachable sentinel.
+		if off != int64(int32(off)) || off == -1 || m.text && off < 0 {
+			return "method table entry cannot reach the image; restart the program"
+		}
+		offs[i] = int32(off)
+	}
+
 	beginPatch()
 	defer endPatch()
 	ps := uintptr(pageSize())
-	for _, s := range slots {
-		page := s.addr &^ (ps - 1)
+	write := func(addr uintptr, prot int, w func()) string {
+		page := addr &^ (ps - 1)
 		if err := protect(page, ps, protRW); err != nil {
-			return "cannot unprotect itab: " + err.Error()
+			return "cannot unprotect slot: " + err.Error()
 		}
-		*(*uintptr)(unsafe.Pointer(s.addr)) = s.value
-		if err := protect(page, ps, s.prot); err != nil {
-			return "cannot reprotect itab: " + err.Error()
+		w()
+		if err := protect(page, ps, prot); err != nil {
+			return "cannot reprotect slot: " + err.Error()
+		}
+		return ""
+	}
+	for _, s := range slots {
+		if msg := write(s.addr, s.prot, func() { *(*uintptr)(unsafe.Pointer(s.addr)) = s.value }); msg != "" {
+			return msg
+		}
+	}
+	for i, m := range methodOffs {
+		if msg := write(m.addr, m.prot, func() { *(*int32)(unsafe.Pointer(m.addr)) = offs[i] }); msg != "" {
+			return msg
 		}
 	}
 	return ""
@@ -252,6 +291,7 @@ func patchBounds(patches []uintptr) (lo, hi uintptr) {
 //	segment <hex addr> <hex file offset> <hex file size> <hex mem size> r|rw|rx
 //	patch <hex old entry> <hex new entry>
 //	slot <hex address> <hex value> r|rw
+//	methodoff <hex address> <hex target> text|type r|rw
 func readRequest(path string) (*request, string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -296,6 +336,17 @@ func readRequest(path string) (*request, string) {
 				return nil, "unknown slot protection " + f[3]
 			}
 			req.slots = append(req.slots, slot{addr: parseHex(f, 1), value: parseHex(f, 2), prot: p})
+		case "methodoff":
+			if len(f) < 5 || f[3] != "text" && f[3] != "type" {
+				return nil, "malformed methodoff line in manifest"
+			}
+			p, ok := protByName(f[4])
+			if !ok {
+				return nil, "unknown methodoff protection " + f[4]
+			}
+			req.methodOffs = append(req.methodOffs, methodOff{
+				addr: parseHex(f, 1), target: parseHex(f, 2), text: f[3] == "text", prot: p,
+			})
 		}
 	}
 	if req.base == 0 || req.size == 0 || req.moduledata == 0 {
