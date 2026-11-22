@@ -41,6 +41,17 @@ var hostType = reflect.TypeOf(payload{})
 // Keeps encoding/json imported while render does not use it.
 var _ = json.Marshal
 
+// shouter is boxed by the original build, so its type descriptor, method
+// table included, is in the running program, but nothing there calls Shout:
+// its linker wrote -1 for Shout's method table entries.
+type shouter struct{ word string }
+
+func (s shouter) Shout(n int8) [2]string {
+	return [2]string{fmt.Sprint(s.word, n), "shouted"}
+}
+
+var boxedShouter any = shouter{"hey"}
+
 // check is never reloaded: it asserts a value boxed by whatever generation
 // of render is running against the original build's type.
 func check(v any) string {
@@ -73,6 +84,13 @@ const watchReloadGen1 = `_ = json.NewEncoder(os.Stdout).Encode(payload{OK: true,
 	fmt.Println(check(payload{OK: true, Note: "boxed"}))
 	return true`
 
+// watchReloadWant is what watchReloadGen1 prints.
+var watchReloadWant = []string{
+	`{"ok":true,"note":"gen1 `,
+	`{OK:true Note:fmt}`,
+	`assert=true sametype=true note=boxed`,
+}
+
 // TestWatchReloadUsesTypes reloads a function whose new code uses type
 // descriptors (lsegal/forgo#50).
 func TestWatchReloadUsesTypes(t *testing.T) {
@@ -89,6 +107,8 @@ func TestWatchReloadUsesTypes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		gen0 string
+		gen1 string   // defaults to watchReloadGen1
+		want []string // defaults to watchReloadWant
 	}{
 		{
 			// The program from the issue. The hot image used to carry its
@@ -108,14 +128,48 @@ func TestWatchReloadUsesTypes(t *testing.T) {
 			gen0: `fmt.Println("gen0", i)
 	return false`,
 		},
+		{
+			// The new code converts a value the original build boxed to an
+			// interface type that is new, so the runtime builds the itab,
+			// resolving Shout through the method table of shouter's type
+			// descriptor. The reload has to fill in that table's entries
+			// (lsegal/forgo#60).
+			name: "newiface",
+			gen0: `fmt.Println("gen0", i)
+	return false`,
+			gen1: `s, ok := boxedShouter.(interface{ Shout(int8) [2]string })
+	if ok {
+		r := s.Shout(7)
+		fmt.Println("iface", r[0], r[1])
+	} else {
+		fmt.Println("iface missing")
+	}
+	return true`,
+			want: []string{"iface hey7 shouted"},
+		},
+		{
+			// The same method table entries, reached through reflect.
+			name: "reflectmethod",
+			gen0: `fmt.Println("gen0", i)
+	return false`,
+			gen1: `m := reflect.ValueOf(boxedShouter).MethodByName("Shout")
+	r := m.Call([]reflect.Value{reflect.ValueOf(int8(9))})[0].Interface().([2]string)
+	fmt.Println("reflect", m.Type(), r[0], r[1])
+	return true`,
+			want: []string{"reflect func(int8) [2]string hey9 shouted"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			testWatchReload(t, tc.gen0)
+			gen1, want := tc.gen1, tc.want
+			if gen1 == "" {
+				gen1, want = watchReloadGen1, watchReloadWant
+			}
+			testWatchReload(t, tc.gen0, gen1, want)
 		})
 	}
 }
 
-func testWatchReload(t *testing.T, gen0 string) {
+func testWatchReload(t *testing.T, gen0, gen1 string, want []string) {
 	dir := t.TempDir()
 	write := func(name, content string) {
 		t.Helper()
@@ -153,7 +207,7 @@ func testWatchReload(t *testing.T, gen0 string) {
 		line := sc.Text()
 		out = append(out, line)
 		if strings.Contains(line, "gen0 ") && time.Since(saved) > 5*time.Second {
-			write("main.go", strings.Replace(watchReloadSource, "GEN", watchReloadGen1, 1))
+			write("main.go", strings.Replace(watchReloadSource, "GEN", gen1, 1))
 			saved = time.Now()
 		}
 	}
@@ -162,13 +216,9 @@ func testWatchReload(t *testing.T, gen0 string) {
 	if err != nil {
 		t.Fatalf("forgo run --watch: %v\nstdout:\n%s\nstderr:\n%s", err, got, stderr.String())
 	}
-	for _, want := range []string{
-		`{"ok":true,"note":"gen1 `,
-		`{OK:true Note:fmt}`,
-		`assert=true sametype=true note=boxed`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output does not contain %q\nstdout:\n%s\nstderr:\n%s", want, got, stderr.String())
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("output does not contain %q\nstdout:\n%s\nstderr:\n%s", w, got, stderr.String())
 		}
 	}
 	if !strings.Contains(stderr.String(), "forgo: reloaded") {
