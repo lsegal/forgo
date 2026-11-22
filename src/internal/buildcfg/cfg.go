@@ -36,6 +36,10 @@ var (
 	GO_LDSO   = defaultGO_LDSO
 	GOFIPS140 = gofips140()
 	Version   = version
+
+	// ForgoVersion is forgo's own version (FORGO_VERSION at build time),
+	// or "" for a toolchain built from a GOROOT without that file.
+	ForgoVersion = forgoVersion
 )
 
 // Error is one of the errors found (if any) in the build configuration.

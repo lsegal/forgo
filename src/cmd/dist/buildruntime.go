@@ -64,12 +64,23 @@ func mkbuildcfg(file string) {
 	fmt.Fprintf(&buf, "const defaultGO_EXTLINK_ENABLED = `%s`\n", goextlinkenabled)
 	fmt.Fprintf(&buf, "const defaultGO_LDSO = `%s`\n", defaultldso)
 	fmt.Fprintf(&buf, "const version = `%s`\n", findgoversion())
+	fmt.Fprintf(&buf, "const forgoVersion = `%s`\n", findforgoversion())
 	fmt.Fprintf(&buf, "const defaultGOOS = runtime.GOOS\n")
 	fmt.Fprintf(&buf, "const defaultGOARCH = runtime.GOARCH\n")
 	fmt.Fprintf(&buf, "const DefaultGOFIPS140 = `%s`\n", gofips140)
 	fmt.Fprintf(&buf, "const DefaultCGO_ENABLED = %s\n", quote(os.Getenv("CGO_ENABLED")))
 
 	writefile(buf.String(), file, writeSkipSame)
+}
+
+// findforgoversion returns forgo's own version from $GOROOT/FORGO_VERSION,
+// or "" when the file is missing (a GOROOT that isn't a forgo checkout).
+func findforgoversion() string {
+	path := pathf("%s/FORGO_VERSION", goroot)
+	if !isfile(path) {
+		return ""
+	}
+	return chomp(readfile(path))
 }
 
 // mkobjabi writes cmd/internal/objabi/zbootstrap.go:
