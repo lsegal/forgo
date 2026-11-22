@@ -215,28 +215,41 @@ func (versionFlag) Set(s string) error {
 	name = name[strings.LastIndex(name, `\`)+1:]
 	name = strings.TrimSuffix(name, ".exe")
 
+	fmt.Println(toolVersion(name, s == "full", buildcfg.Version, buildcfg.Experiment.String(), buildcfg.ForgoVersion, buildID))
+	os.Exit(0)
+	return nil
+}
+
+// toolVersion formats a tool's -V output. With full set it is the go
+// command's tool ID for the tool, which keys every cache entry the tool
+// writes.
+func toolVersion(name string, full bool, version, goexperiment, forgoVersion, buildID string) string {
 	p := ""
 
 	// If the enabled experiments differ from the baseline,
 	// include that difference.
-	if goexperiment := buildcfg.Experiment.String(); goexperiment != "" {
+	if goexperiment != "" {
 		p = " X:" + goexperiment
 	}
 
 	// The go command invokes -V=full to get a unique identifier
-	// for this tool. It is assumed that the release version is sufficient
-	// for releases, but during development we include the full
-	// build ID of the binary, so that if the compiler is changed and
-	// rebuilt, we notice and rebuild all packages.
-	if s == "full" {
-		if strings.Contains(buildcfg.Version, "devel") {
+	// for this tool. Upstream assumes the release version is sufficient
+	// for releases, but forgo changes the toolchain's output between its
+	// own releases (and between commits) on the same Go version. So
+	// include forgo's version and the full build ID of the binary, so
+	// that if the compiler is changed and rebuilt, we notice and rebuild
+	// all packages. The build ID stays last: on a devel version the go
+	// command reads it from the final field.
+	if full {
+		if forgoVersion != "" {
+			p += " forgo:" + forgoVersion
+		}
+		if buildID != "" || strings.Contains(version, "devel") {
 			p += " buildID=" + buildID
 		}
 	}
 
-	fmt.Printf("%s version %s%s\n", name, buildcfg.Version, p)
-	os.Exit(0)
-	return nil
+	return fmt.Sprintf("%s version %s%s", name, version, p)
 }
 
 // count is a flag.Value that is like a flag.Bool and a flag.Int.
