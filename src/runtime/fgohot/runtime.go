@@ -28,6 +28,11 @@ func textRange() (start, end uintptr)
 // It returns "" on success.
 func addModule(moduledata uintptr) string
 
+// methodBase returns what the method table entries of the type descriptor at
+// addr are offsets from: the start of its module's text, or of its types. It
+// returns "" as the message on success.
+func methodBase(addr uintptr, text bool) (base uintptr, msg string)
+
 // moduleInitTasks returns the init tasks the hot linker recorded for packages
 // that are new in this image.
 func moduleInitTasks(moduledata uintptr) []*initTask

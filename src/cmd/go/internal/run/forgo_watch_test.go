@@ -64,6 +64,9 @@ func render(i int) bool {
 }
 
 func main() {
+	if boxedShouter == nil {
+		os.Exit(4)
+	}
 	for i := 0; i < 600; i++ {
 		if render(i) {
 			os.Exit(0)

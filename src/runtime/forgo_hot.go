@@ -110,6 +110,50 @@ func fgohotAddModule(mdaddr uintptr) string {
 	return ""
 }
 
+// fgohotMethodBase returns what the method table entries of the type
+// descriptor at addr are offsets from: the start of the text, or of the
+// types, of the module the descriptor lives in. The agent needs it to fill in
+// entries the module's linker found unreachable (see relocsym in cmd/link).
+// It returns "" as the message on success.
+//
+//go:linkname fgohotMethodBase runtime/fgohot.methodBase
+func fgohotMethodBase(addr uintptr, text bool) (base uintptr, msg string) {
+	for md := &firstmoduledata; md != nil; md = md.next {
+		if addr < md.types || addr >= md.etypes {
+			continue
+		}
+		if !text {
+			return md.types, ""
+		}
+		if len(md.textsectmap) > 1 {
+			// textAddr maps an offset through the sections and rejects one
+			// past them all, as an offset into an image would be.
+			return 0, "hot reload: cannot fill in the method table of a module with split text sections"
+		}
+		return md.text, ""
+	}
+	return 0, "hot reload: method table entry is outside every module's types"
+}
+
+// fgohotTypeAt returns the type descriptor at res, which a type offset
+// resolved to past the end of its own module's types, or nil if no module
+// has a type there. A hot reload produces such offsets when it fills in a
+// method table entry of the running program (fgohotMethodBase) with a type
+// that is new in the image.
+func fgohotTypeAt(res uintptr) *_type {
+	for md := &firstmoduledata; md != nil; md = md.next {
+		if res < md.types || res >= md.etypes {
+			continue
+		}
+		t := (*_type)(unsafe.Pointer(res))
+		if mt := md.typemap[t]; mt != nil {
+			return mt
+		}
+		return t
+	}
+	return nil
+}
+
 // fgohotInitTasks returns the init tasks recorded in the image's moduledata.
 // The hot linker only records tasks for packages that are new in this image;
 // packages that already exist in the process keep the state their init built.
