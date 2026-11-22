@@ -68,7 +68,7 @@ func TestExperimentToolID(t *testing.T) {
 
 	// Verify compiler version string.
 	goCmdPath := igoroot.GoCommand(goroot)
-	gotVersion := bytes.TrimSpace(runCmd(t, gorootSrc, env, goCmdPath, "tool", "compile", "-V=full"))
+	gotVersion := releaseVersion(runCmd(t, gorootSrc, env, goCmdPath, "tool", "compile", "-V=full"))
 	wantVersion := []byte(`compile version go1.999`)
 	if !bytes.Equal(gotVersion, wantVersion) {
 		t.Errorf("compile version without experiment is unexpected:\ngot  %q\nwant %q", gotVersion, wantVersion)
@@ -82,7 +82,7 @@ func TestExperimentToolID(t *testing.T) {
 	runCmd(t, gorootSrc, env, makeScriptPath)
 
 	// Verify compiler version string.
-	gotVersion = bytes.TrimSpace(runCmd(t, gorootSrc, env, goCmdPath, "tool", "compile", "-V=full"))
+	gotVersion = releaseVersion(runCmd(t, gorootSrc, env, goCmdPath, "tool", "compile", "-V=full"))
 	wantVersion = []byte(`compile version go1.999 X:fieldtrack`)
 	if !bytes.Equal(gotVersion, wantVersion) {
 		t.Errorf("compile version with experiment is unexpected:\ngot  %q\nwant %q", gotVersion, wantVersion)
@@ -90,6 +90,19 @@ func TestExperimentToolID(t *testing.T) {
 
 	// Build the same package. We should not get a cache conflict.
 	runCmd(t, gorootSrc, env, goCmdPath, "build", "-race", "archive/tar")
+}
+
+// releaseVersion trims the forgo version and content ID that forgo appends to
+// a release tool ID, leaving the part this test controls.
+func releaseVersion(out []byte) []byte {
+	out = bytes.TrimSpace(out)
+	if i := bytes.Index(out, []byte(" contentID=")); i >= 0 {
+		out = out[:i]
+	}
+	if i := bytes.Index(out, []byte(" forgo:")); i >= 0 {
+		out = out[:i]
+	}
+	return out
 }
 
 func runCmd(t *testing.T, dir string, env []string, path string, args ...string) []byte {
