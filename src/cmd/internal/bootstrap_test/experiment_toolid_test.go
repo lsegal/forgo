@@ -92,11 +92,11 @@ func TestExperimentToolID(t *testing.T) {
 	runCmd(t, gorootSrc, env, goCmdPath, "build", "-race", "archive/tar")
 }
 
-// releaseVersion trims the forgo version and build ID that forgo appends to
+// releaseVersion trims the forgo version and content ID that forgo appends to
 // a release tool ID, leaving the part this test controls.
 func releaseVersion(out []byte) []byte {
 	out = bytes.TrimSpace(out)
-	if i := bytes.Index(out, []byte(" buildID=")); i >= 0 {
+	if i := bytes.Index(out, []byte(" contentID=")); i >= 0 {
 		out = out[:i]
 	}
 	if i := bytes.Index(out, []byte(" forgo:")); i >= 0 {

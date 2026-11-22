@@ -23,13 +23,20 @@ func TestToolVersionForgo(t *testing.T) {
 	if older == newer {
 		t.Errorf("toolchains differing only in forgo version share tool ID %q", older)
 	}
-	if want := "compile version go1.27.4 X:simd forgo:0.7.4 buildID=a/b"; older != want {
+	if want := "compile version go1.27.4 X:simd forgo:0.7.4 contentID=b"; older != want {
 		t.Errorf("tool ID = %q, want %q", older, want)
 	}
 
 	rebuilt := toolVersion("compile", true, release, "simd", "0.7.4", "a/c")
 	if older == rebuilt {
-		t.Errorf("toolchains differing only in build ID share tool ID %q", older)
+		t.Errorf("toolchains differing only in content ID share tool ID %q", older)
+	}
+
+	// The same tool built by a different toolchain has a different action
+	// ID but the same content, and must keep its tool ID; otherwise make.bash
+	// finds the final toolchain stale.
+	if rebuiltBy := toolVersion("compile", true, release, "simd", "0.7.4", "z/b"); older != rebuiltBy {
+		t.Errorf("tool ID depends on the action ID: %q vs %q", older, rebuiltBy)
 	}
 
 	// Without a FORGO_VERSION or a build ID the ID is upstream's.

@@ -233,19 +233,25 @@ func toolVersion(name string, full bool, version, goexperiment, forgoVersion, bu
 	}
 
 	// The go command invokes -V=full to get a unique identifier
-	// for this tool. Upstream assumes the release version is sufficient
-	// for releases, but forgo changes the toolchain's output between its
-	// own releases (and between commits) on the same Go version. So
-	// include forgo's version and the full build ID of the binary, so
-	// that if the compiler is changed and rebuilt, we notice and rebuild
-	// all packages. The build ID stays last: on a devel version the go
-	// command reads it from the final field.
+	// for this tool. It is assumed that the release version is sufficient
+	// for releases, but during development we include the full
+	// build ID of the binary, so that if the compiler is changed and
+	// rebuilt, we notice and rebuild all packages.
+	//
+	// forgo changes the toolchain's output between its own releases (and
+	// between commits) on the same Go version, so a release forgo
+	// toolchain also includes forgo's version and the binary's content ID
+	// (the build ID's last part; the go command uses the same part on a
+	// devel version). The action ID part is left out because it changes
+	// with the toolchain that built the tool, even when the tool doesn't.
 	if full {
 		if forgoVersion != "" {
 			p += " forgo:" + forgoVersion
 		}
-		if buildID != "" || strings.Contains(version, "devel") {
+		if strings.Contains(version, "devel") {
 			p += " buildID=" + buildID
+		} else if buildID != "" {
+			p += " contentID=" + buildID[strings.LastIndex(buildID, "/")+1:]
 		}
 	}
 
